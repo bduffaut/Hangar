@@ -46,6 +46,21 @@ export function createGit() {
       return sha && isCommitSha(sha) ? sha : null
     },
 
+    /** The branch the remote's HEAD points at (its default branch), or null. */
+    async defaultBranch(
+      repoUrl: string,
+      token: string | null,
+      signal?: AbortSignal,
+    ): Promise<string | null> {
+      const { stdout } = await runChecked('git', ['ls-remote', '--symref', '--', repoUrl, 'HEAD'], {
+        env: gitEnv(repoUrl, token),
+        signal,
+        captureStdout: true,
+      })
+      const match = /^ref: refs\/heads\/(\S+)\tHEAD$/m.exec(stdout)
+      return match?.[1] ?? null
+    },
+
     /** Shallow-fetches exactly `sha` into `dir` (which must not exist yet) and checks it out. */
     async cloneAt(options: {
       repoUrl: string

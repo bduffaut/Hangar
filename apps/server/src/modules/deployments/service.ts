@@ -5,8 +5,9 @@ import {
   isTerminal,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
-import type { Project } from '../projects/repo.ts'
-import { getGithubToken } from '../settings/service.ts'
+import { notFound, UserError } from '../../errors.ts'
+import { type Project, updateProject } from '../projects/repo.ts'
+import { getGithubToken } from '../settings/secrets.ts'
 import {
   type Deployment,
   type DeploymentPatch,
@@ -18,7 +19,11 @@ import {
   updateDeploymentStatus,
 } from './repo.ts'
 
-export class DeploymentError extends Error {}
+export class DeploymentError extends UserError {
+  constructor(message: string) {
+    super(409, 'deployment_conflict', message)
+  }
+}
 
 async function publishStatus(
   ctx: Ctx,
@@ -64,6 +69,10 @@ export async function sendJob(ctx: Ctx, deployment: Pick<Deployment, 'id' | 'tri
 /** Inserts a queued deployment (superseding any still waiting), announces it, and sends its job. */
 async function enqueue(ctx: Ctx, values: NewDeployment): Promise<Deployment> {
   const { deployment, superseded } = await insertQueuedDeployment(ctx.db, values)
+  // The poller compares the branch head with this, so a manual or webhook deploy is not repeated.
+  if (values.trigger !== 'rollback') {
+    await updateProject(ctx.db, values.projectId, { lastSeenSha: values.commitSha })
+  }
   for (const id of superseded) {
     await publishStatus(ctx, { id, projectId: values.projectId, status: 'cancelled' })
   }
@@ -121,7 +130,7 @@ export async function queueRollback(ctx: Ctx, source: Deployment): Promise<Deplo
  */
 export async function requestCancel(ctx: Ctx, deploymentId: string): Promise<void> {
   const deployment = await getDeployment(ctx.db, deploymentId)
-  if (!deployment) throw new DeploymentError('Deployment not found')
+  if (!deployment) throw notFound('Deployment')
   if (deployment.status === 'queued') {
     const row = await transition(ctx, deploymentId, 'queued', 'cancelled', {
       failureCode: 'cancelled_by_user',

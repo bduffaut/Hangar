@@ -8,6 +8,7 @@ export interface JobMap {
   deploy: { deploymentId: string }
   gc: Record<string, never>
   reconcile: Record<string, never>
+  poll: Record<string, never>
 }
 
 export type JobName = keyof JobMap
@@ -18,6 +19,7 @@ const QUEUE_OPTIONS: Record<JobName, { expireInSeconds: number }> = {
   deploy: { expireInSeconds: 300 },
   gc: { expireInSeconds: 600 },
   reconcile: { expireInSeconds: 300 },
+  poll: { expireInSeconds: 300 },
 }
 
 export function createQueue(options: { connectionString: string; log: Logger }) {

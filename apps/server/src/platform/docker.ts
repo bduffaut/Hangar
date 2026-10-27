@@ -1,3 +1,4 @@
+import { PassThrough, type Readable } from 'node:stream'
 import Dockerode from 'dockerode'
 
 const HANGAR_NETWORK = 'hangar'
@@ -8,7 +9,11 @@ export const LABELS = {
   kind: 'hangar.kind',
   project: 'hangar.project',
   deployment: 'hangar.deployment',
+  /** On the tunnel container: a hash of the token it runs with, to detect a changed token. */
+  tunnelToken: 'hangar.tunnel-token',
 } as const
+
+export const TUNNEL_CONTAINER = 'hangar-tunnel'
 
 export interface AppContainerSpec {
   name: string
@@ -25,6 +30,12 @@ export interface ManagedContainer {
   projectId: string | null
   deploymentId: string | null
   running: boolean
+  labels: Record<string, string>
+}
+
+export interface ContainerStats {
+  cpuPercent: number
+  memoryUsedBytes: number
 }
 
 export interface ContainerState {
@@ -59,7 +70,7 @@ export function createDocker(docker = new Dockerode()) {
     }
   }
 
-  return {
+  const api = {
     async imageExists(ref: string): Promise<boolean> {
       try {
         await docker.getImage(ref).inspect()
@@ -167,18 +178,108 @@ export function createDocker(docker = new Dockerode()) {
       }
     },
 
-    async listManagedApps(projectId?: string): Promise<ManagedContainer[]> {
-      const label = [`${LABELS.managed}=true`, `${LABELS.kind}=app`]
-      if (projectId) label.push(`${LABELS.project}=${projectId}`)
-      const containers = await docker.listContainers({ all: true, filters: { label } })
-      return containers.map((c) => ({
-        id: c.Id,
-        name: (c.Names[0] ?? '').replace(/^\//, ''),
-        projectId: c.Labels[LABELS.project] ?? null,
-        deploymentId: c.Labels[LABELS.deployment] ?? null,
-        running: c.State === 'running',
-      }))
+    listManagedApps: (projectId?: string) => listManaged('app', projectId),
+    listTunnels: () => listManaged('tunnel'),
+
+    /** Pulls an image if it is not present yet. */
+    async ensureImage(ref: string): Promise<void> {
+      if (await api.imageExists(ref)) return
+      const stream = await docker.pull(ref)
+      await new Promise<void>((resolve, reject) =>
+        docker.modem.followProgress(stream, (error) => (error ? reject(error) : resolve())),
+      )
     },
+
+    /** Starts cloudflared with the tunnel token in its environment (never on its command line). */
+    async runTunnel(spec: { image: string; token: string; tokenHash: string }): Promise<void> {
+      await api.removeContainer(TUNNEL_CONTAINER)
+      const container = await docker.createContainer({
+        name: TUNNEL_CONTAINER,
+        Image: spec.image,
+        Cmd: ['tunnel', '--no-autoupdate', 'run'],
+        Env: [`TUNNEL_TOKEN=${spec.token}`],
+        Labels: {
+          [LABELS.managed]: 'true',
+          [LABELS.kind]: 'tunnel',
+          [LABELS.tunnelToken]: spec.tokenHash,
+        },
+        HostConfig: {
+          NetworkMode: HANGAR_NETWORK,
+          RestartPolicy: { Name: 'unless-stopped' },
+          LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
+        },
+      })
+      await container.start()
+    },
+
+    async restartContainer(idOrName: string, graceSeconds: number): Promise<void> {
+      await docker.getContainer(idOrName).restart({ t: graceSeconds })
+    },
+
+    /**
+     * Follows a container's output, starting with the last `tail` lines. Returns a text stream of
+     * stdout and stderr combined; destroy it (or abort `signal`) to stop following.
+     */
+    async followLogs(idOrName: string, tail: number, signal: AbortSignal): Promise<Readable> {
+      const container = docker.getContainer(idOrName)
+      const raw = (await container.logs({
+        stdout: true,
+        stderr: true,
+        follow: true,
+        tail,
+        abortSignal: signal,
+      })) as unknown as Readable
+      const out = new PassThrough()
+      docker.modem.demuxStream(raw, out, out)
+      raw.on('end', () => out.end())
+      raw.on('error', (error) => out.destroy(error))
+      signal.addEventListener('abort', () => raw.destroy(), { once: true })
+      return out
+    },
+
+    async containerStats(idOrName: string): Promise<ContainerStats | null> {
+      try {
+        const stats = await docker.getContainer(idOrName).stats({ stream: false })
+        const cpuDelta =
+          stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage
+        const systemDelta =
+          (stats.cpu_stats.system_cpu_usage ?? 0) - (stats.precpu_stats.system_cpu_usage ?? 0)
+        const cpus = stats.cpu_stats.online_cpus ?? 1
+        const cache =
+          (stats.memory_stats.stats as { inactive_file?: number } | undefined)?.inactive_file ?? 0
+        return {
+          cpuPercent: systemDelta > 0 ? (cpuDelta / systemDelta) * cpus * 100 : 0,
+          memoryUsedBytes: Math.max(0, (stats.memory_stats.usage ?? 0) - cache),
+        }
+      } catch (error) {
+        if (isNotFound(error)) return null
+        throw error
+      }
+    },
+
+    /** Total size of Hangar's app images (`hangar/*`). */
+    async imageDiskUsage(): Promise<number> {
+      const images = await docker.listImages({ filters: { reference: ['hangar/*'] } })
+      return images.reduce((sum, image) => sum + image.Size, 0)
+    },
+  }
+  return api
+
+  async function listManaged(
+    kind: 'app' | 'tunnel',
+    projectId?: string,
+  ): Promise<ManagedContainer[]> {
+    const label = [`${LABELS.managed}=true`, `${LABELS.kind}=${kind}`]
+    if (projectId) label.push(`${LABELS.project}=${projectId}`)
+    const containers = await docker.listContainers({ all: true, filters: { label } })
+    return containers.map((c) => ({
+      id: c.Id,
+      name: (c.Names[0] ?? '').replace(/^\//, ''),
+      projectId: c.Labels[LABELS.project] ?? null,
+      deploymentId: c.Labels[LABELS.deployment] ?? null,
+      running: c.State === 'running',
+      labels: c.Labels,
+    }))
   }
 }
 

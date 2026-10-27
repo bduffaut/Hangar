@@ -8,6 +8,7 @@ import { readdir, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { Ctx } from '../context.ts'
 import { listDeploymentsByStatus, listImages, pruneLogs } from '../modules/deployments/repo.ts'
+import { deleteExpiredSessions } from '../modules/auth/repo.ts'
 import { listProjects } from '../modules/projects/repo.ts'
 import { appImageRepository } from '../platform/names.ts'
 
@@ -43,7 +44,8 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
 
   const prunedLogs = await pruneLogs(ctx.db, LOGS_KEPT_PER_PROJECT)
   const removedDirs = await sweepBuildDirs(ctx)
-  ctx.log.info({ removedImages, prunedLogs, removedDirs }, 'Cleanup finished')
+  const expiredSessions = await deleteExpiredSessions(ctx.db)
+  ctx.log.info({ removedImages, prunedLogs, removedDirs, expiredSessions }, 'Cleanup finished')
 }
 
 /** Removes build directories that do not belong to a deployment still in progress. */

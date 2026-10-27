@@ -4,6 +4,7 @@ import { sendJob, transition } from '../modules/deployments/service.ts'
 import { listCurrentDeployments } from '../modules/projects/repo.ts'
 import { collectGarbage, sweepBuildDirs } from './gc.ts'
 import { ABORT_CANCEL, ABORT_SHUTDOWN, runDeployment } from './pipeline.ts'
+import { pollProjects } from './poller.ts'
 import { reconcile } from './reconciler.ts'
 
 const SHUTDOWN_WAIT_MS = 5_000
@@ -61,7 +62,9 @@ export async function startWorker(ctx: Ctx): Promise<{ stop: () => Promise<void>
   await ctx.queue.work('deploy', handleDeployment)
   await ctx.queue.work('gc', () => collectGarbage(ctx))
   await ctx.queue.work('reconcile', () => reconcile(ctx))
+  await ctx.queue.work('poll', () => pollProjects(ctx))
   await ctx.queue.schedule('gc', '17 * * * *')
+  await ctx.queue.schedule('poll', '* * * * *')
   ctx.log.info('Worker started')
 
   return {

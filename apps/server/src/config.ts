@@ -19,6 +19,10 @@ const envSchema = z.object({
   HANGAR_MIGRATIONS_DIR: z.string().min(1).optional(),
   HANGAR_RAILPACK_FRONTEND: z.string().min(1).optional(), // set by the core image
   HANGAR_BUILD_DIR: z.string().min(1).default('/tmp/hangar-builds'),
+  HANGAR_HOST_PROC: z.string().min(1).default('/proc'),
+  HANGAR_HOST_ROOT: z.string().min(1).default('/'),
+  // Extra browser origins allowed to call the API, comma-separated (development only).
+  HANGAR_DEV_ORIGINS: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.string().default('development'),
 })
@@ -50,6 +54,14 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     migrationsDir: e.HANGAR_MIGRATIONS_DIR ?? path.resolve('drizzle'),
     railpackFrontend: e.HANGAR_RAILPACK_FRONTEND ?? null,
     buildDir: e.HANGAR_BUILD_DIR,
+    hostProcDir: e.HANGAR_HOST_PROC,
+    hostRootDir: e.HANGAR_HOST_ROOT,
+    devOrigins:
+      e.NODE_ENV === 'production'
+        ? []
+        : e.HANGAR_DEV_ORIGINS.split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean),
     logLevel: e.LOG_LEVEL,
     isProduction: e.NODE_ENV === 'production',
   }

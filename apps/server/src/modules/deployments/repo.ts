@@ -171,3 +171,18 @@ export async function pruneLogs(db: Db, keep: number): Promise<number> {
     )`)
   return result.rowCount ?? 0
 }
+
+/** The newest deployment of each of the given projects. */
+export async function listLatestDeployments(db: Db, projectIds: string[]): Promise<Deployment[]> {
+  if (projectIds.length === 0) return []
+  return db
+    .selectDistinctOn([deployments.projectId])
+    .from(deployments)
+    .where(inArray(deployments.projectId, projectIds))
+    .orderBy(deployments.projectId, desc(deployments.number))
+}
+
+export async function listDeploymentsById(db: Db, ids: string[]): Promise<Deployment[]> {
+  if (ids.length === 0) return []
+  return db.select().from(deployments).where(inArray(deployments.id, ids))
+}

@@ -19,9 +19,11 @@ import { appImageRepository } from '../../src/platform/names.ts'
 export const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..')
 /** Where hangar-core sees the repository (docker/compose.dev.yml bind mount). */
 const CONTAINER_REPO_ROOT = '/repo'
+export const DEV_DATABASE_URL =
+  process.env.DATABASE_URL ?? 'postgres://hangar:hangar@localhost:5432/hangar'
 
 /** Same secrets as hangar-core, so env vars sealed here open there. */
-function devCoreEnv(): Record<string, string> {
+export function devCoreEnv(): Record<string, string> {
   const compose = parse(readFileSync(path.join(REPO_ROOT, 'docker/compose.dev.yml'), 'utf8'))
   return compose.services['hangar-core'].environment
 }
@@ -30,7 +32,7 @@ export function createHarness() {
   const coreEnv = devCoreEnv()
   const config = loadConfig({
     ...coreEnv,
-    DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://hangar:hangar@localhost:5432/hangar',
+    DATABASE_URL: DEV_DATABASE_URL,
   })
   const { ctx, close } = createContext(config, createLogger({ ...config, logLevel: 'warn' }))
   const runId = Date.now().toString(36).slice(-5)
@@ -104,6 +106,11 @@ export function createHarness() {
       })
     },
 
+    /** Cleans up a project created some other way (e.g. through the API) after the run. */
+    adopt(project: Project) {
+      projects.push(project)
+    },
+
     async close() {
       for (const project of projects) {
         for (const container of await ctx.docker.listManagedApps(project.id)) {
@@ -133,7 +140,7 @@ export function createFixtureRepo(runId: string) {
 
   rmSync(root, { recursive: true, force: true })
   mkdirSync(work, { recursive: true })
-  git(root, 'init', '--quiet', '--bare', bare)
+  git(root, 'init', '--quiet', '--bare', '-b', 'main', bare)
   // The pipeline fetches exact commits, which GitHub allows; a local repo needs opting in.
   git(bare, 'config', 'uploadpack.allowAnySHA1InWant', 'true')
   git(work, 'init', '--quiet', '-b', 'main')

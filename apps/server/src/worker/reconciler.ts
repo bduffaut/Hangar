@@ -1,9 +1,12 @@
 import { CONTAINER_STOP_GRACE_SECONDS, DEFAULT_APP_PORT } from '@hangar/shared'
+import { createHash } from 'node:crypto'
 import type { Ctx } from '../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
 import { updateDeployment } from '../modules/deployments/repo.ts'
 import { listCurrentDeployments, listProjectRoutes } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
+import { getTunnelToken } from '../modules/settings/secrets.ts'
+import { LABELS } from '../platform/docker.ts'
 import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
 import { startAppContainer } from './app-container.ts'
@@ -93,6 +96,43 @@ export async function reconcile(ctx: Ctx): Promise<void> {
     }
   }
   await syncRouting(ctx)
+  await ensureTunnel(ctx).catch((error: unknown) => {
+    ctx.log.error({ err: error }, 'Could not start the Cloudflare tunnel')
+  })
+}
+
+/** Converges one project (after start, stop, or a settings change) and the routing file. */
+export async function reconcileOne(ctx: Ctx, projectId: string): Promise<void> {
+  await withAdvisoryLock(ctx.db, projectLockKey(projectId), () => reconcileProject(ctx, projectId))
+  await syncRouting(ctx)
+}
+
+// Pinned by digest; upgrade deliberately.
+const CLOUDFLARED_IMAGE =
+  'cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c'
+
+/**
+ * Runs `hangar-tunnel` if and only if a Cloudflare tunnel token is set, recreating it when the
+ * token changes. The container is labelled with a hash of the token, never the token itself.
+ */
+export async function ensureTunnel(ctx: Ctx): Promise<void> {
+  const token = await getTunnelToken(ctx)
+  const existing = await ctx.docker.listTunnels()
+  if (!token) {
+    for (const container of existing) await ctx.docker.removeContainer(container.id, 10)
+    return
+  }
+  const tokenHash = createHash('sha256').update(token).digest('hex').slice(0, 16)
+  const current = existing.find((c) => c.labels[LABELS.tunnelToken] === tokenHash)
+  if (current?.running && existing.length === 1) return
+  if (current && existing.length === 1) {
+    await ctx.docker.startContainer(current.id)
+    return
+  }
+  for (const container of existing) await ctx.docker.removeContainer(container.id, 10)
+  await ctx.docker.ensureImage(CLOUDFLARED_IMAGE)
+  await ctx.docker.runTunnel({ image: CLOUDFLARED_IMAGE, token, tokenHash })
+  ctx.log.info('Cloudflare tunnel started')
 }
 
 /** Call with the project lock held, so the current deployment cannot change underneath. */
