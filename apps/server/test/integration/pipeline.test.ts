@@ -207,4 +207,22 @@ describe('repository safety', () => {
     expect(done.failureCode).toBe('build_failed')
     expect(done.failureReason).toContain('outside the repository')
   })
+
+  it('refuses a build whose files link to the server, before Railpack reads them', async () => {
+    // Railpack copies a static site's Caddyfile into the image; this one points at core's secrets.
+    repo.write('leaky-site/index.html', '<h1>hi</h1>')
+    repo.symlink('leaky-site/Caddyfile', '/proc/1/environ')
+    const sha = repo.commit('Leaky static site')
+    const project = await h.createProject('leaky', { repoUrl: repo.url, rootDir: 'leaky-site' })
+    const done = await h.waitForEnd(
+      await queueDeployment(h.ctx, project, { commitSha: sha, trigger: 'manual' }),
+    )
+
+    expect(done.status).toBe('failed')
+    expect(done.failureCode).toBe('build_failed')
+    expect(done.failureReason).toContain(
+      '"leaky-site/Caddyfile" is a symlink to a file outside the repository',
+    )
+    expect(await h.ctx.docker.listTags(`hangar/${project.name}`)).toEqual([])
+  })
 })

@@ -194,6 +194,7 @@ async function build(
   await step('build_failed', signal, () =>
     ctx.builder.build({
       contextDir,
+      repoDir: sourceDir,
       workDir,
       tag,
       secrets: env,

@@ -3,10 +3,13 @@ import { createHash } from 'node:crypto'
 import { lstat, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { CommandError, type LineHandler, run, runChecked } from './process.ts'
+import { findEscapingSymlink } from './symlinks.ts'
 
 export interface BuildRequest {
   /** Directory holding the source to build (the clone plus the project's root directory). */
   contextDir: string
+  /** The whole checkout. Symlinks in the build context must not point outside it. */
+  repoDir: string
   /** Scratch directory outside the build context for the plan and secret files. */
   workDir: string
   tag: string
@@ -42,10 +45,8 @@ async function usesContainerdStore(): Promise<boolean> {
   return stdout.includes('io.containerd.snapshotter')
 }
 
-/** A Dockerfile that is a symlink could make the build read a file outside the repository. */
 async function hasDockerfile(contextDir: string): Promise<boolean> {
   const stats = await lstat(path.join(contextDir, 'Dockerfile')).catch(() => null)
-  if (stats?.isSymbolicLink()) throw new Error('The Dockerfile is a symlink, which is not allowed')
   return stats?.isFile() ?? false
 }
 
@@ -85,6 +86,14 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
 
   return {
     async build(request: BuildRequest): Promise<void> {
+      const escaping = await findEscapingSymlink(request.contextDir, request.repoDir)
+      if (escaping) {
+        throw new Error(
+          `"${escaping}" is a symlink to a file outside the repository, which Hangar does not ` +
+            'allow because build tools would read files from the server. Replace it with a copy ' +
+            'of the file or a link to a file inside the repository.',
+        )
+      }
       const method: BuildMethod = (await hasDockerfile(request.contextDir))
         ? 'dockerfile'
         : 'railpack'

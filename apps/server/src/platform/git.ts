@@ -13,13 +13,23 @@ function isCommitSha(value: string): boolean {
   return SHA_PATTERN.test(value)
 }
 
+/** The stored token is a GitHub token: it may only ever be sent to github.com. */
+function isGithubHttpsUrl(repoUrl: string): boolean {
+  try {
+    const url = new URL(repoUrl)
+    return url.protocol === 'https:' && url.hostname === 'github.com' && url.port === ''
+  } catch {
+    return false
+  }
+}
+
 /**
  * Credentials travel as an HTTP header set through GIT_CONFIG_* variables, so the token never
  * appears in a URL, on a command line, in .git/config, or in logs.
  */
-function gitEnv(repoUrl: string, token: string | null): Record<string, string> {
+export function gitEnv(repoUrl: string, token: string | null): Record<string, string> {
   const env: Record<string, string> = { GIT_TERMINAL_PROMPT: '0' }
-  if (token && repoUrl.startsWith('https://')) {
+  if (token && isGithubHttpsUrl(repoUrl)) {
     const basic = Buffer.from(`x-access-token:${token}`).toString('base64')
     env.GIT_CONFIG_COUNT = '1'
     env.GIT_CONFIG_KEY_0 = 'http.extraHeader'
