@@ -44,7 +44,14 @@ disk_kb=$(df -Pk / | awk 'NR==2 {print $4}')
 [ "$disk_kb" -ge 10000000 ] || fail "Hangar needs at least 10 GB of free disk; this server has $((disk_kb / 1024 / 1024)) GB."
 ok "Free disk $((disk_kb / 1024 / 1024)) GB"
 if ! docker ps --filter name='^hangar-proxy$' -q 2>/dev/null | grep -q .; then
-  if ss -ltnH "( sport = :80 )" | awk '{print $4}' | grep -qE "^(0\.0\.0\.0|\[::\]|\*|${HANGAR_BIND_IP//./\\.}):80$"; then
+  # Binding every address conflicts with any listener on port 80; one address, only with a
+  # listener on that address or on every address.
+  if [ "$HANGAR_BIND_IP" = 0.0.0.0 ]; then
+    port80_conflict='.*'
+  else
+    port80_conflict="(0\.0\.0\.0|\[::\]|\*|${HANGAR_BIND_IP//./\\.})"
+  fi
+  if ss -ltnH "( sport = :80 )" | awk '{print $4}' | grep -qE "^${port80_conflict}:80$"; then
     fail "Port 80 is already in use on ${HANGAR_BIND_IP}." "Stop whatever uses it, or set HANGAR_BIND_IP to a different address."
   fi
 fi

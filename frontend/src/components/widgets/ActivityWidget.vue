@@ -68,6 +68,9 @@ const rows = computed(() =>
   text-decoration: none;
   font-size: var(--hg-size-sm);
 }
+.hg-activity-row > :first-child {
+  justify-self: start;
+}
 .hg-activity-row:hover {
   background: var(--hg-raised);
 }

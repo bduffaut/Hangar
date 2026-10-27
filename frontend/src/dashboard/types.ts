@@ -22,7 +22,7 @@ export interface DashboardWidget {
   /** A Vue component accepting `DashboardWidgetProps`. */
   component: Component
   size: WidgetSize
-  /** Shown until the person turns it off. */
+  /** Shown on the dashboard. Set false to register a widget without showing it yet. */
   enabledByDefault: boolean
   /** Lower comes first in the default order. */
   order: number

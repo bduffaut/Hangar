@@ -1,5 +1,7 @@
 /* Global base styles. Every value comes from the theme variables (theme/tokens.ts). */
 @import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/b612/latin-400.css';
+@import '@fontsource/b612/latin-700.css';
 @import '@fontsource-variable/jetbrains-mono/index.css';
 
 *,
@@ -86,6 +88,14 @@ pre {
 
 ::selection {
   background: color-mix(in srgb, var(--hg-accent) 35%, transparent);
+}
+
+.hg-nowrap {
+  white-space: nowrap;
+}
+
+.hg-data {
+  font-family: var(--hg-data);
 }
 
 .hg-muted {

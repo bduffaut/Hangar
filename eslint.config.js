@@ -37,8 +37,15 @@ export default tseslint.config(
         'error',
         {
           patterns: [
-            { group: ['primevue', 'primevue/*', '@primevue/*', '@primeuix/*'], message: 'Use the Base* components from ui/ instead.' },
-            { group: ['chart.js', 'chart.js/*'], message: 'Use BaseChart from charts/ instead (type-only imports are fine).', allowTypeImports: true },
+            {
+              group: ['primevue', 'primevue/*', '@primevue/*', '@primeuix/*'],
+              message: 'Use the Base* components from ui/ instead.',
+            },
+            {
+              group: ['chart.js', 'chart.js/*'],
+              message: 'Use BaseChart from charts/ instead (type-only imports are fine).',
+              allowTypeImports: true,
+            },
           ],
         },
       ],

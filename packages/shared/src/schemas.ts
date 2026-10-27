@@ -16,7 +16,11 @@ import {
 
 const id = z.uuid()
 const timestamp = z.iso.datetime({ offset: true })
-const port = z.number().int().min(1).max(65535)
+const port = z
+  .number({ error: 'The port must be a number from 1 to 65535.' })
+  .int()
+  .min(1)
+  .max(65535)
 
 export const ok = z.object({ ok: z.literal(true) })
 export const idParams = z.object({ id })
@@ -26,22 +30,37 @@ export const errorBody = z.object({
 })
 export type ErrorBody = z.infer<typeof errorBody>
 
+const MEMORY_LIMIT_PROBLEM = `The memory limit must be a whole number of MB from ${MEMORY_LIMIT_MIN_MB} to ${MEMORY_LIMIT_MAX_MB}.`
+
 // Auth and setup
 
 const username = z.string().trim().toLowerCase().regex(USERNAME_PATTERN, {
-  error: '3–32 characters: lowercase letters, digits, dot, dash, underscore',
+  error:
+    'Usernames are 3 to 32 characters: lowercase letters, digits, dots, dashes, and underscores.',
 })
-const password = z.string().min(PASSWORD_MIN_LENGTH).max(PASSWORD_MAX_LENGTH)
+const password = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, {
+    error: `Passwords must be at least ${PASSWORD_MIN_LENGTH} characters.`,
+  })
+  .max(PASSWORD_MAX_LENGTH, {
+    error: `Passwords can be at most ${PASSWORD_MAX_LENGTH} characters.`,
+  })
 
 export const setupStatus = z.object({ needsSetup: z.boolean() })
 export const setupComplete = z.object({
-  setupCode: z.string().min(1).max(100),
+  setupCode: z
+    .string()
+    .trim()
+    .min(1, { error: 'Enter the setup code the installer printed.' })
+    .max(100, { error: 'That setup code is not correct.' }),
   username,
   password,
 })
+const WRONG_LOGIN = 'The username or password is not correct.'
 export const login = z.object({
-  username: z.string().max(64),
-  password: z.string().max(PASSWORD_MAX_LENGTH),
+  username: z.string().max(64, { error: WRONG_LOGIN }),
+  password: z.string().max(PASSWORD_MAX_LENGTH, { error: WRONG_LOGIN }),
 })
 export const session = z.object({
   user: z.object({ id, username: z.string() }),
@@ -65,14 +84,18 @@ export type SettingsView = z.infer<typeof settingsView>
 
 export const settingsPatch = z
   .object({
-    lanIp: z.ipv4(),
+    lanIp: z.ipv4({ error: 'Enter an IPv4 address, like 192.168.1.50.' }),
     publicDomain: z.string().trim().toLowerCase().nullable(),
     exposeTowerPublicly: z.boolean(),
   })
   .partial()
-export const githubToken = z.object({ token: z.string().trim().max(500).nullable() })
+export const githubToken = z.object({
+  token: z.string().trim().max(500, { error: 'That GitHub token is too long.' }).nullable(),
+})
 export const githubAccount = z.object({ connected: z.boolean(), login: z.string().nullable() })
-export const tunnelToken = z.object({ token: z.string().trim().max(4000).nullable() })
+export const tunnelToken = z.object({
+  token: z.string().trim().max(4000, { error: 'That tunnel token is too long.' }).nullable(),
+})
 
 // GitHub
 
@@ -88,14 +111,26 @@ export const githubBranchesQuery = z.object({ repo: z.string().regex(/^[\w.-]+\/
 // Projects
 
 export const projectInput = z.object({
-  name: z.string().trim().toLowerCase().min(1).max(PROJECT_NAME_MAX_LENGTH),
-  repoUrl: z.string().trim().max(500),
+  name: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(1, { error: 'Enter a project name.' })
+    .max(PROJECT_NAME_MAX_LENGTH, {
+      error: `Project names can be at most ${PROJECT_NAME_MAX_LENGTH} characters.`,
+    }),
+  repoUrl: z.string().trim().max(500, { error: 'That repository address is too long.' }),
   /** Defaults to the repository's default branch. */
-  branch: z.string().trim().max(200).optional(),
-  rootDir: z.string().max(500).optional(),
+  branch: z.string().trim().max(200, { error: 'That branch name is too long.' }).optional(),
+  rootDir: z.string().max(500, { error: 'That root directory is too long.' }).optional(),
   /** Omit or null to detect it from the image, falling back to 3000. */
   port: port.nullable().optional(),
-  memoryLimitMb: z.number().int().min(MEMORY_LIMIT_MIN_MB).max(MEMORY_LIMIT_MAX_MB).optional(),
+  memoryLimitMb: z
+    .number({ error: MEMORY_LIMIT_PROBLEM })
+    .int()
+    .min(MEMORY_LIMIT_MIN_MB)
+    .max(MEMORY_LIMIT_MAX_MB)
+    .optional(),
   triggerMode: z.enum(TRIGGER_MODES).optional(),
   /** Deploy the branch head right away (default true). */
   deploy: z.boolean().optional(),
@@ -168,14 +203,22 @@ export const logsQuery = z.object({ after: z.coerce.number().int().min(-1).defau
 
 // Env vars
 
-const envKey = z.string().regex(ENV_KEY_PATTERN).max(200)
+const ENV_KEY_PROBLEM =
+  'Variable names can use letters, digits, and underscores, cannot start with a digit, and can be at most 200 characters.'
+const envKey = z.string().max(200, { error: ENV_KEY_PROBLEM }).regex(ENV_KEY_PATTERN, {
+  error: ENV_KEY_PROBLEM,
+})
 export const envList = z.object({ keys: z.array(envKey) })
 export const envKeyParams = z.object({ id, key: envKey })
 export const envValue = z.object({ key: envKey, value: z.string() })
 export const envReplace = z.object({
-  vars: z.record(envKey, z.string().max(64 * 1024)).refine((v) => Object.keys(v).length <= 200, {
-    error: 'At most 200 variables',
-  }),
+  vars: z
+    .record(envKey, z.string().max(64 * 1024, { error: 'Each value can be at most 64 KB.' }), {
+      error: ENV_KEY_PROBLEM,
+    })
+    .refine((v) => Object.keys(v).length <= 200, {
+      error: 'A project can have at most 200 variables.',
+    }),
 })
 
 // System
@@ -184,7 +227,11 @@ export const health = z.object({ status: z.literal('ok'), version: z.string() })
 export const systemInfo = z.object({
   version: z.string(),
   imageDiskBytes: z.number(),
+  cpuModel: z.string().nullable(),
+  cpuThreads: z.number().int(),
+  kernel: z.string().nullable(),
 })
+export type SystemInfo = z.infer<typeof systemInfo>
 
 // Server-sent events
 
@@ -202,6 +249,12 @@ export const metricsSample = z.object({
     memoryTotalBytes: z.number(),
     diskUsedBytes: z.number(),
     diskTotalBytes: z.number(),
+    loadAverage: z.number(),
+    uptimeSeconds: z.number(),
+    /** One reading per kind of sensor (CPU, SSD, …); empty when the machine exposes none. */
+    temperatures: z.array(z.object({ name: z.string(), celsius: z.number() })),
+    /** Null on machines without a battery. */
+    battery: z.object({ percent: z.number(), status: z.string() }).nullable(),
   }),
   containers: z.array(
     z.object({ projectId: id, cpuPercent: z.number(), memoryUsedBytes: z.number() }),

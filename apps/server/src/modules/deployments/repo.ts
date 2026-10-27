@@ -196,7 +196,6 @@ export async function listDeploymentsById(db: Db, ids: string[]): Promise<Deploy
   return db.select().from(deployments).where(inArray(deployments.id, ids))
 }
 
-/** The env var fingerprint of the project's most recent build before `beforeNumber`. */
 /**
  * The env var hash of the newest earlier build, or with `readyOnly` of the newest earlier build
  * that succeeded. Null when there is none.

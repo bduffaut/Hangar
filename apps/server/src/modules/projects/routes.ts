@@ -16,7 +16,6 @@ import {
   webhookInfo,
 } from './service.ts'
 
-
 export function projectRoutes(http: Http) {
   const { ctx } = http
 

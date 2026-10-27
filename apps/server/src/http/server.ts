@@ -129,13 +129,6 @@ export function createHttpServer(ctx: Ctx): Http {
         .code(error.status)
         .send({ error: { code: error.code, message: error.message, hint: error.hint } })
     }
-    if (error instanceof z.ZodError) {
-      const issue = error.issues[0]
-      const where = issue?.path.length ? `${issue.path.join('.')}: ` : ''
-      return reply.code(400).send({
-        error: { code: 'invalid_input', message: `${where}${issue?.message ?? 'Invalid input'}` },
-      })
-    }
     // Only Fastify's own errors (bad JSON, body too large, rate limit) are client errors here;
     // other libraries (dockerode) put upstream HTTP statuses on their errors.
     const { statusCode: status = 500, code } = error as { statusCode?: number; code?: string }
@@ -225,6 +218,20 @@ export function sessionView(ctx: Ctx, session: Pick<AuthenticatedSession, 'sessi
 
 type Parsed<T> = T extends z.ZodType ? z.output<T> : undefined
 
+/**
+ * Validates what a client sent. Each field a person types into has its own plain message in the
+ * schema; anything else (a malformed id, a field the dashboard never sends) gets a general one.
+ */
+export function parseInput<S extends z.ZodType>(schema: S, value: unknown): z.output<S> {
+  const result = schema.safeParse(value, {
+    error: () => 'Some of the details sent were not valid. Reload the page and try again.',
+  })
+  if (!result.success) {
+    throw new UserError(400, 'invalid_input', result.error.issues[0]!.message)
+  }
+  return result.data
+}
+
 export interface HandlerInput<E extends Endpoint> {
   params: Parsed<E['params']>
   query: Parsed<E['query']>
@@ -258,9 +265,9 @@ export function route<E extends Endpoint>(
     handler: async (request, reply) => {
       const auth = endpoint.access === 'session' ? await authenticate(ctx, request, reply) : null
       const input = {
-        params: endpoint.params?.parse(request.params),
-        query: endpoint.query?.parse(request.query),
-        body: endpoint.body?.parse(request.body ?? {}),
+        params: endpoint.params && parseInput(endpoint.params, request.params),
+        query: endpoint.query && parseInput(endpoint.query, request.query),
+        body: endpoint.body && parseInput(endpoint.body, request.body ?? {}),
         auth,
         request,
         reply,
@@ -283,7 +290,7 @@ export function eventStream<P extends z.ZodType, T>(
 ) {
   app.get(path, async (request, reply) => {
     await authenticate(ctx, request, reply)
-    const prepared = await prepare(params.parse(request.params), request)
+    const prepared = await prepare(parseInput(params, request.params), request)
     const stream = openEventStream(request, reply)
     try {
       await run(stream, prepared, request)

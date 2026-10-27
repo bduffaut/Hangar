@@ -1,6 +1,6 @@
 import { contract, isTerminal, type LogLineView, schemas, streams } from '@hangar/shared'
 import { z } from 'zod'
-import { eventStream, type Http, OK, route } from '../../http/server.ts'
+import { eventStream, type Http, OK, parseInput, route } from '../../http/server.ts'
 import { getProjectOrThrow } from '../projects/service.ts'
 import {
   deploymentViewOf as viewOf,
@@ -95,7 +95,7 @@ export function deploymentRoutes(http: Http) {
     async (params, request) => {
       await getDeploymentOrThrow(ctx, params.id)
       const lastEventId = Number(request.headers['last-event-id'])
-      const after = schemas.logsQuery.parse(request.query).after
+      const after = parseInput(schemas.logsQuery, request.query).after
       return { id: params.id, after: Number.isInteger(lastEventId) ? lastEventId : after }
     },
     async (stream, { id, after }) => {

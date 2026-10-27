@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { brand, navCopy, type SettingsView, toastCopy, TUNNEL_SERVICE_URL } from '@hangar/shared'
+import {
+  brand,
+  navCopy,
+  type SettingsView,
+  type SystemInfo,
+  toastCopy,
+  TUNNEL_SERVICE_URL,
+} from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
@@ -25,7 +32,7 @@ const notify = useNotify()
 const theme = useTheme()
 
 const settings = ref<SettingsView | null>(null)
-const info = ref<{ version: string; imageDiskBytes: number } | null>(null)
+const info = ref<SystemInfo | null>(null)
 const lanIp = ref('')
 const publicDomain = ref('')
 const exposeTower = ref(false)
@@ -132,12 +139,16 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
         <BaseField
           label="Server address"
           for="set-ip"
-          help="Change this if the server's IP address changes; every app address updates with it. If you lose access after a change, run sudo hangar-admin set-lan-ip <address> on the server."
+          help="Change this if the server's IP address changes. Every app address updates with it."
         >
           <BaseInput id="set-ip" v-model="lanIp" mono inputmode="numeric" />
         </BaseField>
         <p v-if="settings.towerUrl" class="hg-muted hg-note">
           {{ brand.dashboardName }}: <a :href="settings.towerUrl">{{ settings.towerUrl }}</a>
+        </p>
+        <p class="hg-muted hg-note">
+          Lost access after changing it? On the server, run
+          <code class="hg-nowrap">sudo hangar-admin set-lan-ip &lt;address&gt;</code>.
         </p>
         <BaseMessage v-if="errors.address" tone="error">{{ errors.address }}</BaseMessage>
         <div>
@@ -202,7 +213,8 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             Add a public hostname <code>*.your-domain.com</code> with this service:
             <CopyField :value="TUNNEL_SERVICE_URL" label="Tunnel service" />
           </li>
-          <li>Copy the tunnel token and paste it below, with your domain.</li>
+          <li>Enter your domain below and save it.</li>
+          <li>Copy the tunnel token from Cloudflare, paste it below, and save it.</li>
         </ol>
         <BaseField
           label="Public domain"

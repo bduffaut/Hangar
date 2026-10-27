@@ -55,13 +55,15 @@ done
 
 compose up -d --remove-orphans
 if ! wait_for_core; then
+  printf '\n%sError:%s Hangar did not become healthy after the update.\n' "$RED$BOLD" "$RESET" >&2
+  printf 'See what went wrong: docker logs hangar-core\n' >&2
   db="docker exec hangar-db"
-  printf '\n  To go back to the version you had before:\n' >&2
-  printf '    1. In %s/.env, set HANGAR_IMAGE=%s\n' "$HANGAR_DIR" "$previous_image" >&2
-  printf '    2. %s dropdb -U hangar --force hangar && %s createdb -U hangar hangar\n' "$db" "$db" >&2
-  printf '    3. gunzip -c %s/pre-update-%s.sql.gz | docker exec -i hangar-db psql -q -U hangar hangar\n' "$backups" "$stamp" >&2
-  printf '    4. docker compose --project-directory %s up -d\n' "$HANGAR_DIR" >&2
-  fail "Hangar did not become healthy after the update." "See what went wrong: docker logs hangar-core"
+  printf '\nTo go back to the version you had before:\n' >&2
+  printf '  1. In %s/.env, set HANGAR_IMAGE=%s\n' "$HANGAR_DIR" "$previous_image" >&2
+  printf '  2. %s dropdb -U hangar --force hangar && %s createdb -U hangar hangar\n' "$db" "$db" >&2
+  printf '  3. gunzip -c %s/pre-update-%s.sql.gz | docker exec -i hangar-db psql -q -U hangar hangar\n' "$backups" "$stamp" >&2
+  printf '  4. docker compose --project-directory %s up -d\n' "$HANGAR_DIR" >&2
+  exit 1
 fi
 ok "Hangar is back up"
 printf '\n%sMaintenance complete.%s\n' "$GREEN$BOLD" "$RESET"

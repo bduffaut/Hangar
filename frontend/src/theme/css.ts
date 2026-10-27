@@ -30,6 +30,7 @@ function colorVariables(scheme: ColorScheme): string[] {
 function sharedVariables(): string[] {
   const vars = [
     `--hg-font: ${typography.family};`,
+    `--hg-data: ${typography.data};`,
     `--hg-mono: ${typography.mono};`,
     `--hg-heading-stretch: ${typography.headingStretch};`,
   ]

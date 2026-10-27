@@ -15,5 +15,6 @@ export type {
   ProjectView,
   Session,
   SettingsView,
+  SystemInfo,
 } from './schemas.ts'
 export * from './copy.ts'

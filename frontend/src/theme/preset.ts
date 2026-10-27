@@ -19,7 +19,7 @@ const scheme = {
     color: 'var(--hg-ink)',
     focusColor: 'var(--hg-ink)',
   },
-  mask: { background: 'rgba(5, 10, 20, 0.6)', color: 'var(--hg-ink)' },
+  mask: { background: 'var(--hg-scrim)', color: 'var(--hg-ink)' },
   formField: {
     background: 'var(--hg-raised)',
     disabledBackground: 'var(--hg-panel)',

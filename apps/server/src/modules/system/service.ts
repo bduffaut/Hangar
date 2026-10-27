@@ -8,5 +8,9 @@ export async function health(ctx: Ctx) {
 }
 
 export async function systemInfo(ctx: Ctx) {
-  return { version: ctx.config.version, imageDiskBytes: await ctx.docker.imageDiskUsage() }
+  const [imageDiskBytes, host] = await Promise.all([
+    ctx.docker.imageDiskUsage(),
+    ctx.hostMetrics.info(),
+  ])
+  return { version: ctx.config.version, imageDiskBytes, ...host }
 }

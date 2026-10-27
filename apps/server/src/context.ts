@@ -42,7 +42,11 @@ export function createContext(config: Config, log: Logger = createLogger(config)
     queue: createQueue({ connectionString: config.databaseUrl, log }),
     crypto: createCrypto(config.instanceKey),
     github: createGithub(),
-    hostMetrics: createHostMetrics({ procDir: config.hostProcDir, rootDir: config.hostRootDir }),
+    hostMetrics: createHostMetrics({
+      procDir: config.hostProcDir,
+      rootDir: config.hostRootDir,
+      sysDir: config.hostSysDir,
+    }),
   }
   const close = async () => {
     await ctx.queue.stop()

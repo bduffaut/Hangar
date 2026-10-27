@@ -306,7 +306,7 @@ const resources = computed(() => () => {
                   size="sm"
                   variant="ghost"
                   icon="rewind"
-                  label="Rollback"
+                  label="Roll back"
                   :disabled="busy"
                   @click="rollback(d)"
                 />

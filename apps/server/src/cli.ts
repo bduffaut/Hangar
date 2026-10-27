@@ -1,6 +1,13 @@
 // hangar-admin: administration from the server's command line. In production it runs inside
 // hangar-core (`docker exec -it hangar-core hangar-admin …`); the installer calls it too.
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, schemas } from '@hangar/shared'
+import { createInterface } from 'node:readline'
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  schemas,
+  sslipDomain,
+  towerHostname,
+} from '@hangar/shared'
 import { ConfigError, loadConfig } from './config.ts'
 import { createContext } from './context.ts'
 import { createLogger } from './logger.ts'
@@ -14,12 +21,15 @@ const USAGE = `Usage: hangar-admin <command>
   set-lan-ip <address>       Change the address devices use to reach Hangar (if the server's IP
                              changed and the Control Tower no longer opens)`
 
-async function readStdin(): Promise<string> {
-  const chunks: Buffer[] = []
-  for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
-  return Buffer.concat(chunks)
-    .toString('utf8')
-    .replace(/\r?\n$/, '')
+/** The first line of standard input, so a typed password ends with Enter (no Ctrl+D needed). */
+async function readLine(): Promise<string> {
+  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
+  try {
+    for await (const line of lines) return line
+    return ''
+  } finally {
+    lines.close()
+  }
 }
 
 async function main() {
@@ -41,7 +51,9 @@ async function main() {
       case 'reset-password': {
         const [username] = args
         if (!username) throw new Error(USAGE)
-        const password = await readStdin()
+        // Through `docker exec -i` there is no terminal to hide the typing, so say so.
+        console.error('Type the new password and press Enter (it shows as you type):')
+        const password = await readLine()
         if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
           throw new Error(
             `The password must be ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters.`,
@@ -53,10 +65,12 @@ async function main() {
       }
       case 'set-lan-ip': {
         const parsed = schemas.settingsPatch.shape.lanIp.safeParse(args[0])
-        if (!parsed.success || !parsed.data) throw new Error(`Give an IPv4 address.\n\n${USAGE}`)
+        if (!parsed.success || !parsed.data) {
+          throw new Error(`Enter an IPv4 address, like 192.168.1.50.\n\n${USAGE}`)
+        }
         await updateSettings(ctx, { lanIp: parsed.data })
-        const domain = parsed.data.replaceAll('.', '-')
-        console.error(`Hangar now answers at http://tower.${domain}.sslip.io and http://${parsed.data}`)
+        const tower = towerHostname(sslipDomain(parsed.data))
+        console.error(`Hangar now answers at http://${tower} and http://${parsed.data}`)
         break
       }
       default:

@@ -31,67 +31,69 @@ export interface Palette {
 }
 
 /**
- * Night panel (dark) and day panel (light). Navy instead of black keeps long sessions easy on the
- * eyes; the radar teal accent never collides with a deployment status color.
+ * Cockpit panel (dark) and day panel (light). The canvas is the blue-gray of a flight deck rather
+ * than black. The accent comes from airport taxiway signs: black on yellow at night, yellow on
+ * black by day, so a primary button reads like a sign in both themes.
  */
 export const palettes: Record<ColorScheme, Palette> = {
   dark: {
-    canvas: '#0F1A2B',
-    panel: '#15233A',
-    raised: '#1D2E4A',
-    line: '#2B3F60',
-    ink: '#E7EDF6',
-    inkMuted: '#97A7BF',
-    accent: '#36CFC9',
-    onAccent: '#04201F',
-    console: '#0A1322',
-    consoleInk: '#D4DEEC',
-    danger: '#F2555A',
-    scrim: 'rgba(5, 10, 20, 0.62)',
+    canvas: '#1A2127',
+    panel: '#222B33',
+    raised: '#2B3640',
+    line: '#36434F',
+    ink: '#ECEFF1',
+    inkMuted: '#9DAAB5',
+    accent: '#F5C42C',
+    onAccent: '#14181C',
+    console: '#12171C',
+    consoleInk: '#D7DEE4',
+    danger: '#F45B5B',
+    scrim: 'rgba(8, 11, 14, 0.66)',
   },
   light: {
-    canvas: '#EDF1F7',
-    panel: '#FFFFFF',
-    raised: '#F4F7FB',
-    line: '#D3DCE8',
-    ink: '#13213A',
-    inkMuted: '#56677F',
-    accent: '#087A75',
-    onAccent: '#FFFFFF',
-    console: '#0F1A2B',
-    consoleInk: '#D4DEEC',
-    danger: '#C9302C',
-    scrim: 'rgba(19, 33, 58, 0.45)',
+    canvas: '#E7EBEE',
+    panel: '#F8FAFB',
+    raised: '#EEF2F4',
+    line: '#CCD4DA',
+    ink: '#151B20',
+    inkMuted: '#56636E',
+    accent: '#151B20',
+    onAccent: '#F5C42C',
+    console: '#1A2127',
+    consoleInk: '#D7DEE4',
+    danger: '#C22F2F',
+    scrim: 'rgba(21, 27, 32, 0.5)',
   },
 }
 
 /**
- * Deployment status colors (gray holding, amber preflight, blue taking off, green, red). Each meets
- * 3:1 contrast against its panel as a dot, and the text tones meet 4.5:1 (WCAG AA).
+ * Deployment status colors follow the color code of cockpit flight displays: cyan for a value
+ * being set up (building), magenta for the active leg (taking off), green for engaged (live), red
+ * for a warning. Each meets 3:1 against its panel as a dot and 4.5:1 as text (WCAG AA).
  */
 export const statusColors: Record<ColorScheme, Record<DeploymentStatus, string>> = {
   dark: {
-    queued: '#8A97AB',
-    building: '#F2B441',
-    deploying: '#5B9BFF',
-    ready: '#3DD68C',
-    failed: '#F2555A',
-    cancelled: '#6B7891',
+    queued: '#9AA6B1',
+    building: '#4FC9E8',
+    deploying: '#E486EA',
+    ready: '#4FD889',
+    failed: '#F45B5B',
+    cancelled: '#76828E',
   },
   light: {
-    queued: '#5F6E85',
-    building: '#946200',
-    deploying: '#2F6FDB',
-    ready: '#13894F',
-    failed: '#C9302C',
-    cancelled: '#8A96A8',
+    queued: '#5A6772',
+    building: '#0A7896',
+    deploying: '#9E3399',
+    ready: '#13784A',
+    failed: '#C22F2F',
+    cancelled: '#7D8994',
   },
 }
 
 /** Chart series colors after the status colors: accent first, then distinct hues. */
 export const chartSeries: Record<ColorScheme, string[]> = {
-  dark: ['#36CFC9', '#5B9BFF', '#F2B441', '#C38BFF', '#FF8A5B'],
-  light: ['#087A75', '#2F6FDB', '#946200', '#8A4FD8', '#D4622F'],
+  dark: ['#F5C42C', '#4FC9E8', '#E486EA', '#4FD889', '#FF9B5B'],
+  light: ['#8A6A00', '#0A7896', '#9E3399', '#13784A', '#B8541F'],
 }
 
 /**
@@ -106,12 +108,15 @@ export const terminal = {
   blue: '#7FB2FF',
   magenta: '#D4A5FF',
   cyan: '#5FE3DD',
-  white: '#E7EDF6',
-  accent: '#5FE3DD',
+  white: '#ECEFF1',
+  accent: '#F5C42C',
 } as const
 
 export const typography = {
   family: '"Archivo Variable", "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif',
+  /** B612: the typeface Airbus designed for cockpit displays. For readings, addresses, statuses. */
+  data: '"B612", system-ui, -apple-system, "Segoe UI", sans-serif',
+  /** For what people type or copy exactly: addresses in inputs, commit IDs, logs. */
   mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
   /** Headings use Archivo's width axis: wide like a cockpit placard. */
   headingStretch: '118%',
@@ -129,7 +134,8 @@ export const typography = {
   weight: { regular: '400', medium: '520', bold: '650' },
 } as const
 
-export const radius = { sm: '4px', md: '8px', lg: '12px', pill: '999px' } as const
+/** Controls are tighter than the panels that hold them; pills are for status only. */
+export const radius = { sm: '3px', md: '5px', lg: '8px', pill: '999px' } as const
 
 export const space = {
   1: '0.25rem',

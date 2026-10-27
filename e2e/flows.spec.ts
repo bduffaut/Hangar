@@ -62,8 +62,8 @@ test('create, deploy, configure, roll back, and delete a project', async ({ page
   await expect(history.locator('tbody tr')).toHaveCount(2)
   await expect(page.getByRole('img', { name: 'Build time per deployment' })).toBeVisible()
   await shot(page, `${device}-project`)
-  await history.getByRole('row', { name: /#1/ }).getByRole('button', { name: 'Rollback' }).click()
-  await page.getByRole('button', { name: 'Roll back' }).click()
+  await history.getByRole('row', { name: /#1/ }).getByRole('button', { name: 'Roll back' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Roll back' }).click()
   await expect(history.getByRole('row', { name: /#3/ })).toContainText('Airborne', {
     timeout: 2 * 60_000,
   })

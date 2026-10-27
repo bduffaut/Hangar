@@ -51,3 +51,21 @@ export function deploymentDuration(
   if (!d.startedAt) return null
   return (d.finishedAt ? new Date(d.finishedAt).getTime() : now) - new Date(d.startedAt).getTime()
 }
+
+/** "45 min", "6 h 12 min", "3 days 4 h" */
+export function formatUptime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+  if (days > 0) return `${days} ${days === 1 ? 'day' : 'days'} ${hours % 24} h`
+  if (hours > 0) return `${hours} h ${minutes % 60} min`
+  return `${minutes} min`
+}
+
+/** "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz" → "Intel Core i7-9750H @ 2.60GHz" */
+export const cleanCpuModel = (model: string) =>
+  model
+    .replace(/\((R|TM|tm|r)\)/g, '')
+    .replace(/\bCPU\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()

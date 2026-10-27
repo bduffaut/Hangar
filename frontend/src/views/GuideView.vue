@@ -16,17 +16,6 @@ async function restartTour() {
   await router.push({ name: 'home' })
   tour.start()
 }
-
-const pipeline = [
-  { title: 'Download', body: 'Fetch exactly the commit being deployed.' },
-  {
-    title: 'Build',
-    body: 'Turn the code into an image, using your Dockerfile or by detecting the framework.',
-  },
-  { title: 'Start', body: 'Run the new version next to the old one. Nobody sees it yet.' },
-  { title: 'Check', body: 'Wait up to a minute for the app to answer on its port.' },
-  { title: 'Switch', body: 'Point the address at the new version, then stop the old one.' },
-]
 </script>
 
 <template>
@@ -37,17 +26,15 @@ const pipeline = [
   </PageHeader>
 
   <div class="hg-guide">
-    <HgPanel title="What happens when you deploy" class="hg-guide-wide">
+    <HgPanel :title="guideCopy.pipelineTitle" class="hg-guide-wide">
       <ol class="hg-pipeline">
-        <li v-for="(stage, i) in pipeline" :key="stage.title">
+        <li v-for="(stage, i) in guideCopy.pipeline" :key="stage.title">
           <span class="hg-pipeline-index" aria-hidden="true">{{ i + 1 }}</span>
           <strong>{{ stage.title }}</strong>
           <span class="hg-muted">{{ stage.body }}</span>
         </li>
       </ol>
-      <p class="hg-muted hg-pipeline-note">
-        If any step fails, the previous version keeps serving and nothing changes for visitors.
-      </p>
+      <p class="hg-muted hg-pipeline-note">{{ guideCopy.pipelineNote }}</p>
     </HgPanel>
 
     <HgPanel title="Statuses">

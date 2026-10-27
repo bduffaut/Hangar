@@ -28,18 +28,19 @@ const inProgress = computed(() => ['queued', 'building', 'deploying'].includes(p
   --tone: var(--hg-status-queued);
   display: inline-flex;
   align-items: center;
-  gap: var(--hg-space-2);
-  padding: 0.15rem 0.6rem 0.15rem 0.45rem;
-  border-radius: var(--hg-radius-pill);
-  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  gap: 0.45rem;
+  padding: 0.2rem 0.55rem 0.2rem 0.5rem;
+  border-radius: var(--hg-radius-sm);
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  background: color-mix(in srgb, var(--tone) 12%, var(--hg-panel));
   color: var(--hg-ink);
-  font-size: var(--hg-size-sm);
-  font-weight: var(--hg-weight-medium);
+  font-family: var(--hg-data);
+  font-size: var(--hg-size-xs);
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 .is-small {
-  font-size: var(--hg-size-xs);
-  padding: 0.1rem 0.5rem 0.1rem 0.4rem;
+  padding: 0.1rem 0.45rem 0.1rem 0.4rem;
 }
 .is-building {
   --tone: var(--hg-status-building);
@@ -57,9 +58,9 @@ const inProgress = computed(() => ['queued', 'building', 'deploying'].includes(p
   --tone: var(--hg-status-cancelled);
 }
 .hg-status-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 1px;
   background: var(--tone);
 }
 .is-live {

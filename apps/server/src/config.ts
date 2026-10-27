@@ -25,6 +25,7 @@ const envSchema = z.object({
   HANGAR_WEB_DIR: z.string().min(1).default('/app/web'),
   HANGAR_HOST_PROC: z.string().min(1).default('/proc'),
   HANGAR_HOST_ROOT: z.string().min(1).default('/'),
+  HANGAR_HOST_SYS: z.string().min(1).default('/sys'),
   // Extra browser origins allowed to call the API, comma-separated (development only).
   HANGAR_DEV_ORIGINS: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
@@ -62,6 +63,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     webDir: e.HANGAR_WEB_DIR,
     hostProcDir: e.HANGAR_HOST_PROC,
     hostRootDir: e.HANGAR_HOST_ROOT,
+    hostSysDir: e.HANGAR_HOST_SYS,
     devOrigins:
       e.NODE_ENV === 'production'
         ? []

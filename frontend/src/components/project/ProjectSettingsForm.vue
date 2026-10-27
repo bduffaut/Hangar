@@ -116,14 +116,14 @@ async function remove() {
         <BaseField label="Branch" for="ps-branch">
           <BaseInput id="ps-branch" v-model="branch" mono />
         </BaseField>
-        <BaseField label="Root directory" for="ps-root" help="Empty for the repository root.">
+        <BaseField label="Root directory" for="ps-root" help="Leave empty for the repository root.">
           <BaseInput id="ps-root" v-model="rootDir" mono placeholder="(repository root)" />
         </BaseField>
         <BaseField
           label="Port"
           for="ps-port"
           :error="portError"
-          help="Empty to detect it, falling back to 3000."
+          help="Leave empty to detect it, falling back to 3000."
         >
           <BaseInput
             id="ps-port"

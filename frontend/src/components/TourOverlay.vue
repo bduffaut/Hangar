@@ -5,36 +5,92 @@ import { useTour } from '../composables/useTour.ts'
 import { BaseButton } from '../ui/index.ts'
 
 const tour = useTour()
-const box = ref<{ top: number; left: number; width: number; height: number } | null>(null)
+interface Box {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+const box = ref<Box | null>(null)
 const card = ref<HTMLElement | null>(null)
+const cardPosition = ref<{ top: number; left: number } | null>(null)
+
+/** Space kept between the highlight, the card, and the window edges. */
+const GAP = 12
+const PAD = 6
 
 function target() {
   const step = tour.current.value
   return step ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`) : null
 }
 
-function place(element: HTMLElement | null) {
-  if (!element) {
+// While the tour is open the highlight is re-measured every frame, so it stays on its target
+// through smooth scrolling, data arriving and changing the layout, and window resizes.
+let frame = 0
+function track() {
+  const element = target()
+  if (element) {
+    const r = element.getBoundingClientRect()
+    const next = {
+      top: r.top - PAD,
+      left: r.left - PAD,
+      width: r.width + PAD * 2,
+      height: r.height + PAD * 2,
+    }
+    const prev = box.value
+    if (!prev || Object.entries(next).some(([k, v]) => Math.abs(prev[k as keyof Box] - v) > 0.5)) {
+      box.value = next
+    }
+  } else if (box.value) {
     box.value = null
-    return
   }
-  const rect = element.getBoundingClientRect()
-  box.value = { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+  placeCard()
+  frame = requestAnimationFrame(track)
 }
 
-function measure() {
-  const element = target()
-  element?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  place(element)
+/** Below the highlight if it fits, else above, else pinned to the bottom of the window. */
+function placeCard() {
+  const el = card.value
+  if (!el) return
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const w = el.offsetWidth
+  const h = el.offsetHeight
+  const b = box.value
+  let top: number
+  let left: number
+  if (!b) {
+    top = (vh - h) / 2
+    left = (vw - w) / 2
+  } else {
+    const below = b.top + b.height + GAP
+    const above = b.top - GAP - h
+    if (below + h <= vh - GAP) top = below
+    else if (above >= GAP) top = above
+    else top = vh - h - GAP
+    // Line up with the highlight's left edge, or its right edge when it sits on the right.
+    left = b.left + b.width / 2 > vw / 2 ? b.left + b.width - w : b.left
+  }
+  left = Math.min(Math.max(GAP, left), vw - w - GAP)
+  top = Math.min(Math.max(GAP, top), vh - h - GAP)
+  const prev = cardPosition.value
+  if (!prev || Math.abs(prev.top - top) > 0.5 || Math.abs(prev.left - left) > 0.5) {
+    cardPosition.value = { top, left }
+  }
 }
 
 // Focus returns to where it was when the tour ends.
 let returnFocus: HTMLElement | null = null
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 watch(
   () => tour.step.value,
   async (step, previous) => {
     if (step === null) {
+      cancelAnimationFrame(frame)
+      frame = 0
+      box.value = null
+      cardPosition.value = null
       returnFocus?.focus()
       returnFocus = null
       return
@@ -42,10 +98,9 @@ watch(
     if (previous === null || previous === undefined)
       returnFocus = document.activeElement as HTMLElement | null
     await nextTick()
-    measure()
-    // Measure again once the smooth scroll settles.
-    setTimeout(measure, 350)
-    card.value?.focus()
+    target()?.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' })
+    if (!frame) frame = requestAnimationFrame(track)
+    card.value?.focus({ preventScroll: true })
   },
   { immediate: true },
 )
@@ -71,34 +126,16 @@ const onKey = (event: KeyboardEvent) => {
     first.focus()
   }
 }
-// The highlight follows its target when the page scrolls or resizes.
-let frame = 0
-const remeasure = () => {
-  if (tour.step.value === null || frame) return
-  frame = requestAnimationFrame(() => {
-    frame = 0
-    place(target())
-  })
-}
 window.addEventListener('keydown', onKey)
-window.addEventListener('resize', remeasure)
-window.addEventListener('scroll', remeasure, { passive: true, capture: true })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
-  window.removeEventListener('resize', remeasure)
-  window.removeEventListener('scroll', remeasure, { capture: true })
-  if (frame) cancelAnimationFrame(frame)
+  cancelAnimationFrame(frame)
 })
 
-const cardStyle = () => {
-  if (!box.value) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
-  const below = box.value.top + box.value.height + 12
-  const fitsBelow = below + 180 < window.innerHeight
-  return {
-    top: `${fitsBelow ? below : Math.max(12, box.value.top - 192)}px`,
-    left: `${Math.min(Math.max(12, box.value.left), window.innerWidth - 332)}px`,
-  }
-}
+const cardStyle = () =>
+  cardPosition.value
+    ? { top: `${cardPosition.value.top}px`, left: `${cardPosition.value.left}px` }
+    : { top: '0', left: '0', visibility: 'hidden' as const }
 </script>
 
 <template>
@@ -113,12 +150,13 @@ const cardStyle = () => {
       v-if="box"
       class="hg-tour-spotlight"
       :style="{
-        top: `${box.top - 6}px`,
-        left: `${box.left - 6}px`,
-        width: `${box.width + 12}px`,
-        height: `${box.height + 12}px`,
+        top: `${box.top}px`,
+        left: `${box.left}px`,
+        width: `${box.width}px`,
+        height: `${box.height}px`,
       }"
     />
+    <div v-else class="hg-tour-scrim" />
     <div ref="card" class="hg-tour-card" tabindex="-1" :style="cardStyle()">
       <p class="hg-tour-progress">{{ (tour.step.value ?? 0) + 1 }} of {{ tour.steps.length }}</p>
       <h2>{{ tour.current.value.title }}</h2>
@@ -146,13 +184,19 @@ const cardStyle = () => {
   inset: 0;
   z-index: 1000;
 }
+/* Positioned from the target every frame, so no transition: it would lag behind. */
 .hg-tour-spotlight {
   position: fixed;
-  border-radius: var(--hg-radius-lg);
-  box-shadow: 0 0 0 9999px var(--hg-scrim);
+  border-radius: calc(var(--hg-radius-lg) + 4px);
+  box-shadow: 0 0 0 200vmax var(--hg-scrim);
   outline: 2px solid var(--hg-accent);
-  transition: all var(--hg-motion-base) var(--hg-motion-easing);
+  outline-offset: 0;
   pointer-events: none;
+}
+.hg-tour-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--hg-scrim);
 }
 .hg-tour-card {
   position: fixed;
@@ -163,7 +207,9 @@ const cardStyle = () => {
   border-radius: var(--hg-radius-lg);
   background: var(--hg-panel);
   border: 1px solid var(--hg-line);
+  border-top: 3px solid var(--hg-accent);
   color: var(--hg-ink);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 .hg-tour-card h2 {
   font-size: var(--hg-size-md);

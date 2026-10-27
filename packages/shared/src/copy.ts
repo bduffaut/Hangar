@@ -115,9 +115,22 @@ export const instrumentsCopy = {
   cpu: 'CPU',
   memory: 'Memory',
   disk: 'Disk',
-  images: 'App images',
+  temperature: 'CPU temperature',
+  noSensors: 'This machine reports no temperature sensors.',
+  battery: 'Battery',
+  uptime: 'Up for',
+  load: (value: number) => `Load ${value.toFixed(2)}`,
+  threads: (n: number) => `${n} threads`,
+  images: (size: string) => `${size} of app images`,
   version: 'Version',
   waiting: 'Reading the instruments…',
+  /** Battery states as the kernel names them. */
+  batteryStatus: {
+    Charging: 'Charging',
+    Discharging: 'On battery',
+    'Not charging': 'Plugged in, not charging',
+    Full: 'Full, plugged in',
+  } as Record<string, string>,
 } as const
 
 export const projectTabsCopy = {
@@ -261,6 +274,19 @@ export const guideCopy = {
   title: 'How Hangar works',
   intro:
     'A short tour of what happens when you deploy, and where to look when something goes wrong.',
+  pipelineTitle: 'What happens when you deploy',
+  pipeline: [
+    { title: 'Download', body: 'Fetch exactly the commit being deployed.' },
+    {
+      title: 'Build',
+      body: 'Turn the code into an image, using your Dockerfile or by detecting the framework.',
+    },
+    { title: 'Start', body: 'Run the new version next to the old one. Nobody sees it yet.' },
+    { title: 'Check', body: 'Wait up to a minute for the app to answer on its port.' },
+    { title: 'Switch', body: 'Point the address at the new version, then stop the old one.' },
+  ],
+  pipelineNote:
+    'If any step fails, the previous version keeps serving and nothing changes for visitors.',
   sections: [
     {
       title: 'Projects',
@@ -268,11 +294,7 @@ export const guideCopy = {
     },
     {
       title: 'Deployments',
-      body: 'Each deployment builds one commit. Hangar downloads it, builds an image (with your Dockerfile, or by detecting the framework if there is none), starts it, and checks it answers. Only then does traffic switch over, so a broken build never takes your app down.',
-    },
-    {
-      title: 'Statuses',
-      body: 'Holding means waiting to build. Preflight means building. Taking off means starting and health-checking. Airborne means live. Grounded means it failed and the previous version kept serving. Scrubbed means it was cancelled.',
+      body: "Each deployment builds and runs one commit. A project's page lists them, newest first, with the build log of each.",
     },
     {
       title: 'Logs',
@@ -295,19 +317,19 @@ export const guideCopy = {
     {
       target: 'instruments',
       title: 'Instruments',
-      body: 'Live CPU, memory, and disk use of this server.',
+      body: 'Live readings from this server: CPU, memory, disk, temperature, and battery.',
     },
     {
       target: 'projects',
       title: 'Your projects',
-      body: 'Each card shows the app, its address, and its recent deployments as a row of lights, newest on the right.',
+      body: 'One row per app: its address, the last commit deployed, and its status. The lights are its recent deployments, newest on the right.',
     },
     {
       target: 'new-project',
       title: 'Add a project',
-      body: 'Connect a repository here. Hangar deploys it right away.',
+      body: 'Connect a GitHub repository here. Hangar builds it and gives it its own address.',
     },
-    { target: 'guide', title: 'Guide', body: 'Come back here any time for a refresher.' },
+    { target: 'guide', title: 'Guide', body: 'How deploys work and what each status means.' },
   ],
   tourNext: 'Next',
   tourDone: 'Done',

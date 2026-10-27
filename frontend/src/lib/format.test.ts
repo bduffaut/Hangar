@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { deploymentDuration, formatBytes, formatDuration, relativeTime } from './format.ts'
+import {
+  cleanCpuModel,
+  deploymentDuration,
+  formatBytes,
+  formatDuration,
+  formatUptime,
+  relativeTime,
+} from './format.ts'
 
 describe('format', () => {
   it('formats bytes', () => {
@@ -29,5 +36,14 @@ describe('format', () => {
     expect(
       deploymentDuration({ startedAt: '2026-10-27T12:00:00Z', finishedAt: '2026-10-27T12:01:30Z' }),
     ).toBe(90_000)
+  })
+
+  it('formats uptime and CPU names', () => {
+    expect(formatUptime(45 * 60)).toBe('45 min')
+    expect(formatUptime(6 * 3600 + 12 * 60)).toBe('6 h 12 min')
+    expect(formatUptime(3 * 86400 + 4 * 3600)).toBe('3 days 4 h')
+    expect(cleanCpuModel('Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz')).toBe(
+      'Intel Core i7-9750H @ 2.60GHz',
+    )
   })
 })

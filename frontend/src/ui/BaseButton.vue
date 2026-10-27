@@ -42,7 +42,10 @@ const library = computed(() => ({
     :aria-label="ariaLabel"
     :fluid="fluid"
     class="hg-button"
-    :class="{ 'is-console': tone === 'console' }"
+    :class="{
+      'is-console': tone === 'console',
+      'is-unavailable': variant === 'primary' && disabled && !loading,
+    }"
     @click="$emit('click', $event)"
   >
     <template v-if="icon" #icon>
@@ -56,6 +59,13 @@ const library = computed(() => ({
 .hg-button {
   font-weight: var(--hg-weight-medium);
   gap: var(--hg-space-2);
+}
+/* A faded yellow reads as broken; an unavailable primary action goes plain instead. */
+.hg-button.is-unavailable {
+  background: var(--hg-raised);
+  border-color: var(--hg-line);
+  color: var(--hg-ink-muted);
+  opacity: 1;
 }
 .hg-button.is-console {
   color: var(--hg-console-ink);
