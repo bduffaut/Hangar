@@ -2,7 +2,7 @@
 //   pnpm hangar <command> ...   (from the repo root; see `pnpm hangar help`)
 import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
-import { appHostname, checkProjectName, isTerminal } from '@hangar/shared'
+import { appHostname, isTerminal } from '@hangar/shared'
 import { loadConfig } from '../src/config.ts'
 import { createContext } from '../src/context.ts'
 import { createLogger } from '../src/logger.ts'
@@ -14,20 +14,15 @@ import {
   listLogs,
 } from '../src/modules/deployments/repo.ts'
 import {
+  cancelActive,
+  queueBranchHead,
   queueDeployment,
   queueRollback,
-  requestCancel,
 } from '../src/modules/deployments/service.ts'
 import { setEnv } from '../src/modules/env-vars/service.ts'
-import {
-  getProjectByName,
-  insertProject,
-  listProjects,
-  type Project,
-  updateProject,
-} from '../src/modules/projects/repo.ts'
+import { getProjectByName, listProjects, type Project } from '../src/modules/projects/repo.ts'
+import { createProject, updateProjectSettings } from '../src/modules/projects/service.ts'
 import { getSettings } from '../src/modules/settings/repo.ts'
-import { getGithubToken } from '../src/modules/settings/service.ts'
 
 const USAGE = `Usage: pnpm hangar <command>
 
@@ -44,7 +39,6 @@ const USAGE = `Usage: pnpm hangar <command>
 
 const config = loadConfig(process.env)
 const { ctx, close } = createContext(config, createLogger({ ...config, logLevel: 'warn' }))
-await ctx.queue.start()
 
 const { values: flags, positionals } = parseArgs({
   allowPositionals: true,
@@ -72,22 +66,23 @@ function describe(d: Deployment): string {
   return `#${d.number}  ${d.status}${failure}  ${sha}  ${d.trigger}${message}`
 }
 
+/** Prints log lines after `seq`; returns the last sequence number printed. */
+async function printLogs(deploymentId: string, seq = -1): Promise<number> {
+  for (const row of await listLogs(ctx.db, deploymentId, seq)) {
+    console.log(row.stream === 'system' ? `▸ ${row.line}` : row.line)
+    seq = row.seq
+  }
+  return seq
+}
+
 /** Prints the build log as it is written, until the deployment finishes. */
 async function follow(deployment: Deployment): Promise<Deployment> {
   let seq = -1
   for (;;) {
-    for (const row of await listLogs(ctx.db, deployment.id, seq)) {
-      console.log(row.stream === 'system' ? `▸ ${row.line}` : row.line)
-      seq = row.seq
-    }
+    // Read the status first: the pipeline saves every log line before the final status.
     const current = (await getDeployment(ctx.db, deployment.id))!
-    if (isTerminal(current.status)) {
-      await sleep(300) // the last log batch lands just after the status change
-      for (const row of await listLogs(ctx.db, deployment.id, seq)) {
-        console.log(row.stream === 'system' ? `▸ ${row.line}` : row.line)
-      }
-      return current
-    }
+    seq = await printLogs(deployment.id, seq)
+    if (isTerminal(current.status)) return current
     await sleep(500)
   }
 }
@@ -106,18 +101,11 @@ async function finish(p: Project, deployment: Deployment): Promise<void> {
 }
 
 function parsePort(value: string | undefined): number | null | undefined {
-  if (value === undefined) return undefined
-  if (value === 'auto') return null
-  const port = Number(value)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`Invalid port: ${value}`)
-  return port
+  return value === undefined ? undefined : value === 'auto' ? null : Number(value)
 }
 
 function parseMemory(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined
-  const mb = Number(value)
-  if (!Number.isInteger(mb) || mb < 64) throw new Error(`Invalid memory limit: ${value}`)
-  return mb
+  return value === undefined ? undefined : Number(value)
 }
 
 try {
@@ -133,23 +121,21 @@ try {
     case 'add': {
       const [name, repoUrl] = args
       if (!name || !repoUrl) throw new Error(USAGE)
-      const problem = checkProjectName(name)
-      if (problem) throw new Error(`Invalid project name "${name}": ${problem}`)
-      await insertProject(ctx.db, {
+      await createProject(ctx, {
         name,
         repoUrl,
-        branch: flags.branch ?? 'main',
-        rootDir: flags.root ?? '',
-        port: parsePort(flags.port) ?? null,
-        memoryLimitMb: parseMemory(flags.memory),
         triggerMode: 'manual',
+        branch: flags.branch,
+        rootDir: flags.root,
+        port: parsePort(flags.port),
+        memoryLimitMb: parseMemory(flags.memory),
       })
       console.log(`Added ${name}. Deploy it with: pnpm hangar deploy ${name}`)
       break
     }
     case 'set': {
       const p = await project(args[0])
-      await updateProject(ctx.db, p.id, {
+      await updateProjectSettings(ctx, p, {
         branch: flags.branch,
         rootDir: flags.root,
         port: parsePort(flags.port),
@@ -173,10 +159,10 @@ try {
     }
     case 'deploy': {
       const p = await project(args[0])
-      const sha =
-        flags.sha ?? (await ctx.git.headOf(p.repoUrl, p.branch, await getGithubToken(ctx)))
-      if (!sha) throw new Error(`Branch "${p.branch}" was not found in ${p.repoUrl}`)
-      await finish(p, await queueDeployment(ctx, p, { commitSha: sha, trigger: 'manual' }))
+      const deployment = flags.sha
+        ? await queueDeployment(ctx, p, { commitSha: flags.sha, trigger: 'manual' })
+        : await queueBranchHead(ctx, p, 'manual')
+      await finish(p, deployment)
       break
     }
     case 'rollback': {
@@ -187,10 +173,7 @@ try {
       break
     }
     case 'cancel': {
-      const p = await project(args[0])
-      const [active] = (await listDeployments(ctx.db, p.id, 5)).filter((d) => !isTerminal(d.status))
-      if (!active) throw new Error(`${p.name} has nothing to cancel`)
-      await requestCancel(ctx, active.id)
+      const active = await cancelActive(ctx, await project(args[0]))
       console.log(`Cancel requested for #${active.number}`)
       break
     }
@@ -208,9 +191,7 @@ try {
         ? await getDeploymentByNumber(ctx.db, p.id, Number(args[1]))
         : (await listDeployments(ctx.db, p.id, 1))[0]
       if (!d) throw new Error(`${p.name} has no such deployment`)
-      for (const row of await listLogs(ctx.db, d.id)) {
-        console.log(row.stream === 'system' ? `▸ ${row.line}` : row.line)
-      }
+      await printLogs(d.id)
       console.log(`\n${describe(d)}`)
       if (d.failureReason) console.log(d.failureReason)
       break

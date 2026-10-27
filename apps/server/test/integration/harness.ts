@@ -2,11 +2,11 @@
 // the dev database, the worker inside hangar-core runs them, and the tests check the results
 // through Traefik on port 80, exactly as a browser would.
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { request } from 'node:http'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { appHostname, isTerminal } from '@hangar/shared'
+import { appHostname, type DeploymentStatus, isTerminal } from '@hangar/shared'
 import { parse } from 'yaml'
 import { loadConfig } from '../../src/config.ts'
 import { createContext } from '../../src/context.ts'
@@ -14,6 +14,7 @@ import { createLogger } from '../../src/logger.ts'
 import { type Deployment, getDeployment } from '../../src/modules/deployments/repo.ts'
 import { deleteProject, insertProject, type Project } from '../../src/modules/projects/repo.ts'
 import { getSettings } from '../../src/modules/settings/repo.ts'
+import { appImageRepository } from '../../src/platform/names.ts'
 
 export const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..')
 /** Where hangar-core sees the repository (docker/compose.dev.yml bind mount). */
@@ -56,25 +57,33 @@ export function createHarness() {
       return project
     },
 
-    async waitForEnd(deployment: Deployment, timeoutMs = 600_000): Promise<Deployment> {
+    /** Polls until `done` holds for the deployment, or throws after `timeoutMs`. */
+    async waitFor(
+      deployment: Deployment,
+      done: (current: Deployment) => boolean,
+      timeoutMs: number,
+    ): Promise<Deployment> {
       const deadline = Date.now() + timeoutMs
       while (Date.now() < deadline) {
         const current = (await getDeployment(ctx.db, deployment.id))!
-        if (isTerminal(current.status)) return current
-        await sleep(500)
-      }
-      throw new Error(`Deployment #${deployment.number} did not finish in time`)
-    },
-
-    async waitForStatus(deployment: Deployment, status: string, timeoutMs = 120_000) {
-      const deadline = Date.now() + timeoutMs
-      while (Date.now() < deadline) {
-        const current = (await getDeployment(ctx.db, deployment.id))!
-        if (current.status === status) return current
-        if (isTerminal(current.status)) throw new Error(`Deployment ended as ${current.status}`)
+        if (done(current)) return current
         await sleep(250)
       }
-      throw new Error(`Deployment #${deployment.number} never reached ${status}`)
+      throw new Error(`Deployment #${deployment.number} did not get there in time`)
+    },
+
+    waitForEnd(deployment: Deployment, timeoutMs = 600_000): Promise<Deployment> {
+      return this.waitFor(deployment, (d) => isTerminal(d.status), timeoutMs)
+    },
+
+    async waitForStatus(deployment: Deployment, status: DeploymentStatus, timeoutMs = 120_000) {
+      const current = await this.waitFor(
+        deployment,
+        (d) => d.status === status || isTerminal(d.status),
+        timeoutMs,
+      )
+      if (current.status !== status) throw new Error(`Deployment ended as ${current.status}`)
+      return current
     },
 
     /** GET / for an app through Traefik on port 80. */
@@ -100,7 +109,7 @@ export function createHarness() {
         for (const container of await ctx.docker.listManagedApps(project.id)) {
           await ctx.docker.removeContainer(container.id)
         }
-        for (const tag of await ctx.docker.listTags(`hangar/${project.name}`)) {
+        for (const tag of await ctx.docker.listTags(appImageRepository(project.name))) {
           await ctx.docker.removeImage(tag).catch(() => {})
         }
         await deleteProject(ctx.db, project.id)
@@ -135,6 +144,9 @@ export function createFixtureRepo(runId: string) {
     write(file: string, content: string) {
       mkdirSync(path.dirname(path.join(work, file)), { recursive: true })
       writeFileSync(path.join(work, file), content)
+    },
+    symlink(file: string, target: string) {
+      symlinkSync(target, path.join(work, file))
     },
     read(file: string) {
       return readFileSync(path.join(work, file), 'utf8')

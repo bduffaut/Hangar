@@ -210,7 +210,7 @@ Indexes: `(project_id, number desc)`, `(status)` partial on non-terminal statuse
 ### Retention
 
 - Build logs are kept for the last 20 deployments per project.
-- Images: the 5 most recent per project, plus the image of `current_deployment_id` regardless of age.
+- Images: the 5 most recent `ready` images per project (failed builds do not take a slot), plus the image of `current_deployment_id` and of any in-flight deployment. A build's tag is recorded when it starts building, so cleanup never removes an image mid-deploy.
 - pg-boss archives are pruned on its default schedule.
 
 ---
@@ -270,12 +270,14 @@ Each step receives an `AbortSignal` that fires on timeout or cancel.
 3. **Resolve port.** `projects.port` if set → the image's single `ExposedPorts` entry → `3000`. Stored on the deployment. `PORT=<port>` is always injected.
 4. **Run.** Create and start `hangar-app-<project>-<n>` on the `hangar` network with decrypted env vars, `RestartPolicy: unless-stopped`, the memory limit, and the managed labels. It is not routed yet.
 5. **Health check.** `GET http://hangar-app-<project>-<n>:<port>/` every second for up to 60 s. Any HTTP response counts as healthy; only connection errors and timeouts count as failure. If the container exits or restarts first, the check fails at once and the container's last 20 output lines go into the build log.
-6. **Switch** (D15). Under a per-project Postgres advisory lock:
+6. **Switch** (D15). Under the global `routing` advisory lock, which every write of the routing file takes (there is one file, so a switch must not be undone by another project's switch or a reconcile):
    1. Re-render `dynamic.yml` with this project pointed at the new container.
    2. Poll the Traefik API until the project's service points at the new container (timeout 10 s). On timeout, re-render from the database and fail.
-   3. In one transaction, set `current_deployment_id` and transition the deployment to `ready`.
+   3. Flush the build log, then in one transaction set `current_deployment_id` and transition the deployment to `ready`. Every log line is saved before a deployment reaches a final status, so a viewer that sees the status has the whole log.
    4. After the lock: stop every other managed container of the project with SIGTERM and a 10 s grace period, then remove it.
 7. **Always** (in `finally`): delete the work directory. On failure, remove the new container and leave the previous one serving.
+
+Steps 3–6 run under a per-project advisory lock (`project:<id>`, always taken before `routing`), which the reconciler also takes, so container changes for one project never interleave. A deployment numbered lower than the live one fails with `superseded` instead of going live, so a slow build cannot undo a later rollback.
 
 A cancel only takes effect while `building`; the 15-minute timeout covers clone and build. When the worker shuts down mid-build it kills the build and records `interrupted`.
 
@@ -379,7 +381,7 @@ Defined in `shared/contract.ts`. All routes are under `/api`. JSON in, JSON out.
 - **Rate limiting:** login and setup are limited per IP and per username (`@fastify/rate-limit`, in-memory while single-process).
 - **Boarding pass:** 128-bit random code shown in readable groups; only its SHA-256 is stored. Account creation is `INSERT … WHERE NOT EXISTS (SELECT 1 FROM users)` in the same transaction that clears `setupCodeHash`.
 - **Webhooks:** `X-Hub-Signature-256` verified with `crypto.timingSafeEqual` before any job is queued.
-- **Input to external commands:** branch names validated with `git check-ref-format` rules, SHAs `^[0-9a-f]{40}$`, root dirs normalized and rejected if absolute or containing `..`, ports 1–65535, project names as above. Every process runs via `execFile` with argument arrays; no shell strings are ever built.
+- **Input to external commands:** branch names validated with `git check-ref-format` rules, SHAs `^[0-9a-f]{40}$`, root dirs normalized and rejected if absolute or containing `..`, ports 1–65535, project names as above. Every process runs through `platform/process.ts` (`spawn` with an argument array, never a shell); no shell strings are ever built. Root directories are resolved with `realpath` and must stay inside the clone, and a symlinked `Dockerfile` is refused, so a repository cannot point a build at files outside its checkout.
 - **Secrets on disk:** `/opt/hangar/.env` is `0600 root:root`.
 - **README warning:** Hangar builds and runs arbitrary code from connected repositories with access to the Docker socket. Only connect repositories you trust.
 

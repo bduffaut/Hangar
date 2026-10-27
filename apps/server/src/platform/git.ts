@@ -9,7 +9,7 @@ export interface CommitInfo {
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 
-export function isCommitSha(value: string): boolean {
+function isCommitSha(value: string): boolean {
   return SHA_PATTERN.test(value)
 }
 
@@ -40,7 +40,7 @@ export function createGit() {
       const { stdout } = await runChecked(
         'git',
         ['ls-remote', '--', repoUrl, `refs/heads/${branch}`],
-        { env: gitEnv(repoUrl, token), signal },
+        { env: gitEnv(repoUrl, token), signal, captureStdout: true },
       )
       const sha = stdout.split('\t')[0]?.trim()
       return sha && isCommitSha(sha) ? sha : null
@@ -69,6 +69,7 @@ export function createGit() {
       const { stdout } = await runChecked('git', ['log', '-1', '--format=%H%x00%an%x00%s'], {
         cwd: dir,
         signal,
+        captureStdout: true,
       })
       const [head = '', author = '', message = ''] = stdout.trim().split('\0')
       if (head !== sha) throw new Error(`Checked out ${head} instead of ${sha}`)

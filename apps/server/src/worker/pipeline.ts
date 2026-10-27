@@ -8,26 +8,22 @@ import {
   HEALTH_CHECK_TIMEOUT_MS,
   appHostname,
 } from '@hangar/shared'
-import { access, rm } from 'node:fs/promises'
+import { realpath, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Ctx } from '../context.ts'
-import {
-  type Deployment,
-  getDeployment,
-  markDeploymentLive,
-  updateDeployment,
-} from '../modules/deployments/repo.ts'
-import { publishStatus, transition } from '../modules/deployments/service.ts'
+import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
+import { type Deployment, getDeployment, updateDeployment } from '../modules/deployments/repo.ts'
+import { goLive, transition } from '../modules/deployments/service.ts'
 import { getEnv } from '../modules/env-vars/service.ts'
-import { getProject, type Project } from '../modules/projects/repo.ts'
+import { getProject, listCurrentDeployments, type Project } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/service.ts'
 import { appImageRef } from '../platform/names.ts'
-import { appServiceName } from '../platform/proxy.ts'
+import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
 import { startAppContainer } from './app-container.ts'
 import { createDeploymentLog, type DeploymentLog } from './deployment-log.ts'
-import { syncRouting } from './reconciler.ts'
+import { switchRoute } from './reconciler.ts'
 
 /** Abort reasons for the controller the worker passes in. */
 export const ABORT_CANCEL = 'cancel'
@@ -55,9 +51,19 @@ async function step<T>(code: FailureCode, signal: AbortSignal, fn: () => Promise
   }
 }
 
-function resolveContextDir(sourceDir: string, rootDir: string): string {
-  const contextDir = path.resolve(sourceDir, rootDir)
-  if (contextDir !== sourceDir && !contextDir.startsWith(sourceDir + path.sep)) {
+/**
+ * The build context: the project's root directory inside the clone. Symlinks are resolved first,
+ * so a repository cannot point the build at files outside its own checkout.
+ */
+async function resolveContextDir(sourceDir: string, rootDir: string): Promise<string> {
+  const root = await realpath(sourceDir)
+  const contextDir = await realpath(path.resolve(sourceDir, rootDir)).catch(() => {
+    throw new PipelineError(
+      'build_failed',
+      `Root directory "${rootDir}" does not exist in this commit`,
+    )
+  })
+  if (contextDir !== root && !contextDir.startsWith(root + path.sep)) {
     throw new PipelineError('build_failed', `Root directory "${rootDir}" is outside the repository`)
   }
   return contextDir
@@ -98,39 +104,49 @@ export async function runDeployment(
   }
 
   try {
+    // Leave `queued` before anything that can fail, so a failure is always recorded on the row.
     if (deployment.trigger === 'rollback') {
       await advance('deploying', { startedAt: new Date() })
       log.system(`Rolling back to the image of commit ${deployment.commitSha.slice(0, 7)}`)
     } else {
-      await advance('building', { startedAt: new Date() })
-      await build(ctx, project, deployment, workDir, buildSignal, log)
-      await advance('deploying', {
-        imageTag: appImageRef(project.name, deployment.number, deployment.commitSha),
-      })
+      // The tag is recorded before building so cleanup never removes the image mid-deploy.
+      const imageTag = appImageRef(project.name, deployment.number, deployment.commitSha)
+      await advance('building', { startedAt: new Date(), imageTag })
+    }
+    const env = await getEnv(ctx, project.id)
+    if (deployment.status === 'building') {
+      await build(ctx, project, deployment, env, workDir, buildSignal, log)
+      await advance('deploying')
     }
 
-    const image = deployment.imageTag!
-    if (!(await ctx.docker.imageExists(image))) {
-      throw new PipelineError('image_missing', `The image ${image} no longer exists on this server`)
-    }
-    const port = await resolvePort(ctx, project, image)
+    // One deployment per project at a time from here on: starting, switching, and removing
+    // containers must not interleave with another deployment or the reconciler.
+    await withAdvisoryLock(ctx.db, projectLockKey(project.id), async () => {
+      const [current] = await listCurrentDeployments(ctx.db, project.id)
+      if (current && current.deployment.number > deployment.number) {
+        // e.g. a rollback requested after this build started has already gone live.
+        throw new PipelineError('superseded', 'A newer deployment of this project went live first')
+      }
+      const image = deployment.imageTag!
+      if (!(await ctx.docker.imageExists(image))) {
+        throw new PipelineError(
+          'image_missing',
+          `The image ${image} no longer exists on this server`,
+        )
+      }
+      const port = await resolvePort(ctx, project, image)
 
-    log.system(`Starting the app (port ${port}, memory limit ${project.memoryLimitMb} MB)`)
-    const container = await step('container_start_failed', control, () =>
-      startAppContainer(ctx, project, deployment, image, port),
-    )
-    containerName = container.name
-    await updateDeployment(ctx.db, deployment.id, { containerId: container.id, port })
+      log.system(`Starting the app (port ${port}, memory limit ${project.memoryLimitMb} MB)`)
+      const container = await step('container_start_failed', control, () =>
+        startAppContainer(ctx, project, deployment, image, port, env),
+      )
+      containerName = container.name
+      await updateDeployment(ctx.db, deployment.id, { containerId: container.id, port })
 
-    await waitUntilHealthy(ctx, log, container.name, port)
-    live = await switchTraffic(ctx, project, deployment, container, port, log)
+      await waitUntilHealthy(ctx, log, container.name, port)
+      live = await switchTraffic(ctx, project, deployment, container, port, log)
+    })
     if (!live) throw new Preempted()
-
-    const settings = await getSettings(ctx.db)
-    const url = settings.lanDomain
-      ? ` at http://${appHostname(project.name, settings.lanDomain)}`
-      : ''
-    log.system(`Deployment #${deployment.number} is live${url}`)
     await ctx.queue.send('gc', {})
   } catch (error) {
     if (error instanceof Preempted) return
@@ -142,14 +158,15 @@ export async function runDeployment(
       })
     }
     await rm(workDir, { recursive: true, force: true })
-    await log.flush()
   }
 }
 
+/** Clones the deployment's commit and builds it into `deployment.imageTag`. */
 async function build(
   ctx: Ctx,
   project: Project,
   deployment: Deployment,
+  env: Record<string, string>,
   workDir: string,
   signal: AbortSignal,
   log: DeploymentLog,
@@ -172,21 +189,14 @@ async function build(
   })
   log.system(`Commit: ${commit.message} (${commit.author})`)
 
-  const contextDir = resolveContextDir(sourceDir, project.rootDir)
-  await access(contextDir).catch(() => {
-    throw new PipelineError(
-      'build_failed',
-      `Root directory "${project.rootDir}" does not exist in this commit`,
-    )
-  })
-
-  const tag = appImageRef(project.name, deployment.number, deployment.commitSha)
-  const method = await step('build_failed', signal, async () =>
+  const contextDir = await resolveContextDir(sourceDir, project.rootDir)
+  const tag = deployment.imageTag!
+  await step('build_failed', signal, () =>
     ctx.builder.build({
       contextDir,
       workDir,
       tag,
-      secrets: await getEnv(ctx, project.id),
+      secrets: env,
       cacheKey: project.id,
       signal,
       onLine: log.write,
@@ -198,7 +208,7 @@ async function build(
         ),
     }),
   )
-  log.system(`Built ${tag} (${method === 'dockerfile' ? 'Dockerfile' : 'Railpack'})`)
+  log.system(`Built ${tag}`)
 }
 
 /** Any HTTP response counts as healthy. A container that exits or restarts fails at once. */
@@ -248,7 +258,8 @@ async function waitUntilHealthy(
 
 /**
  * Points the proxy at the new container, waits until Traefik confirms, then makes the deployment
- * current. Only after that is the previous container stopped. Serialized per project.
+ * current. Only after that is the previous container stopped. Every log line is saved before the
+ * deployment turns ready, so a viewer that sees the final status has the whole log.
  */
 async function switchTraffic(
   ctx: Ctx,
@@ -259,27 +270,27 @@ async function switchTraffic(
   log: DeploymentLog,
 ): Promise<boolean> {
   log.system('Switching traffic to the new version')
-  const live = await withProjectLock(ctx, project.id, async () => {
-    await syncRouting(ctx, { [project.name]: { deploymentNumber: deployment.number, port } })
-    try {
-      await ctx.proxy.waitForService(
-        appServiceName(project.name),
-        `http://${container.name}:${port}`,
-      )
-    } catch (error) {
-      await syncRouting(ctx)
-      throw new PipelineError('internal', (error as Error).message)
+  const { lanDomain } = await getSettings(ctx.db)
+  const url = lanDomain ? ` at http://${appHostname(project.name, lanDomain)}` : ''
+  const target = { deploymentNumber: deployment.number, port }
+
+  const live = await switchRoute(ctx, project.name, target, async () => {
+    const upstream = appUpstreamUrl({ host: container.name, port })
+    await ctx.proxy.waitForService(appServiceName(project.name), upstream).catch((error: Error) => {
+      throw new PipelineError('internal', error.message)
+    })
+    log.system(`Deployment #${deployment.number} is live${url}; stopping the previous version`)
+    await log.flush()
+    const outcome = await goLive(ctx, deployment)
+    if (outcome === 'outdated') {
+      throw new PipelineError('superseded', 'A newer deployment of this project went live first')
     }
-    const marked = await markDeploymentLive(ctx.db, deployment)
-    if (!marked) await syncRouting(ctx)
-    return marked
+    return outcome === 'live'
   })
   if (!live) return false
-  await publishStatus(ctx, { ...deployment, status: 'ready' })
 
   for (const old of await ctx.docker.listManagedApps(project.id)) {
     if (old.id === container.id) continue
-    log.system(`Stopping the previous version (${old.name})`)
     await ctx.docker
       .removeContainer(old.id, CONTAINER_STOP_GRACE_SECONDS)
       .catch((error: unknown) => {
@@ -287,18 +298,6 @@ async function switchTraffic(
       })
   }
   return true
-}
-
-async function withProjectLock<T>(ctx: Ctx, projectId: string, fn: () => Promise<T>): Promise<T> {
-  const client = await ctx.db.$client.connect()
-  const key = `project:${projectId}`
-  try {
-    await client.query('select pg_advisory_lock(hashtextextended($1, 0))', [key])
-    return await fn()
-  } finally {
-    await client.query('select pg_advisory_unlock(hashtextextended($1, 0))', [key]).catch(() => {})
-    client.release()
-  }
 }
 
 async function fail(
@@ -314,6 +313,7 @@ async function fail(
   // Cancel only applies while building; once deploying, the deployment runs to the end.
   if (from === 'building' && control.aborted && control.reason === ABORT_CANCEL) {
     log.system('Cancelled')
+    await log.flush()
     await transition(ctx, deployment.id, from, 'cancelled', {
       failureCode: 'cancelled_by_user',
       finishedAt,
@@ -336,6 +336,7 @@ async function fail(
   }
 
   log.system(`Failed: ${reason.split('\n')[0]}`)
+  await log.flush()
   if (from === 'queued') return
   await transition(ctx, deployment.id, from, 'failed', {
     failureCode: code,

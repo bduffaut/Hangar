@@ -24,18 +24,27 @@ export function createQueue(options: { connectionString: string; log: Logger }) 
   const boss = new PgBoss({ connectionString: options.connectionString })
   boss.on('error', (error) => options.log.error({ err: error }, 'Job queue error'))
 
-  return {
-    async start(): Promise<void> {
+  let started: Promise<void> | null = null
+  const working = new Set<JobName>()
+
+  /** Idempotent; also called by `send` and `work`, so short-lived callers need not call it. */
+  function start(): Promise<void> {
+    started ??= (async () => {
       await boss.start()
       for (const [name, queueOptions] of Object.entries(QUEUE_OPTIONS)) {
         // A failed pipeline already marked its deployment failed; retrying would only repeat it.
         await boss.createQueue(name, { ...queueOptions, retryLimit: 0 })
       }
-    },
+    })()
+    return started
+  }
 
-    /** `id` deduplicates: sending the same id twice queues one job. */
-    async send<N extends JobName>(name: N, data: JobMap[N], id?: string): Promise<void> {
-      await boss.send(name, data, id ? { id } : {})
+  return {
+    start,
+
+    async send<N extends JobName>(name: N, data: JobMap[N]): Promise<void> {
+      await start()
+      await boss.send(name, data)
     },
 
     /** Handles one job at a time from this process. */
@@ -43,17 +52,26 @@ export function createQueue(options: { connectionString: string; log: Logger }) 
       name: N,
       handler: (data: JobMap[N]) => Promise<void>,
     ): Promise<void> {
+      await start()
+      working.add(name)
       await boss.work<JobMap[N]>(name, { batchSize: 1, localConcurrency: 1 }, async ([job]) => {
         if (job) await handler(job.data)
       })
     },
 
     async schedule(name: JobName, cron: string): Promise<void> {
+      await start()
       await boss.schedule(name, cron)
     },
 
+    /** Stops fetching new jobs; jobs already running carry on. */
+    async stopWorking(): Promise<void> {
+      await Promise.all([...working].map((name) => boss.offWork(name, { wait: false })))
+      working.clear()
+    },
+
     async stop(): Promise<void> {
-      await boss.stop({ graceful: false })
+      if (started) await boss.stop({ graceful: false })
     },
   }
 }

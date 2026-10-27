@@ -1,6 +1,6 @@
 import Dockerode from 'dockerode'
 
-export const HANGAR_NETWORK = 'hangar'
+const HANGAR_NETWORK = 'hangar'
 
 // Every container Hangar creates carries these labels; cleanup finds containers by label, never by name.
 export const LABELS = {

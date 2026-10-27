@@ -1,17 +1,26 @@
-import { canTransition, type DeploymentStatus, type DeploymentTrigger } from '@hangar/shared'
+import {
+  canTransition,
+  type DeploymentStatus,
+  type DeploymentTrigger,
+  isTerminal,
+} from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
 import type { Project } from '../projects/repo.ts'
+import { getGithubToken } from '../settings/service.ts'
 import {
   type Deployment,
   type DeploymentPatch,
   getDeployment,
   insertQueuedDeployment,
+  listDeployments,
+  markDeploymentLive,
+  type NewDeployment,
   updateDeploymentStatus,
 } from './repo.ts'
 
 export class DeploymentError extends Error {}
 
-export async function publishStatus(
+async function publishStatus(
   ctx: Ctx,
   deployment: Pick<Deployment, 'id' | 'projectId' | 'status'>,
 ) {
@@ -36,24 +45,57 @@ export async function transition(
   return row
 }
 
+/** deploying → ready, and the deployment becomes the project's live one, atomically. */
+export async function goLive(ctx: Ctx, deployment: Deployment) {
+  const outcome = await markDeploymentLive(ctx.db, deployment)
+  if (outcome === 'live') await publishStatus(ctx, { ...deployment, status: 'ready' })
+  return outcome
+}
+
+/**
+ * Sends the worker job for a queued deployment. Sending twice is harmless: the worker only runs a
+ * deployment it can move out of `queued`, which happens once.
+ */
+export async function sendJob(ctx: Ctx, deployment: Pick<Deployment, 'id' | 'trigger'>) {
+  const queue = deployment.trigger === 'rollback' ? 'deploy' : 'build'
+  await ctx.queue.send(queue, { deploymentId: deployment.id })
+}
+
+/** Inserts a queued deployment (superseding any still waiting), announces it, and sends its job. */
+async function enqueue(ctx: Ctx, values: NewDeployment): Promise<Deployment> {
+  const { deployment, superseded } = await insertQueuedDeployment(ctx.db, values)
+  for (const id of superseded) {
+    await publishStatus(ctx, { id, projectId: values.projectId, status: 'cancelled' })
+  }
+  await publishStatus(ctx, deployment)
+  await sendJob(ctx, deployment)
+  return deployment
+}
+
 /** Queues a build of `commitSha`. A deployment still waiting for the same project is superseded. */
 export async function queueDeployment(
   ctx: Ctx,
   project: Project,
   options: { commitSha: string; trigger: Exclude<DeploymentTrigger, 'rollback'> },
 ): Promise<Deployment> {
-  const { deployment, superseded } = await insertQueuedDeployment(ctx.db, {
+  return enqueue(ctx, {
     projectId: project.id,
     commitSha: options.commitSha,
     branch: project.branch,
     trigger: options.trigger,
   })
-  for (const id of superseded) {
-    await publishStatus(ctx, { id, projectId: project.id, status: 'cancelled' })
-  }
-  await publishStatus(ctx, deployment)
-  await ctx.queue.send('build', { deploymentId: deployment.id }, deployment.id)
-  return deployment
+}
+
+/** Queues a build of the tip of the project's branch. */
+export async function queueBranchHead(
+  ctx: Ctx,
+  project: Project,
+  trigger: Exclude<DeploymentTrigger, 'rollback'>,
+): Promise<Deployment> {
+  const sha = await ctx.git.headOf(project.repoUrl, project.branch, await getGithubToken(ctx))
+  if (!sha)
+    throw new DeploymentError(`Branch "${project.branch}" was not found in ${project.repoUrl}`)
+  return queueDeployment(ctx, project, { commitSha: sha, trigger })
 }
 
 /** Queues a redeploy of an earlier ready deployment's image, without rebuilding. */
@@ -61,7 +103,7 @@ export async function queueRollback(ctx: Ctx, source: Deployment): Promise<Deplo
   if (source.status !== 'ready' || !source.imageTag) {
     throw new DeploymentError('Only a deployment that went live can be rolled back to')
   }
-  const { deployment, superseded } = await insertQueuedDeployment(ctx.db, {
+  return enqueue(ctx, {
     projectId: source.projectId,
     commitSha: source.commitSha,
     commitMessage: source.commitMessage,
@@ -71,12 +113,6 @@ export async function queueRollback(ctx: Ctx, source: Deployment): Promise<Deplo
     trigger: 'rollback',
     sourceDeploymentId: source.id,
   })
-  for (const id of superseded) {
-    await publishStatus(ctx, { id, projectId: source.projectId, status: 'cancelled' })
-  }
-  await publishStatus(ctx, deployment)
-  await ctx.queue.send('deploy', { deploymentId: deployment.id }, deployment.id)
-  return deployment
 }
 
 /**
@@ -98,4 +134,13 @@ export async function requestCancel(ctx: Ctx, deploymentId: string): Promise<voi
     return
   }
   throw new DeploymentError(`A ${deployment.status} deployment cannot be cancelled`)
+}
+
+/** Cancels the project's deployment that is waiting or building. Returns it. */
+export async function cancelActive(ctx: Ctx, project: Project): Promise<Deployment> {
+  // At most one deployment per project is queued and one in progress, so the newest few suffice.
+  const active = (await listDeployments(ctx.db, project.id, 5)).find((d) => !isTerminal(d.status))
+  if (!active) throw new DeploymentError(`${project.name} has nothing to cancel`)
+  await requestCancel(ctx, active.id)
+  return active
 }

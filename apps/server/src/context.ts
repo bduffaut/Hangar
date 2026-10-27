@@ -43,5 +43,5 @@ export function createContext(config: Config, log: Logger = createLogger(config)
     await ctx.events.close()
     await pool.end()
   }
-  return { ctx, pool, close }
+  return { ctx, close }
 }

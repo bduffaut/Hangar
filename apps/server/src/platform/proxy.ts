@@ -59,6 +59,10 @@ const entrypointHeader = (value: string): HeaderMiddleware => ({
 
 export const appServiceName = (projectName: string) => `app-${projectName}`
 
+/** The URL Traefik forwards an app's traffic to. `waitForService` matches it exactly. */
+export const appUpstreamUrl = (target: { host: string; port: number }) =>
+  `http://${target.host}:${target.port}`
+
 export function renderRouting(input: RoutingInput): DynamicConfig {
   const { lanIp, lanDomain, publicDomain } = input
   const routers: Record<string, Router> = {}
@@ -104,7 +108,7 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
   for (const app of apps) {
     if (!app.target) continue
     const service = appServiceName(app.name)
-    services[service] = loadBalancer(`http://${app.target.host}:${app.target.port}`)
+    services[service] = loadBalancer(appUpstreamUrl(app.target))
     routers[`app-${app.name}`] = {
       entryPoints: ['web'],
       rule: host(appHostname(app.name, lanDomain)),

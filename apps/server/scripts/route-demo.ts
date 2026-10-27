@@ -3,7 +3,12 @@
 import { loadConfig } from '../src/config.ts'
 import { createDb } from '../src/db/client.ts'
 import { getSettings } from '../src/modules/settings/repo.ts'
-import { appServiceName, createProxy, renderRouting } from '../src/platform/proxy.ts'
+import {
+  appServiceName,
+  appUpstreamUrl,
+  createProxy,
+  renderRouting,
+} from '../src/platform/proxy.ts'
 import { appHostname } from '@hangar/shared'
 
 const [name, container, portArg] = process.argv.slice(2)
@@ -30,5 +35,5 @@ await proxy.apply(
     apps: [{ name, target }],
   }),
 )
-await proxy.waitForService(appServiceName(name), `http://${target.host}:${target.port}`)
+await proxy.waitForService(appServiceName(name), appUpstreamUrl(target))
 console.log(`Routed: http://${appHostname(name, settings.lanDomain)}`)

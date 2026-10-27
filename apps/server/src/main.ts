@@ -9,12 +9,11 @@ import { startWorker } from './worker/jobs.ts'
 async function main() {
   const config = loadConfig(process.env)
   const log = createLogger(config)
-  const { ctx, pool, close } = createContext(config, log)
+  const { ctx, close } = createContext(config, log)
 
-  await runMigrations(pool, config.migrationsDir)
+  await runMigrations(ctx.db.$client, config.migrationsDir)
   log.info('Database is up to date')
   await seedSettings(ctx)
-  await ctx.queue.start()
 
   const runsApi = config.role !== 'worker'
   const runsWorker = config.role !== 'api'

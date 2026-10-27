@@ -157,4 +157,54 @@ describe('interrupting builds', () => {
     expect(docker('exec', 'hangar-core', 'ls', '-A', h.ctx.config.buildDir)).toBe('')
     expect((await h.fetchApp(live.name)).body).toContain('fixture: static-site')
   })
+
+  it('fails a build whose deployment is overtaken by a rollback, leaving the rollback live', async () => {
+    const project = await h.createProject('overtaken', {
+      repoUrl: repo.url,
+      rootDir: 'dockerfile-app',
+    })
+    const first = await h.waitForEnd(
+      await queueDeployment(h.ctx, project, { commitSha: v1, trigger: 'manual' }),
+    )
+    expect(first.status).toBe('ready')
+
+    // A build slow enough to queue a rollback while it runs.
+    const app = repo.read('dockerfile-app/Dockerfile')
+    repo.write(
+      'slow-app/Dockerfile',
+      app.replace('COPY server.js .', `RUN echo ${h.runId}-slow && sleep 20\nCOPY server.js .`),
+    )
+    repo.write('slow-app/server.js', repo.read('dockerfile-app/server.js'))
+    const slowSha = repo.commit('Slow app')
+    await updateProject(h.ctx.db, project.id, { rootDir: 'slow-app' })
+    const slow = await queueDeployment(h.ctx, (await getProject(h.ctx.db, project.id))!, {
+      commitSha: slowSha,
+      trigger: 'manual',
+    })
+    await h.waitForStatus(slow, 'building')
+
+    const rollback = await h.waitForEnd(await queueRollback(h.ctx, first), 120_000)
+    expect(rollback.status).toBe('ready')
+    const overtaken = await h.waitForEnd(slow)
+
+    expect(overtaken.status).toBe('failed')
+    expect(overtaken.failureCode).toBe('superseded')
+    expect((await getProject(h.ctx.db, project.id))!.currentDeploymentId).toBe(rollback.id)
+    expect((await h.fetchApp(project.name)).body).toContain('fixture: dockerfile-app')
+  })
+})
+
+describe('repository safety', () => {
+  it('refuses a root directory that is a symlink out of the repository', async () => {
+    repo.symlink('escape', '/etc')
+    const sha = repo.commit('Symlink out of the repo')
+    const project = await h.createProject('escape', { repoUrl: repo.url, rootDir: 'escape' })
+    const done = await h.waitForEnd(
+      await queueDeployment(h.ctx, project, { commitSha: sha, trigger: 'manual' }),
+    )
+
+    expect(done.status).toBe('failed')
+    expect(done.failureCode).toBe('build_failed')
+    expect(done.failureReason).toContain('outside the repository')
+  })
 })

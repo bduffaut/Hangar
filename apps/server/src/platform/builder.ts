@@ -1,6 +1,6 @@
 import { ENV_KEY_PATTERN } from '@hangar/shared'
 import { createHash } from 'node:crypto'
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { CommandError, type LineHandler, run, runChecked } from './process.ts'
 
@@ -25,7 +25,7 @@ export type BuildMethod = 'dockerfile' | 'railpack'
 // `railpack prepare` exits with 75 for transient problems (e.g. a download failed) worth one retry.
 const RAILPACK_RETRYABLE_EXIT = 75
 
-export const CONTAINERD_STORE_REQUIRED =
+const CONTAINERD_STORE_REQUIRED =
   "This repository has no Dockerfile, so Hangar builds it with Railpack. Railpack needs Docker's " +
   'containerd image store, which is turned off on this server. Turn it on by adding ' +
   '"features": { "containerd-snapshotter": true } to /etc/docker/daemon.json and restarting ' +
@@ -36,15 +36,17 @@ export const CONTAINERD_STORE_REQUIRED =
  * supports with the containerd image store (the default for new installs since Docker 29).
  */
 async function usesContainerdStore(): Promise<boolean> {
-  const { stdout } = await runChecked('docker', ['info', '--format', '{{json .DriverStatus}}'])
+  const { stdout } = await runChecked('docker', ['info', '--format', '{{json .DriverStatus}}'], {
+    captureStdout: true,
+  })
   return stdout.includes('io.containerd.snapshotter')
 }
 
-async function exists(file: string): Promise<boolean> {
-  return access(file).then(
-    () => true,
-    () => false,
-  )
+/** A Dockerfile that is a symlink could make the build read a file outside the repository. */
+async function hasDockerfile(contextDir: string): Promise<boolean> {
+  const stats = await lstat(path.join(contextDir, 'Dockerfile')).catch(() => null)
+  if (stats?.isSymbolicLink()) throw new Error('The Dockerfile is a symlink, which is not allowed')
+  return stats?.isFile() ?? false
 }
 
 export function createBuilder(options: { railpackFrontend: string | null }) {
@@ -82,9 +84,10 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
   }
 
   return {
-    async build(request: BuildRequest): Promise<BuildMethod> {
-      const hasDockerfile = await exists(path.join(request.contextDir, 'Dockerfile'))
-      const method: BuildMethod = hasDockerfile ? 'dockerfile' : 'railpack'
+    async build(request: BuildRequest): Promise<void> {
+      const method: BuildMethod = (await hasDockerfile(request.contextDir))
+        ? 'dockerfile'
+        : 'railpack'
       request.onMethod?.(method)
       const args = ['buildx', 'build', '--load', '--progress', 'plain', '--tag', request.tag]
       args.push(...(await secretArgs(request)))
@@ -122,7 +125,6 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
       args.push(request.contextDir)
       const result = await run('docker', args, { signal: request.signal, onLine: request.onLine })
       if (result.code !== 0) throw new CommandError('docker buildx build', result.code, result.tail)
-      return method
     },
   }
 }

@@ -1,6 +1,7 @@
 import {
   ACTIVE_DEPLOYMENT_STATUSES,
   IMAGES_KEPT_PER_PROJECT,
+  isTerminal,
   LOGS_KEPT_PER_PROJECT,
 } from '@hangar/shared'
 import { readdir, rm } from 'node:fs/promises'
@@ -8,26 +9,27 @@ import path from 'node:path'
 import type { Ctx } from '../context.ts'
 import { listDeploymentsByStatus, listImages, pruneLogs } from '../modules/deployments/repo.ts'
 import { listProjects } from '../modules/projects/repo.ts'
-
-const isActive = (status: string) =>
-  (ACTIVE_DEPLOYMENT_STATUSES as readonly string[]).includes(status)
+import { appImageRepository } from '../platform/names.ts'
 
 /**
- * Keeps each project's newest images plus any image a current or in-flight deployment needs,
+ * Keeps each project's newest rollback-able images plus any a current or in-flight deployment needs,
  * prunes old build logs, and removes build directories nothing is using.
  */
 export async function collectGarbage(ctx: Ctx): Promise<void> {
   let removedImages = 0
   for (const project of await listProjects(ctx.db)) {
     const images = await listImages(ctx.db, project.id)
+    // Keep the newest images a rollback could use (ready deployments), the live one, and any an
+    // in-flight deployment is building or about to run. Failed builds do not take a slot.
     const keep = new Set<string>()
+    let rollbackable = 0
     for (const image of images) {
-      const recent = keep.size < IMAGES_KEPT_PER_PROJECT
-      if (recent || image.id === project.currentDeploymentId || isActive(image.status)) {
+      const recent = image.status === 'ready' && rollbackable++ < IMAGES_KEPT_PER_PROJECT
+      if (recent || image.id === project.currentDeploymentId || !isTerminal(image.status)) {
         keep.add(image.imageTag!)
       }
     }
-    for (const tag of await ctx.docker.listTags(`hangar/${project.name}`)) {
+    for (const tag of await ctx.docker.listTags(appImageRepository(project.name))) {
       if (keep.has(tag)) continue
       try {
         await ctx.docker.removeImage(tag)

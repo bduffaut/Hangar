@@ -95,20 +95,34 @@ export async function updateDeployment(db: Db, id: string, patch: DeploymentPatc
   await db.update(deployments).set(patch).where(eq(deployments.id, id))
 }
 
-/** Makes the deployment the project's live one and marks it ready, atomically. */
-export async function markDeploymentLive(db: Db, deployment: Deployment): Promise<boolean> {
+/**
+ * Makes the deployment the project's live one and marks it ready, atomically. Returns 'outdated'
+ * when a newer deployment is already live (a slow build must not undo a later rollback), and
+ * 'moved' when the deployment is no longer `deploying`.
+ */
+export async function markDeploymentLive(
+  db: Db,
+  deployment: Deployment,
+): Promise<'live' | 'outdated' | 'moved'> {
   return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ number: deployments.number })
+      .from(projects)
+      .innerJoin(deployments, eq(projects.currentDeploymentId, deployments.id))
+      .where(eq(projects.id, deployment.projectId))
+      .for('update', { of: projects })
+    if (current && current.number > deployment.number) return 'outdated'
     const [row] = await tx
       .update(deployments)
       .set({ status: 'ready', finishedAt: new Date() })
       .where(and(eq(deployments.id, deployment.id), eq(deployments.status, 'deploying')))
       .returning({ id: deployments.id })
-    if (!row) return false
+    if (!row) return 'moved'
     await tx
       .update(projects)
       .set({ currentDeploymentId: deployment.id, desiredState: 'running' })
       .where(eq(projects.id, deployment.projectId))
-    return true
+    return 'live'
   })
 }
 

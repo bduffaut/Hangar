@@ -19,12 +19,13 @@ export async function listProjectRoutes(db: Db) {
     .orderBy(projects.name)
 }
 
-/** Projects that have a current deployment, with what the reconciler needs to run it. */
-export async function listCurrentDeployments(db: Db) {
+/** Projects that have a current deployment (or just `projectId`'s), with that deployment. */
+export async function listCurrentDeployments(db: Db, projectId?: string) {
   return db
     .select({ project: projects, deployment: deployments })
     .from(projects)
     .innerJoin(deployments, eq(projects.currentDeploymentId, deployments.id))
+    .where(projectId ? eq(projects.id, projectId) : undefined)
 }
 
 export async function listProjects(db: Db): Promise<Project[]> {

@@ -1,5 +1,6 @@
 import { CONTAINER_STOP_GRACE_SECONDS, DEFAULT_APP_PORT } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
+import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
 import { updateDeployment } from '../modules/deployments/repo.ts'
 import { listCurrentDeployments, listProjectRoutes } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
@@ -7,11 +8,43 @@ import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
 import { startAppContainer } from './app-container.ts'
 
-/** Routes to use instead of the database's, for a deployment that is about to become current. */
-export type RouteOverrides = Record<string, { deploymentNumber: number; port: number }>
+// There is one routing file, so every write to it is serialized across processes.
+const ROUTING_LOCK = 'routing'
+
+interface RouteTarget {
+  deploymentNumber: number
+  port: number
+}
 
 /** Rewrites Traefik's routing file from the database. Safe to call at any time. */
-export async function syncRouting(ctx: Ctx, overrides: RouteOverrides = {}): Promise<void> {
+export async function syncRouting(ctx: Ctx): Promise<void> {
+  await withAdvisoryLock(ctx.db, ROUTING_LOCK, () => writeRouting(ctx))
+}
+
+/**
+ * Routes `projectName` to a new container, then runs `confirm` (wait for Traefik, record the
+ * deployment as live) before any other routing write can happen. If `confirm` returns false or
+ * throws, routing is restored from the database.
+ */
+export async function switchRoute(
+  ctx: Ctx,
+  projectName: string,
+  target: RouteTarget,
+  confirm: () => Promise<boolean>,
+): Promise<boolean> {
+  return withAdvisoryLock(ctx.db, ROUTING_LOCK, async () => {
+    await writeRouting(ctx, { [projectName]: target })
+    let confirmed = false
+    try {
+      confirmed = await confirm()
+      return confirmed
+    } finally {
+      if (!confirmed) await writeRouting(ctx)
+    }
+  })
+}
+
+async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {}): Promise<void> {
   const settings = await getSettings(ctx.db)
   if (!settings.lanIp || !settings.lanDomain) {
     ctx.log.warn('No LAN address configured yet (HANGAR_LAN_IP); routing is not written')
@@ -20,20 +53,14 @@ export async function syncRouting(ctx: Ctx, overrides: RouteOverrides = {}): Pro
 
   const apps: AppRoute[] = (await listProjectRoutes(ctx.db)).map((row) => {
     const override = overrides[row.name]
-    if (override) {
-      return {
-        name: row.name,
-        target: {
-          host: appContainerName(row.name, override.deploymentNumber),
-          port: override.port,
-        },
-      }
-    }
+    const number = override?.deploymentNumber ?? row.deploymentNumber
+    const port = override?.port ?? row.port
+    const running = override !== undefined || row.desiredState === 'running'
     return {
       name: row.name,
       target:
-        row.desiredState === 'running' && row.deploymentNumber !== null && row.port !== null
-          ? { host: appContainerName(row.name, row.deploymentNumber), port: row.port }
+        running && number !== null && port !== null
+          ? { host: appContainerName(row.name, number), port }
           : null,
     }
   })
@@ -56,30 +83,40 @@ export async function syncRouting(ctx: Ctx, overrides: RouteOverrides = {}): Pro
  * stopped) as desired, recreated from its image if the container is gone. Idempotent.
  */
 export async function reconcile(ctx: Ctx): Promise<void> {
-  for (const { project, deployment } of await listCurrentDeployments(ctx.db)) {
-    const name = appContainerName(project.name, deployment.number)
-    const state = await ctx.docker.containerState(name)
+  for (const { project: listed } of await listCurrentDeployments(ctx.db)) {
     try {
-      if (project.desiredState === 'stopped') {
-        if (state?.running) await ctx.docker.stopContainer(name, CONTAINER_STOP_GRACE_SECONDS)
-        continue
-      }
-      if (state && !state.running && !state.restarting) {
-        await ctx.docker.startContainer(name)
-        ctx.log.info({ container: name }, 'Started stopped app container')
-      } else if (!state) {
-        if (!deployment.imageTag || !(await ctx.docker.imageExists(deployment.imageTag))) {
-          ctx.log.error({ project: project.name }, 'Current deployment image is missing')
-          continue
-        }
-        const port = deployment.port ?? DEFAULT_APP_PORT
-        const { id } = await startAppContainer(ctx, project, deployment, deployment.imageTag, port)
-        await updateDeployment(ctx.db, deployment.id, { containerId: id })
-        ctx.log.info({ container: name }, 'Recreated missing app container')
-      }
+      await withAdvisoryLock(ctx.db, projectLockKey(listed.id), () =>
+        reconcileProject(ctx, listed.id),
+      )
     } catch (error) {
-      ctx.log.error({ err: error, project: project.name }, 'Could not reconcile app container')
+      ctx.log.error({ err: error, project: listed.name }, 'Could not reconcile app container')
     }
   }
   await syncRouting(ctx)
+}
+
+/** Call with the project lock held, so the current deployment cannot change underneath. */
+async function reconcileProject(ctx: Ctx, projectId: string): Promise<void> {
+  const [current] = await listCurrentDeployments(ctx.db, projectId)
+  if (!current) return
+  const { project, deployment } = current
+  const name = appContainerName(project.name, deployment.number)
+  const state = await ctx.docker.containerState(name)
+  if (project.desiredState === 'stopped') {
+    if (state?.running) await ctx.docker.stopContainer(name, CONTAINER_STOP_GRACE_SECONDS)
+    return
+  }
+  if (state && !state.running && !state.restarting) {
+    await ctx.docker.startContainer(name)
+    ctx.log.info({ container: name }, 'Started stopped app container')
+  } else if (!state) {
+    if (!deployment.imageTag || !(await ctx.docker.imageExists(deployment.imageTag))) {
+      ctx.log.error({ project: project.name }, 'Current deployment image is missing')
+      return
+    }
+    const port = deployment.port ?? DEFAULT_APP_PORT
+    const { id } = await startAppContainer(ctx, project, deployment, deployment.imageTag, port)
+    await updateDeployment(ctx.db, deployment.id, { containerId: id })
+    ctx.log.info({ container: name }, 'Recreated missing app container')
+  }
 }

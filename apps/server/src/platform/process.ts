@@ -12,12 +12,15 @@ export interface RunOptions {
   env?: Record<string, string>
   signal?: AbortSignal
   onLine?: LineHandler
+  /** Keep all of stdout in `RunResult.stdout`. Off by default so long builds stay cheap. */
+  captureStdout?: boolean
 }
 
 export interface RunResult {
   code: number
   /** The last lines of combined output, for error messages. */
   tail: string[]
+  /** Empty unless `captureStdout` was set. */
   stdout: string
 }
 
@@ -37,7 +40,7 @@ const KILL_GRACE_MS = 10_000
 // Variables a child needs to find binaries, its home, and the Docker daemon. Nothing else leaks in.
 const INHERITED_ENV = ['PATH', 'HOME', 'LANG', 'TMPDIR', 'DOCKER_HOST', 'DOCKER_CONFIG']
 
-export function baseEnv(): Record<string, string> {
+function baseEnv(): Record<string, string> {
   const env: Record<string, string> = {}
   for (const key of INHERITED_ENV) {
     const value = process.env[key]
@@ -62,23 +65,26 @@ export function run(command: string, args: string[], options: RunOptions = {}): 
     const tail: string[] = []
     let stdout = ''
 
-    const lineReader = (stream: OutputStream) => {
+    // setEncoding keeps multi-byte characters intact across chunk boundaries.
+    const readLines = (readable: NodeJS.ReadableStream, stream: OutputStream) => {
       let pending = ''
-      return (chunk: Buffer) => {
-        const text = pending + chunk.toString('utf8')
-        if (stream === 'stdout') stdout += chunk.toString('utf8')
-        const lines = text.split(/\r?\n/)
+      readable.setEncoding('utf8')
+      readable.on('data', (text: string) => {
+        if (stream === 'stdout' && options.captureStdout) stdout += text
+        const lines = (pending + text).split(/\r?\n/)
         pending = lines.pop() ?? ''
         for (const line of lines) emit(stream, line)
-      }
+      })
+      // The last line often has no trailing newline and is usually the error message.
+      readable.on('end', () => pending && emit(stream, pending))
     }
     const emit = (stream: OutputStream, line: string) => {
       tail.push(line)
       if (tail.length > TAIL_LINES) tail.shift()
       options.onLine?.(stream, line)
     }
-    child.stdout.on('data', lineReader('stdout'))
-    child.stderr.on('data', lineReader('stderr'))
+    readLines(child.stdout, 'stdout')
+    readLines(child.stderr, 'stderr')
 
     let killTimer: NodeJS.Timeout | undefined
     const onAbort = () => {

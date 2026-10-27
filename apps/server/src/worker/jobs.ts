@@ -1,6 +1,6 @@
 import type { Ctx } from '../context.ts'
 import { listDeploymentsByStatus } from '../modules/deployments/repo.ts'
-import { transition } from '../modules/deployments/service.ts'
+import { sendJob, transition } from '../modules/deployments/service.ts'
 import { listCurrentDeployments } from '../modules/projects/repo.ts'
 import { collectGarbage, sweepBuildDirs } from './gc.ts'
 import { ABORT_CANCEL, ABORT_SHUTDOWN, runDeployment } from './pipeline.ts'
@@ -33,8 +33,7 @@ export async function recover(ctx: Ctx): Promise<void> {
   await reconcile(ctx)
 
   for (const deployment of await listDeploymentsByStatus(ctx.db, ['queued'])) {
-    const queue = deployment.trigger === 'rollback' ? 'deploy' : 'build'
-    await ctx.queue.send(queue, { deploymentId: deployment.id }, deployment.id)
+    await sendJob(ctx, deployment)
   }
 }
 
@@ -67,6 +66,7 @@ export async function startWorker(ctx: Ctx): Promise<{ stop: () => Promise<void>
 
   return {
     async stop() {
+      await ctx.queue.stopWorking()
       const inFlight = [...running.values()]
       for (const { controller } of inFlight) controller.abort(ABORT_SHUTDOWN)
       const timeout = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_WAIT_MS))
