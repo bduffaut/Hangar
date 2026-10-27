@@ -35,6 +35,6 @@ if confirm "Delete $HANGAR_DIR, including the secrets file and database backups?
   ok "Deleted $HANGAR_DIR"
 fi
 
-docker network rm hangar >/dev/null 2>&1 || true
+docker network rm hangar hangar-apps >/dev/null 2>&1 || true
 rm -f /usr/local/bin/hangar-update /usr/local/bin/hangar-uninstall /usr/local/bin/hangar-admin
 printf '\nHangar has been removed.\n'

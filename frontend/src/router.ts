@@ -71,6 +71,18 @@ export const router = createRouter({
   ],
 })
 
+// After an update, an open tab may ask for code files that no longer exist. Load the page fresh
+// (once) instead of failing silently.
+router.onError((error, to) => {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/dynamically imported module|Importing a module script failed|module script/i.test(message)) {
+    if (sessionStorage.getItem('hangar.reloaded') !== to.fullPath) {
+      sessionStorage.setItem('hangar.reloaded', to.fullPath)
+      window.location.assign(to.fullPath)
+    }
+  }
+})
+
 // Until the first account exists every page leads to setup; after that, pages need a session.
 router.beforeEach(async (to) => {
   const session = useSessionStore()

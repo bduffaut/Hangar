@@ -18,10 +18,13 @@ const notify = useNotify()
 // While signed in: keep live updates connected and announce deployments that finish.
 watch(
   () => session.signedIn,
-  async (signedIn) => {
+  async (signedIn, wasSignedIn) => {
     if (!signedIn) {
       live.disconnect()
-      if (!route.meta.public) await router.push({ name: 'login', query: { next: route.fullPath } })
+      // Only when a session ends while the app is open; the router guard handles first loads.
+      if (wasSignedIn && !route.meta.public) {
+        await router.push({ name: 'login', query: { next: route.fullPath } })
+      }
       return
     }
     live.connect()

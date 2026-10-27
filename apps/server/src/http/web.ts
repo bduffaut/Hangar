@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import fastifyStatic from '@fastify/static'
 import type { FastifyInstance } from 'fastify'
@@ -34,23 +34,19 @@ export function addSecurityHeaders(app: FastifyInstance) {
 
 /**
  * Serves the built Control Tower on tower hostnames (the request gates keep it there). Files are
- * looked up per request, so a rebuilt dashboard is served without a restart. Hashed assets are
- * cached for a year; everything else is revalidated so updates show up at once.
+ * looked up per request, so a dashboard built after startup, or rebuilt, is served without a
+ * restart. Hashed assets are cached for a year; everything else is revalidated.
  */
 export async function serveDashboard(http: Http) {
   const { app, ctx } = http
   const root = path.resolve(ctx.config.webDir)
-  const present = await access(path.join(root, 'index.html')).then(
-    () => true,
-    () => false,
-  )
-  if (!present) {
-    ctx.log.info({ webDir: root }, 'No built Control Tower found; serving the API only')
-    return
+  if (!existsSync(path.join(root, 'index.html'))) {
+    ctx.log.info({ webDir: root }, 'No built Control Tower yet; it is served once it exists')
   }
   await app.register(fastifyStatic, {
     root,
     index: ['index.html'],
+    serveDotFiles: false,
     setHeaders(res, filePath) {
       res.header(
         'Cache-Control',
@@ -60,5 +56,5 @@ export async function serveDashboard(http: Http) {
       )
     },
   })
-  http.enableDashboardFallback()
+  http.enableDashboardFallback(() => existsSync(path.join(root, 'index.html')))
 }

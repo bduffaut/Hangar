@@ -28,7 +28,17 @@ const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit',
 const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`
 const remote = (...args) => sh('ssh', ['-o', 'BatchMode=yes', host, args.map(quote).join(' ')])
 
-console.log(`Building ${image}…`)
+// Build for the server's processor, not this machine's.
+const machine = execFileSync('ssh', ['-o', 'BatchMode=yes', host, 'uname -m'], {
+  encoding: 'utf8',
+}).trim()
+const platform = { x86_64: 'linux/amd64', aarch64: 'linux/arm64' }[machine]
+if (!platform) {
+  console.error(`The server reports processor "${machine}"; Hangar supports x86_64 and aarch64.`)
+  process.exit(1)
+}
+
+console.log(`Building ${image} for ${platform}…`)
 sh('docker', [
   'build',
   '-f',
@@ -36,7 +46,7 @@ sh('docker', [
   '--target',
   'runtime',
   '--platform',
-  'linux/amd64',
+  platform,
   '--build-arg',
   `HANGAR_VERSION=${version}-${commit}`,
   '-t',

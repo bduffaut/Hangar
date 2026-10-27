@@ -2,7 +2,7 @@
 // checks, validation, env vars, and webhook signatures. Needs Postgres from the dev stack.
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import pg from 'pg'
@@ -31,8 +31,15 @@ async function recreateDatabase() {
   return url.toString()
 }
 
+// A stand-in for the built dashboard.
+const webDir = mkdtempSync(path.join(tmpdir(), 'hangar-api-web-'))
+writeFileSync(path.join(webDir, 'index.html'), '<!doctype html><title>Hangar</title>')
+mkdirSync(path.join(webDir, 'assets'))
+writeFileSync(path.join(webDir, 'assets', 'app-abc123.js'), 'console.log(1)')
+
 const config = loadConfig({
   ...devCoreEnv(),
+  HANGAR_WEB_DIR: webDir,
   DATABASE_URL: await recreateDatabase(),
   HANGAR_DEV_ORIGINS: ORIGIN,
   HANGAR_LAN_IP: '127.0.0.1',
@@ -444,5 +451,28 @@ describe('projects and env vars', () => {
       (await call({ method: 'DELETE', url: `/api/projects/${projectId}`, cookie, csrf })).status,
     ).toBe(200)
     expect((await call({ url: `/api/projects/${projectId}`, cookie })).status).toBe(404)
+  })
+})
+
+describe('serving the dashboard', () => {
+  it('serves pages, assets, and security headers on the tower hostname', async () => {
+    const page = await call({ url: '/projects/blog' })
+    expect(page.status).toBe(200)
+    expect(page.text).toContain('<title>Hangar</title>')
+    const asset = await app.inject({ url: '/assets/app-abc123.js', headers: { host: HOST } })
+    expect(asset.headers['cache-control']).toContain('immutable')
+    expect(asset.headers['content-security-policy']).toContain("script-src 'self'")
+    expect(asset.headers['x-frame-options']).toBe('DENY')
+  })
+
+  it('answers a missing build file with 404, not the page', async () => {
+    const missing = await call({ url: '/assets/OldChunk-123.js' })
+    expect(missing.status).toBe(404)
+    expect(missing.text).not.toContain('<title>Hangar</title>')
+  })
+
+  it('never serves the dashboard on an app hostname', async () => {
+    const res = await call({ url: '/', host: 'blog.127-0-0-1.sslip.io' })
+    expect(res.text).toContain("This app isn't running")
   })
 })

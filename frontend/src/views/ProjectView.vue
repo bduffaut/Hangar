@@ -180,7 +180,7 @@ const running = computed(
       </div>
     </section>
 
-    <BaseTabs v-model="tab" :tabs="TABS">
+    <BaseTabs :key="project.id" v-model="tab" :tabs="TABS">
       <template #deployments><ProjectDeployments :project="project" /></template>
       <template #radio><ProjectRadio :project="project" /></template>
       <template #environment><EnvEditor :project="project" @deploy="deploy" /></template>

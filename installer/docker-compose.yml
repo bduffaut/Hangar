@@ -32,7 +32,7 @@ services:
     volumes:
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
       - traefik-dynamic:/etc/traefik/dynamic:ro
-    networks: [hangar]
+    networks: [hangar, hangar-apps]
 
   hangar-core:
     image: ${HANGAR_IMAGE:?run install.sh first}
@@ -53,7 +53,7 @@ services:
     depends_on:
       hangar-db:
         condition: service_healthy
-    networks: [hangar]
+    networks: [hangar, hangar-apps]
 
 volumes:
   hangar-db-data:
@@ -61,5 +61,9 @@ volumes:
   hangar-builds:
 
 networks:
+  # Platform: database, core, and proxy. Apps are never attached to it.
   hangar:
+    external: true
+  # Apps and the tunnel, with the proxy (to route to them) and core (to health-check them).
+  hangar-apps:
     external: true

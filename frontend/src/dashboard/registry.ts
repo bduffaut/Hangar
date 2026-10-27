@@ -23,14 +23,16 @@ const STORAGE_KEY = 'hangar.dashboard'
 interface SavedLayout {
   order: string[]
   hidden: string[]
+  /** Widgets that are off by default but turned on by the person. */
+  shown: string[]
 }
 
 function readLayout(): SavedLayout {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '') as Partial<SavedLayout>
-    return { order: parsed.order ?? [], hidden: parsed.hidden ?? [] }
+    return { order: parsed.order ?? [], hidden: parsed.hidden ?? [], shown: parsed.shown ?? [] }
   } catch {
-    return { order: [], hidden: [] }
+    return { order: [], hidden: [], shown: [] }
   }
 }
 
@@ -60,15 +62,17 @@ export const orderedWidgets = computed(() => {
 
 export function isWidgetShown(widget: DashboardWidget): boolean {
   if (layout.value.hidden.includes(widget.id)) return false
-  return widget.enabledByDefault || layout.value.order.includes(widget.id)
+  return widget.enabledByDefault || layout.value.shown.includes(widget.id)
 }
 
 export function setWidgetShown(widget: DashboardWidget, shown: boolean): void {
   const hidden = layout.value.hidden.filter((id) => id !== widget.id)
-  const order = layout.value.order.includes(widget.id)
-    ? layout.value.order
-    : [...layout.value.order, widget.id]
-  layout.value = { order, hidden: shown ? hidden : [...hidden, widget.id] }
+  const on = layout.value.shown.filter((id) => id !== widget.id)
+  layout.value = {
+    ...layout.value,
+    hidden: shown ? hidden : [...hidden, widget.id],
+    shown: shown ? [...on, widget.id] : on,
+  }
 }
 
 export function moveWidget(widget: DashboardWidget, offset: -1 | 1): void {
@@ -81,5 +85,5 @@ export function moveWidget(widget: DashboardWidget, offset: -1 | 1): void {
 }
 
 export function resetLayout(): void {
-  layout.value = { order: [], hidden: [] }
+  layout.value = { order: [], hidden: [], shown: [] }
 }

@@ -39,6 +39,7 @@ jobs:
       - name: Start the dev stack
         run: |
           docker network create hangar
+          docker network create hangar-apps
           docker compose -f docker/compose.dev.yml up -d --build --wait
           for i in $(seq 1 60); do curl -sf localhost:3000/api/health && exit 0; sleep 2; done
           exit 1

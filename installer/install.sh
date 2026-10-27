@@ -13,6 +13,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=installer/lib.sh
 . "$SCRIPT_DIR/lib.sh"
 
+# Remember which settings the caller passed, so a re-run changes only those.
+GIVEN_VERSION="${HANGAR_VERSION:-}"
+GIVEN_IMAGE="${HANGAR_IMAGE:-}"
+GIVEN_BIND_IP="${HANGAR_BIND_IP:-}"
+GIVEN_LAN_IP="${HANGAR_LAN_IP:-}"
 HANGAR_VERSION="${HANGAR_VERSION:-0.1.0}"
 HANGAR_IMAGE="${HANGAR_IMAGE:-ghcr.io/bduffaut/hangar-core:$HANGAR_VERSION}"
 HANGAR_BIND_IP="${HANGAR_BIND_IP:-0.0.0.0}"
@@ -94,16 +99,26 @@ ENV
   umask 022
   ok "Generated secrets in $ENV_FILE"
 else
-  # Keep the secrets; update only the image and bind address if they were given.
-  sed -i "s|^HANGAR_IMAGE=.*|HANGAR_IMAGE=$HANGAR_IMAGE|; s|^HANGAR_BIND_IP=.*|HANGAR_BIND_IP=$HANGAR_BIND_IP|" "$ENV_FILE"
-  ok "Kept the existing settings in $ENV_FILE"
+  # Keep the secrets and every setting the caller did not pass explicitly.
+  set_env() { sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; }
+  [ -n "$GIVEN_VERSION" ] && set_env HANGAR_VERSION "$GIVEN_VERSION"
+  [ -n "$GIVEN_IMAGE" ] && set_env HANGAR_IMAGE "$GIVEN_IMAGE"
+  [ -z "$GIVEN_IMAGE" ] && [ -n "$GIVEN_VERSION" ] && set_env HANGAR_IMAGE "$HANGAR_IMAGE"
+  [ -n "$GIVEN_BIND_IP" ] && set_env HANGAR_BIND_IP "$GIVEN_BIND_IP"
+  [ -n "$GIVEN_LAN_IP" ] && set_env HANGAR_LAN_IP "$GIVEN_LAN_IP"
+  ok "Kept the existing secrets and settings in $ENV_FILE"
 fi
+# Use the saved values from here on (a re-run without arguments keeps the old bind address).
+HANGAR_IMAGE=$(awk -F= '/^HANGAR_IMAGE=/ {print $2}' "$ENV_FILE")
+HANGAR_BIND_IP=$(awk -F= '/^HANGAR_BIND_IP=/ {print $2}' "$ENV_FILE")
 chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 lan_ip=$(awk -F= '/^HANGAR_LAN_IP=/ {print $2}' "$ENV_FILE")
 
-docker network inspect hangar >/dev/null 2>&1 || docker network create hangar >/dev/null
-ok "Docker network hangar"
+for network in hangar hangar-apps; do
+  docker network inspect "$network" >/dev/null 2>&1 || docker network create "$network" >/dev/null
+done
+ok "Docker networks hangar (platform) and hangar-apps (your apps)"
 
 step "Starting the engines..." "Downloading images and starting the database, proxy, and Hangar."
 if [ "${HANGAR_SKIP_PULL:-0}" = 1 ]; then

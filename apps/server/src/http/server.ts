@@ -34,8 +34,8 @@ export interface Http {
   app: FastifyInstance
   ctx: Ctx
   access: AccessPolicyCache
-  /** Unknown GET paths outside /api/ get the dashboard's index.html (its router takes over). */
-  enableDashboardFallback(): void
+  /** Unknown page paths get the dashboard's index.html (its router takes over) while `available`. */
+  enableDashboardFallback(available: () => boolean): void
 }
 
 const APP_NOT_RUNNING_PAGE = `<!doctype html>
@@ -126,9 +126,13 @@ export function createHttpServer(ctx: Ctx): Http {
     })
   })
 
-  let dashboardFallback = false
+  let dashboardFallback: () => boolean = () => false
   app.setNotFoundHandler((request, reply) => {
-    if (dashboardFallback && request.method === 'GET' && !request.url.startsWith('/api/')) {
+    // Pages of the dashboard's own router get index.html. Missing build files (/assets/…) and API
+    // paths get a real 404, so an outdated tab notices instead of running HTML as a script.
+    const path = request.url.split('?')[0]!
+    const isPage = !path.startsWith('/api/') && !path.startsWith('/assets/')
+    if (request.method === 'GET' && isPage && dashboardFallback()) {
       return reply.header('Cache-Control', 'no-cache').sendFile('index.html')
     }
     return reply.code(404).send({ error: { code: 'not_found', message: 'No such endpoint' } })
@@ -138,8 +142,8 @@ export function createHttpServer(ctx: Ctx): Http {
     app,
     ctx,
     access,
-    enableDashboardFallback: () => {
-      dashboardFallback = true
+    enableDashboardFallback: (available) => {
+      dashboardFallback = available
     },
   }
 }

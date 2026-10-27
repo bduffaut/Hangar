@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test'
 const SESSION = path.resolve(import.meta.dirname, '../.cache/e2e/session.json')
 
 // Browser tests drive the dev stack through Traefik, exactly like a visitor. The browser runs in
-// Playwright's Docker image on the `hangar` network (see e2e/README.md), so this machine needs no
+// Playwright's Docker image on the `hangar` network (started by global-setup.ts), so this machine needs no
 // browser libraries; the test runner stays here, where it can reach Docker and the database.
 export default defineConfig({
   testDir: '.',

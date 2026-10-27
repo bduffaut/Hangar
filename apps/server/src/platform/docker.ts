@@ -1,7 +1,11 @@
 import { PassThrough, type Readable } from 'node:stream'
 import Dockerode from 'dockerode'
 
-const HANGAR_NETWORK = 'hangar'
+/**
+ * Deployed apps (and the tunnel) live on their own network with Traefik and core only, so an app
+ * cannot reach the database or anything else on the platform network.
+ */
+export const APP_NETWORK = 'hangar-apps'
 
 // Every container Hangar creates carries these labels; cleanup finds containers by label, never by name.
 export const LABELS = {
@@ -129,7 +133,7 @@ export function createDocker(docker = new Dockerode()) {
           [LABELS.deployment]: spec.deploymentId,
         },
         HostConfig: {
-          NetworkMode: HANGAR_NETWORK,
+          NetworkMode: APP_NETWORK,
           RestartPolicy: { Name: 'unless-stopped' },
           Memory: spec.memoryLimitMb * 1024 * 1024,
           LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
@@ -212,7 +216,7 @@ export function createDocker(docker = new Dockerode()) {
           [LABELS.tunnelToken]: spec.tokenHash,
         },
         HostConfig: {
-          NetworkMode: HANGAR_NETWORK,
+          NetworkMode: APP_NETWORK,
           RestartPolicy: { Name: 'unless-stopped' },
           LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         },

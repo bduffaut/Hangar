@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # hangar-update: backs up the database, pulls the newest images, and restarts the stack. Your
 # apps, settings, and data are kept; database migrations run when Hangar starts.
-#   HANGAR_SKIP_PULL=1  use the core image already on this server (e.g. copied over SSH)
+#   HANGAR_VERSION=x.y.z  move to that release (default: pull the current image again)
+#   HANGAR_SKIP_PULL=1    use the core image already on this server (e.g. copied over SSH)
 set -euo pipefail
 
 HANGAR_DIR="${HANGAR_DIR:-/opt/hangar}"
@@ -21,6 +22,12 @@ ls -1t "$backups"/pre-update-*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
 ok "Backup saved to $backups/pre-update-$stamp.sql.gz"
 
 step "Refueling..." "Downloading the newest images and restarting Hangar."
+if [ -n "${HANGAR_VERSION:-}" ]; then
+  sed -i "s|^HANGAR_VERSION=.*|HANGAR_VERSION=$HANGAR_VERSION|; s|^HANGAR_IMAGE=.*|HANGAR_IMAGE=ghcr.io/bduffaut/hangar-core:$HANGAR_VERSION|" "$HANGAR_DIR/.env"
+fi
+image=$(awk -F= '/^HANGAR_IMAGE=/ {print $2}' "$HANGAR_DIR/.env")
+# An image without a registry path (installed with `pnpm ship`) exists only on this server.
+case "$image" in */*) ;; *) HANGAR_SKIP_PULL=1 ;; esac
 if [ "${HANGAR_SKIP_PULL:-0}" = 1 ]; then
   compose pull --quiet hangar-db hangar-proxy
 else
