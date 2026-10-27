@@ -44,7 +44,11 @@ export function openEventStream(request: FastifyRequest, reply: FastifyReply): E
       res.write(`${idLine}event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
     },
     close,
-    onClose: (fn) => cleanups.push(fn),
+    onClose(fn) {
+      // A handler that subscribes after an await may find the client already gone.
+      if (controller.signal.aborted) fn()
+      else cleanups.push(fn)
+    },
     get closed() {
       return controller.signal.aborted
     },

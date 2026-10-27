@@ -220,9 +220,7 @@ describe('repository safety', () => {
 
     expect(done.status).toBe('failed')
     expect(done.failureCode).toBe('build_failed')
-    expect(done.failureReason).toContain(
-      '"leaky-site/Caddyfile" is a symlink to a file outside the repository',
-    )
+    expect(done.failureReason).toContain('is a symlink to a file outside the repository')
     expect(await h.ctx.docker.listTags(`hangar/${project.name}`)).toEqual([])
   })
 })

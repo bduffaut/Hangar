@@ -16,6 +16,8 @@ const envSchema = z.object({
   HANGAR_TRAEFIK_DYNAMIC_DIR: z.string().min(1).default('/var/lib/hangar/traefik'),
   HANGAR_TRAEFIK_API_URL: z.url().default('http://hangar-proxy:8082'),
   HANGAR_CORE_URL: z.url().default('http://hangar-core:3000'),
+  // Only this host's addresses may set X-Forwarded-For.
+  HANGAR_PROXY_HOST: z.string().min(1).default('hangar-proxy'),
   HANGAR_MIGRATIONS_DIR: z.string().min(1).optional(),
   HANGAR_RAILPACK_FRONTEND: z.string().min(1).optional(), // set by the core image
   HANGAR_BUILD_DIR: z.string().min(1).default('/tmp/hangar-builds'),
@@ -51,6 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     traefikDynamicDir: e.HANGAR_TRAEFIK_DYNAMIC_DIR,
     traefikApiUrl: e.HANGAR_TRAEFIK_API_URL,
     coreUrl: e.HANGAR_CORE_URL,
+    proxyHost: e.HANGAR_PROXY_HOST,
     migrationsDir: e.HANGAR_MIGRATIONS_DIR ?? path.resolve('drizzle'),
     railpackFrontend: e.HANGAR_RAILPACK_FRONTEND ?? null,
     buildDir: e.HANGAR_BUILD_DIR,

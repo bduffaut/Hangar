@@ -1,3 +1,4 @@
+import { lookup } from 'node:dns/promises'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
 import type { Endpoint } from '@hangar/shared'
@@ -43,11 +44,30 @@ const APP_NOT_RUNNING_PAGE = `<!doctype html>
 <p>Nothing is deployed at this address right now, or the app has been stopped.
 Open the Control Tower to check its status.</p></body></html>`
 
+/**
+ * Addresses of Traefik, the only proxy in front of core. Other peers on the hangar network (app
+ * containers) can reach core directly, and must not be able to choose their own client address.
+ */
+function trackProxyAddresses(host: string) {
+  const addresses = new Set<string>()
+  const refresh = () =>
+    lookup(host, { all: true })
+      .then((found) => {
+        addresses.clear()
+        for (const { address } of found) addresses.add(address)
+      })
+      .catch(() => addresses.clear())
+  void refresh()
+  setInterval(refresh, 60_000).unref()
+  return (address: string) => addresses.has(address.replace(/^::ffff:/, ''))
+}
+
 export function createHttpServer(ctx: Ctx): Http {
+  const isProxy = trackProxyAddresses(ctx.config.proxyHost)
   const app = Fastify({
     loggerInstance: ctx.log as FastifyBaseLogger,
-    // Traefik is the only proxy in front of core: trust the one hop it adds to X-Forwarded-For.
-    trustProxy: (_address: string, hop: number) => hop === 0,
+    // Trust the one X-Forwarded-For hop Traefik adds, and only when the request came from Traefik.
+    trustProxy: (address: string, hop: number) => hop === 0 && isProxy(address),
     bodyLimit: 1024 * 1024,
   })
   const access = createAccessPolicy(ctx)
@@ -91,8 +111,10 @@ export function createHttpServer(ctx: Ctx): Http {
         error: { code: 'invalid_input', message: `${where}${issue?.message ?? 'Invalid input'}` },
       })
     }
-    const status = (error as { statusCode?: number }).statusCode ?? 500
-    if (status < 500) {
+    // Only Fastify's own errors (bad JSON, body too large, rate limit) are client errors here;
+    // other libraries (dockerode) put upstream HTTP statuses on their errors.
+    const { statusCode: status = 500, code } = error as { statusCode?: number; code?: string }
+    if (status < 500 && (code?.startsWith('FST_') || status === 429)) {
       const message = (error as Error).message
       return reply.code(status).send({ error: { code: 'bad_request', message } })
     }

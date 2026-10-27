@@ -1,7 +1,8 @@
 // The API in-process against a throwaway database: setup, sign-in, sessions, CSRF and origin
 // checks, validation, env vars, and webhook signatures. Needs Postgres from the dev stack.
+import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import pg from 'pg'
@@ -85,6 +86,18 @@ async function call({
     cookie: sessionCookie?.split(';')[0],
   }
 }
+
+/** A local repository with one commit on main; development allows file:// URLs. */
+function localRepo(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'hangar-api-repo-'))
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: dir })
+  git('init', '--quiet', '-b', 'main')
+  writeFileSync(path.join(dir, 'index.html'), 'hi')
+  git('add', '-A')
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'init')
+  return `file://${dir}`
+}
+const repoUrl = localRepo()
 
 let cookie = ''
 let csrf = ''
@@ -313,20 +326,32 @@ describe('projects and env vars', () => {
     expect(res.json().error.message.toLowerCase()).toContain(message.toLowerCase())
   })
 
+  it('checks the branch before saving anything', async () => {
+    const res = await call({
+      method: 'POST',
+      url: '/api/projects',
+      body: { name: 'typo', repoUrl, branch: 'mian' },
+      cookie,
+      csrf,
+    })
+    expect(res.status).toBe(400)
+    expect(res.json().error.message).toContain('"mian" was not found')
+    expect((await call({ url: '/api/projects', cookie })).json()).toEqual([])
+  })
+
   it('creates a project without deploying', async () => {
     const res = await call({
       method: 'POST',
       url: '/api/projects',
       body: {
         name: 'blog',
-        repoUrl: 'https://github.com/example/blog',
-        branch: 'main',
+        repoUrl,
         deploy: false,
       },
       cookie,
       csrf,
     })
-    expect(res.status).toBe(200)
+    expect(res.status, res.text).toBe(200)
     const project = res.json()
     projectId = project.id
     expect(project).toMatchObject({
@@ -342,8 +367,7 @@ describe('projects and env vars', () => {
       url: '/api/projects',
       body: {
         name: 'blog',
-        repoUrl: 'https://github.com/example/blog',
-        branch: 'main',
+        repoUrl,
         deploy: false,
       },
       cookie,

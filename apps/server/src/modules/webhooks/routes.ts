@@ -2,8 +2,7 @@ import { GITHUB_WEBHOOK_PATH } from '@hangar/shared'
 import { z } from 'zod'
 import type { Http } from '../../http/server.ts'
 import { queueDeployment } from '../deployments/service.ts'
-import { getProject } from '../projects/repo.ts'
-import { webhookSecret } from '../projects/service.ts'
+import { findProject, webhookSecret } from '../projects/service.ts'
 import { isValidGithubSignature } from './signature.ts'
 
 const pushEvent = z.object({
@@ -33,7 +32,7 @@ export function webhookRoutes({ app, ctx }: Http) {
       { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
       async (request, reply) => {
         const { id } = request.params as { id: string }
-        const project = z.uuid().safeParse(id).success ? await getProject(ctx.db, id) : null
+        const project = z.uuid().safeParse(id).success ? await findProject(ctx, id) : null
         const body = request.body
         if (!project || !Buffer.isBuffer(body)) {
           return reply.code(404).send({ error: { code: 'not_found', message: 'Not found' } })

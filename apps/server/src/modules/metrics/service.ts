@@ -28,11 +28,18 @@ export function createMetricsSampler(ctx: Ctx) {
     for (const listener of listeners) listener(entry)
   }
 
-  const tick = () => {
+  // Each sampling loop has a generation; stopping bumps it, so a sample still in flight from an
+  // old loop never reschedules itself alongside a new one.
+  let generation = 0
+  let looping = false
+
+  const run = (loop: number) => {
     sample()
       .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not sample metrics'))
       .finally(() => {
-        if (listeners.size > 0) timer = setTimeout(tick, INTERVAL_MS)
+        if (loop !== generation) return
+        if (listeners.size > 0) timer = setTimeout(() => run(loop), INTERVAL_MS)
+        else looping = false
       })
   }
 
@@ -41,12 +48,17 @@ export function createMetricsSampler(ctx: Ctx) {
     /** Returns a function that stops listening. Sampling stops when nobody listens. */
     subscribe(listener: Listener): () => void {
       listeners.add(listener)
-      if (!timer) tick()
+      if (!looping) {
+        looping = true
+        run(++generation)
+      }
       return () => {
         listeners.delete(listener)
-        if (listeners.size === 0 && timer) {
-          clearTimeout(timer)
+        if (listeners.size === 0 && looping) {
+          if (timer) clearTimeout(timer)
           timer = null
+          looping = false
+          generation++
         }
       }
     },

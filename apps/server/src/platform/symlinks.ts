@@ -5,7 +5,8 @@ const isInside = (root: string, target: string) =>
   target === root || target.startsWith(root + path.sep)
 
 /**
- * Returns the first symlink under `dir` that resolves outside `root`, or null. Build tools read
+ * Returns the first symlink under `dir` that resolves outside `root`, or null. Pass the whole
+ * checkout as `dir`: a link inside the build context may lead to another link elsewhere. Build tools read
  * repository files with ordinary, symlink-following reads (Railpack copies some, like a Caddyfile,
  * into the image), so a link such as `Caddyfile -> /proc/1/environ` would hand them Hangar's own
  * secrets. Links that stay inside the repository are fine. Dangling links are judged by where they

@@ -42,6 +42,16 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
     }
   }
 
+  // Images of deleted projects, e.g. from a build that finished after its project was deleted.
+  const repositories = new Set((await listProjects(ctx.db)).map((p) => appImageRepository(p.name)))
+  for (const tag of await ctx.docker.listAppImageTags()) {
+    if (repositories.has(tag.slice(0, tag.lastIndexOf(':')))) continue
+    await ctx.docker.removeImage(tag).then(
+      () => removedImages++,
+      (error: unknown) => ctx.log.debug({ err: error, image: tag }, 'Kept an orphaned image'),
+    )
+  }
+
   const prunedLogs = await pruneLogs(ctx.db, LOGS_KEPT_PER_PROJECT)
   const removedDirs = await sweepBuildDirs(ctx)
   const expiredSessions = await deleteExpiredSessions(ctx.db)

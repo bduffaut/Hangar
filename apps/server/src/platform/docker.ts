@@ -89,6 +89,14 @@ export function createDocker(docker = new Dockerode()) {
         .filter((port) => Number.isInteger(port))
     },
 
+    /** Every tag of Hangar's app images (`hangar/*:*`). */
+    async listAppImageTags(): Promise<string[]> {
+      const images = await docker.listImages({ filters: { reference: ['hangar/*'] } })
+      return images
+        .flatMap((image) => image.RepoTags ?? [])
+        .filter((tag) => tag.startsWith('hangar/'))
+    },
+
     /** Image tags in a repository, e.g. every `hangar/blog:*`. */
     async listTags(repository: string): Promise<string[]> {
       const images = await docker.listImages({ filters: { reference: [`${repository}:*`] } })

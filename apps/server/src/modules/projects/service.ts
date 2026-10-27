@@ -17,6 +17,7 @@ import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository } from '../../platform/names.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
 import { listDeploymentsById, listLatestDeployments } from '../deployments/repo.ts'
+import { cancelActive } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { getSettings } from '../settings/repo.ts'
 import { getGithubToken } from '../settings/secrets.ts'
@@ -87,6 +88,8 @@ function isAllowedRepoUrl(ctx: Ctx, repoUrl: string): boolean {
   return isValidRepoUrl(repoUrl) || (!ctx.config.isProduction && repoUrl.startsWith('file:///'))
 }
 
+export const findProject = (ctx: Ctx, id: string) => getProject(ctx.db, id)
+
 export async function getProjectOrThrow(ctx: Ctx, id: string): Promise<Project> {
   const project = await getProject(ctx.db, id)
   if (!project) throw notFound('Project')
@@ -96,7 +99,7 @@ export async function getProjectOrThrow(ctx: Ctx, id: string): Promise<Project> 
 export async function createProject(
   ctx: Ctx,
   input: ProjectSettings & { name: string; repoUrl: string },
-): Promise<Project> {
+): Promise<{ project: Project; headSha: string }> {
   const problem = checkProjectName(input.name)
   if (problem) throw new ProjectError(NAME_PROBLEMS[problem])
   const repoUrl = input.repoUrl.trim()
@@ -117,6 +120,11 @@ export async function createProject(
       )
     }))
   if (!branch) throw new ProjectError('That repository has no default branch. Enter a branch name.')
+  // Checked before anything is saved, so a mistyped branch does not leave a half-created project.
+  const headSha = await ctx.git.headOf(repoUrl, branch, token).catch(() => null)
+  if (!headSha) {
+    throw new ProjectError(`The branch "${branch}" was not found in that repository.`)
+  }
 
   const { publicDomain } = await getSettings(ctx.db)
   let project: Project
@@ -139,7 +147,7 @@ export async function createProject(
     webhookSecret: ctx.crypto.seal(secret, webhookAad(project.id)),
   })
   if (project.triggerMode === 'webhook') await tryCreateGithubWebhook(ctx, project, secret)
-  return (await getProject(ctx.db, project.id))!
+  return { project: (await getProject(ctx.db, project.id))!, headSha }
 }
 
 /** Changes take effect on the next deploy. */
@@ -152,8 +160,11 @@ export async function updateProjectSettings(
   return (await getProject(ctx.db, project.id))!
 }
 
-/** Removes the project's containers, images, and records. */
+/** Removes the project's containers, images, and records, cancelling any build in progress. */
 export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
+  // A running build would otherwise finish and leave an image behind (cleanup removes images of
+  // deleted projects later, but cancelling stops the work now).
+  await cancelActive(ctx, project).catch(() => {})
   await withAdvisoryLock(ctx.db, projectLockKey(project.id), async () => {
     for (const container of await ctx.docker.listManagedApps(project.id)) {
       await ctx.docker.removeContainer(container.id, CONTAINER_STOP_GRACE_SECONDS)
@@ -166,6 +177,7 @@ export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
       ctx.log.warn({ err: error, image: tag }, 'Could not remove image of deleted project')
     })
   }
+  await ctx.queue.send('gc', {})
 }
 
 export async function setDesiredState(ctx: Ctx, project: Project, state: 'running' | 'stopped') {

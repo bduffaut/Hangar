@@ -1,7 +1,7 @@
 import { createInterface } from 'node:readline'
 import { contract, schemas, streams } from '@hangar/shared'
 import { eventStream, type Http, OK, route } from '../../http/server.ts'
-import { queueBranchHead } from '../deployments/service.ts'
+import { queueBranchHead, queueDeployment } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import {
   allProjectViews,
@@ -24,12 +24,11 @@ export function projectRoutes(http: Http) {
 
   route(http, contract.createProject, async ({ body }) => {
     const { deploy, ...input } = body
-    let project = await createProject(ctx, input)
+    const { project, headSha } = await createProject(ctx, input)
     if (deploy !== false) {
-      await queueBranchHead(ctx, project, 'manual')
-      project = await getProjectOrThrow(ctx, project.id)
+      await queueDeployment(ctx, project, { commitSha: headSha, trigger: 'manual' })
     }
-    return projectView(ctx, project)
+    return projectView(ctx, await getProjectOrThrow(ctx, project.id))
   })
 
   route(http, contract.getProject, async ({ params }) =>

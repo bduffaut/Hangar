@@ -43,4 +43,14 @@ describe('findEscapingSymlink', () => {
     symlinkSync('/nonexistent/secret', path.join(root, 'app/gone'))
     expect(await findEscapingSymlink(root, root)).toBe('app/gone')
   })
+
+  it('finds a link outside the build context reached through an in-repo link', async () => {
+    const root = repo()
+    mkdirSync(path.join(root, 'lib'))
+    symlinkSync('../lib', path.join(root, 'app/shared'))
+    symlinkSync('/etc/hostname', path.join(root, 'lib/secret'))
+    // The context alone looks clean; the whole checkout does not.
+    expect(await findEscapingSymlink(path.join(root, 'app'), root)).toBeNull()
+    expect(await findEscapingSymlink(root, root)).toBe('lib/secret')
+  })
 })

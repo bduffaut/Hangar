@@ -1,4 +1,5 @@
 import {
+  ACTIVE_DEPLOYMENT_STATUSES,
   canTransition,
   type DeploymentStatus,
   type DeploymentTrigger,
@@ -6,7 +7,7 @@ import {
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
 import { notFound, UserError } from '../../errors.ts'
-import { type Project, updateProject } from '../projects/repo.ts'
+import { getProject, type Project, updateProject } from '../projects/repo.ts'
 import { getGithubToken } from '../settings/secrets.ts'
 import {
   type Deployment,
@@ -14,10 +15,13 @@ import {
   getDeployment,
   insertQueuedDeployment,
   listDeployments,
+  listDeploymentsByStatus,
+  listLogs,
   markDeploymentLive,
   type NewDeployment,
   updateDeploymentStatus,
 } from './repo.ts'
+import { deploymentView } from './views.ts'
 
 export class DeploymentError extends UserError {
   constructor(message: string) {
@@ -152,4 +156,28 @@ export async function cancelActive(ctx: Ctx, project: Project): Promise<Deployme
   if (!active) throw new DeploymentError(`${project.name} has nothing to cancel`)
   await requestCancel(ctx, active.id)
   return active
+}
+
+// Reads for the API.
+
+export const findDeployment = (ctx: Ctx, id: string) => getDeployment(ctx.db, id)
+
+export async function getDeploymentOrThrow(ctx: Ctx, id: string): Promise<Deployment> {
+  const deployment = await getDeployment(ctx.db, id)
+  if (!deployment) throw notFound('Deployment')
+  return deployment
+}
+
+export const listProjectDeployments = (ctx: Ctx, projectId: string, limit: number) =>
+  listDeployments(ctx.db, projectId, limit)
+
+export const listActiveDeployments = (ctx: Ctx) =>
+  listDeploymentsByStatus(ctx.db, [...ACTIVE_DEPLOYMENT_STATUSES])
+
+export const logsAfter = (ctx: Ctx, deploymentId: string, afterSeq: number) =>
+  listLogs(ctx.db, deploymentId, afterSeq)
+
+export async function deploymentViewOf(ctx: Ctx, deployment: Deployment) {
+  const project = await getProject(ctx.db, deployment.projectId)
+  return deploymentView(deployment, project?.currentDeploymentId ?? null)
 }

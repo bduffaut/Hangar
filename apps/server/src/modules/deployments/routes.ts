@@ -1,39 +1,21 @@
-import {
-  ACTIVE_DEPLOYMENT_STATUSES,
-  contract,
-  isTerminal,
-  type LogLineView,
-  schemas,
-  streams,
-} from '@hangar/shared'
+import { contract, isTerminal, type LogLineView, schemas, streams } from '@hangar/shared'
 import { z } from 'zod'
-import type { Ctx } from '../../context.ts'
-import { notFound, UserError } from '../../errors.ts'
+import { UserError } from '../../errors.ts'
 import { eventStream, type Http, OK, route } from '../../http/server.ts'
-import { getProject } from '../projects/repo.ts'
 import { getProjectOrThrow } from '../projects/service.ts'
 import {
-  type Deployment,
-  getDeployment,
-  listDeployments,
-  listDeploymentsByStatus,
-  listLogs,
-} from './repo.ts'
-import { queueRollback, requestCancel } from './service.ts'
+  deploymentViewOf as viewOf,
+  findDeployment,
+  getDeploymentOrThrow,
+  listActiveDeployments,
+  listProjectDeployments,
+  logsAfter,
+  queueRollback,
+  requestCancel,
+} from './service.ts'
 import { deploymentView } from './views.ts'
 
-async function getDeploymentOrThrow(ctx: Ctx, id: string): Promise<Deployment> {
-  const deployment = await getDeployment(ctx.db, id)
-  if (!deployment) throw notFound('Deployment')
-  return deployment
-}
-
-async function viewOf(ctx: Ctx, deployment: Deployment) {
-  const project = await getProject(ctx.db, deployment.projectId)
-  return deploymentView(deployment, project?.currentDeploymentId ?? null)
-}
-
-const logView = (row: Awaited<ReturnType<typeof listLogs>>[number]): LogLineView => ({
+const logView = (row: Awaited<ReturnType<typeof logsAfter>>[number]): LogLineView => ({
   ...row,
   ts: row.ts.toISOString(),
 })
@@ -43,7 +25,7 @@ export function deploymentRoutes(http: Http) {
 
   route(http, contract.listDeployments, async ({ params, query }) => {
     const project = await getProjectOrThrow(ctx, params.id)
-    const rows = await listDeployments(ctx.db, project.id, query.limit)
+    const rows = await listProjectDeployments(ctx, project.id, query.limit)
     return rows.map((d) => deploymentView(d, project.currentDeploymentId))
   })
 
@@ -53,7 +35,7 @@ export function deploymentRoutes(http: Http) {
 
   route(http, contract.deploymentLogs, async ({ params, query }) => {
     await getDeploymentOrThrow(ctx, params.id)
-    return (await listLogs(ctx.db, params.id, query.after)).map(logView)
+    return (await logsAfter(ctx, params.id, query.after)).map(logView)
   })
 
   route(http, contract.cancelDeployment, async ({ params }) => {
@@ -81,12 +63,24 @@ export function deploymentRoutes(http: Http) {
     z.object({}),
     async () => null,
     async (stream) => {
-      const active = await listDeploymentsByStatus(ctx.db, [...ACTIVE_DEPLOYMENT_STATUSES])
+      // Subscribe before taking the snapshot, and hold events until it is sent, so a change in
+      // between is neither lost nor delivered ahead of the snapshot.
+      let pending: string[] | null = []
+      const unsubscribe = await ctx.events.subscribe('deployment_status', (event) => {
+        if (pending) pending.push(event.deploymentId)
+        else sendStatus(event.deploymentId)
+      })
+      stream.onClose(unsubscribe)
+      const active = await listActiveDeployments(ctx)
       stream.send('snapshot', {
         deployments: await Promise.all(active.map((d) => viewOf(ctx, d))),
       })
-      const unsubscribe = await ctx.events.subscribe('deployment_status', (event) => {
-        void getDeployment(ctx.db, event.deploymentId)
+      const buffered = pending
+      pending = null
+      for (const id of buffered) sendStatus(id)
+
+      function sendStatus(deploymentId: string) {
+        void findDeployment(ctx, deploymentId)
           .then(async (deployment) => {
             if (!deployment) return
             stream.send('status', {
@@ -97,8 +91,7 @@ export function deploymentRoutes(http: Http) {
             })
           })
           .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not send status event'))
-      })
-      stream.onClose(unsubscribe)
+      }
     },
   )
 
@@ -130,8 +123,8 @@ export function deploymentRoutes(http: Http) {
         try {
           do {
             again = false
-            const deployment = await getDeployment(ctx.db, id)
-            for (const row of await listLogs(ctx.db, id, lastSeq)) {
+            const deployment = await findDeployment(ctx, id)
+            for (const row of await logsAfter(ctx, id, lastSeq)) {
               stream.send('log', logView(row), row.seq)
               lastSeq = row.seq
             }

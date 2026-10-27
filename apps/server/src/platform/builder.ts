@@ -1,6 +1,6 @@
 import { ENV_KEY_PATTERN } from '@hangar/shared'
 import { createHash } from 'node:crypto'
-import { lstat, mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { CommandError, type LineHandler, run, runChecked } from './process.ts'
 import { findEscapingSymlink } from './symlinks.ts'
@@ -46,7 +46,8 @@ async function usesContainerdStore(): Promise<boolean> {
 }
 
 async function hasDockerfile(contextDir: string): Promise<boolean> {
-  const stats = await lstat(path.join(contextDir, 'Dockerfile')).catch(() => null)
+  // Escaping links were rejected already, so following a link here stays inside the repository.
+  const stats = await stat(path.join(contextDir, 'Dockerfile')).catch(() => null)
   return stats?.isFile() ?? false
 }
 
@@ -86,7 +87,8 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
 
   return {
     async build(request: BuildRequest): Promise<void> {
-      const escaping = await findEscapingSymlink(request.contextDir, request.repoDir)
+      // The whole checkout, not just the context: an in-repo link can lead to another link.
+      const escaping = await findEscapingSymlink(request.repoDir, request.repoDir)
       if (escaping) {
         throw new Error(
           `"${escaping}" is a symlink to a file outside the repository, which Hangar does not ` +
