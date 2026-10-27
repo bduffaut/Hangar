@@ -13,3 +13,14 @@ export const CONTAINER_STOP_GRACE_SECONDS = 10
 
 /** Env var names: what a POSIX shell accepts, so they work as build secret ids and file names. */
 export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/**
+ * The sample app the Preflight Checklist deploys: a static page in Hangar's own public
+ * repository, so the test flight needs nothing but internet access.
+ */
+export const TEST_FLIGHT = {
+  name: 'test-flight',
+  repoUrl: 'https://github.com/bduffaut/Hangar',
+  branch: 'main',
+  rootDir: 'fixtures/static-site',
+} as const

@@ -1,0 +1,56 @@
+<script setup lang="ts">
+import Button from 'primevue/button'
+import { computed } from 'vue'
+import BaseIcon, { type IconName } from './BaseIcon.vue'
+
+const props = withDefaults(
+  defineProps<{
+    label?: string
+    variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+    size?: 'sm' | 'md'
+    icon?: IconName
+    loading?: boolean
+    disabled?: boolean
+    type?: 'button' | 'submit'
+    /** Accessible name when the button shows only an icon. */
+    ariaLabel?: string
+    fluid?: boolean
+  }>(),
+  { variant: 'secondary', size: 'md', type: 'button' },
+)
+defineEmits<{ click: [event: MouseEvent] }>()
+
+const library = computed(() => ({
+  severity: props.variant === 'danger' ? 'danger' : props.variant === 'primary' ? undefined : 'secondary',
+  variant: props.variant === 'ghost' ? ('text' as const) : undefined,
+  size: props.size === 'sm' ? ('small' as const) : undefined,
+}))
+</script>
+
+<template>
+  <Button
+    :type="type"
+    :label="label"
+    :severity="library.severity"
+    :variant="library.variant"
+    :size="library.size"
+    :loading="loading"
+    :disabled="disabled || loading"
+    :aria-label="ariaLabel"
+    :fluid="fluid"
+    class="hg-button"
+    @click="$emit('click', $event)"
+  >
+    <template v-if="icon" #icon>
+      <BaseIcon :name="icon" :size="size === 'sm' ? 16 : 18" />
+    </template>
+    <slot />
+  </Button>
+</template>
+
+<style scoped>
+.hg-button {
+  font-weight: var(--hg-weight-medium);
+  gap: var(--hg-space-2);
+}
+</style>

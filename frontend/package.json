@@ -1,0 +1,28 @@
+{
+  "name": "@hangar/frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@hangar/shared": "workspace:*",
+    "@primeuix/themes": "2.0.3",
+    "anser": "2.3.5",
+    "chart.js": "4.5.1",
+    "pinia": "4.0.3",
+    "primevue": "4.5.5",
+    "vue": "^3.5.44",
+    "vue-router": "5.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.5",
+    "vue-tsc": "^3.3.13"
+  }
+}

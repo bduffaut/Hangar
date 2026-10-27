@@ -17,7 +17,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['apps/web/src/**', 'fixtures/vite-app/src/**'],
+    files: ['frontend/src/**', 'fixtures/vite-app/src/**'],
     languageOptions: { globals: globals.browser },
   },
   {

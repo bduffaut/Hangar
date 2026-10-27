@@ -133,6 +133,8 @@ export const projectView = z.object({
   publicUrl: z.string().nullable(),
   current: deploymentView.nullable(),
   latest: deploymentView.nullable(),
+  /** The most recent deployments, oldest first: the runway lights on a project card. */
+  recent: z.array(z.object({ id, number: z.number().int(), status: z.enum(DEPLOYMENT_STATUSES) })),
   createdAt: timestamp,
 })
 export type ProjectView = z.infer<typeof projectView>

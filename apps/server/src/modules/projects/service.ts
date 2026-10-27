@@ -16,7 +16,11 @@ import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository } from '../../platform/names.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
-import { listDeploymentsById, listLatestDeployments } from '../deployments/repo.ts'
+import {
+  listDeploymentsById,
+  listLatestDeployments,
+  listRecentStatuses,
+} from '../deployments/repo.ts'
 import { cancelActive } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { getSettings } from '../settings/repo.ts'
@@ -242,13 +246,17 @@ async function tryCreateGithubWebhook(ctx: Ctx, project: Project, secret: string
 
 // Views
 
+/** How many recent deployments a project card shows. */
+const RUNWAY_LIGHTS = 12
+
 export async function projectViews(ctx: Ctx, projects: Project[]): Promise<ProjectView[]> {
   const settings = await getSettings(ctx.db)
   const ids = projects.map((p) => p.id)
   const currentIds = projects.flatMap((p) => (p.currentDeploymentId ? [p.currentDeploymentId] : []))
-  const [latest, current] = await Promise.all([
+  const [latest, current, recent] = await Promise.all([
     listLatestDeployments(ctx.db, ids),
     listDeploymentsById(ctx.db, currentIds),
+    listRecentStatuses(ctx.db, ids, RUNWAY_LIGHTS),
   ])
   return projects.map((p) => {
     const latestRow = latest.find((d) => d.projectId === p.id)
@@ -269,6 +277,9 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
         : null,
       current: currentRow ? deploymentView(currentRow, p.currentDeploymentId) : null,
       latest: latestRow ? deploymentView(latestRow, p.currentDeploymentId) : null,
+      recent: recent
+        .filter((d) => d.projectId === p.id)
+        .map(({ id, number, status }) => ({ id, number, status })),
       createdAt: p.createdAt.toISOString(),
     }
   })

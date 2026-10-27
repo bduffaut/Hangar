@@ -207,3 +207,31 @@ export async function previousSecretsHash(
     .limit(1)
   return row?.secretsHash ?? null
 }
+
+/** The newest `perProject` deployments of each project, as (id, number, status). */
+export async function listRecentStatuses(db: Db, projectIds: string[], perProject: number) {
+  if (projectIds.length === 0) return []
+  const ranked = db
+    .select({
+      id: deployments.id,
+      projectId: deployments.projectId,
+      number: deployments.number,
+      status: deployments.status,
+      rank: sql<number>`row_number() over (partition by ${deployments.projectId} order by ${deployments.number} desc)`.as(
+        'rank',
+      ),
+    })
+    .from(deployments)
+    .where(inArray(deployments.projectId, projectIds))
+    .as('ranked')
+  return db
+    .select({
+      id: ranked.id,
+      projectId: ranked.projectId,
+      number: ranked.number,
+      status: ranked.status,
+    })
+    .from(ranked)
+    .where(sql`${ranked.rank} <= ${perProject}`)
+    .orderBy(ranked.projectId, ranked.number)
+}

@@ -1,0 +1,167 @@
+<script setup lang="ts">
+import { navCopy } from '@hangar/shared'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import BrandMark from '../brand/BrandMark.vue'
+import { useLiveStore } from '../stores/live.ts'
+import { useSessionStore } from '../stores/session.ts'
+import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
+import { BaseButton, BaseIcon, type IconName } from '../ui/index.ts'
+import TourOverlay from './TourOverlay.vue'
+
+const session = useSessionStore()
+const live = useLiveStore()
+const router = useRouter()
+const theme = useTheme()
+
+const themes: { value: ThemePreference; icon: IconName; label: string }[] = [
+  { value: 'system', icon: 'monitor', label: 'Theme: match system' },
+  { value: 'dark', icon: 'moon', label: 'Theme: dark' },
+  { value: 'light', icon: 'sun', label: 'Theme: light' },
+]
+const currentTheme = computed(() => themes.find((t) => t.value === theme.preference.value) ?? themes[0]!)
+function cycleTheme() {
+  const index = themes.findIndex((t) => t.value === theme.preference.value)
+  theme.setPreference(themes[(index + 1) % themes.length]!.value)
+}
+
+async function signOut() {
+  live.disconnect()
+  await session.logout()
+  await router.push({ name: 'login' })
+}
+</script>
+
+<template>
+  <a class="hg-skip" href="#main">Skip to content</a>
+  <header class="hg-shell-header">
+    <div class="hg-shell-bar">
+      <RouterLink :to="{ name: 'home' }" class="hg-shell-brand" aria-label="Hangar home">
+        <BrandMark />
+      </RouterLink>
+      <nav class="hg-shell-nav" aria-label="Main">
+        <RouterLink :to="{ name: 'home' }">{{ navCopy.projects }}</RouterLink>
+        <RouterLink :to="{ name: 'settings' }">{{ navCopy.settings }}</RouterLink>
+        <RouterLink :to="{ name: 'guide' }" data-tour="guide">{{ navCopy.guide }}</RouterLink>
+      </nav>
+      <div class="hg-shell-tools">
+        <span
+          v-hint.bottom="live.connected ? 'Live updates connected' : 'Reconnecting to live updates'"
+          class="hg-shell-link"
+          :class="{ 'is-up': live.connected }"
+          role="status"
+          :aria-label="live.connected ? 'Live updates connected' : 'Reconnecting to live updates'"
+        />
+        <BaseButton variant="ghost" size="sm" :icon="currentTheme.icon" :aria-label="currentTheme.label" v-hint.bottom="currentTheme.label" @click="cycleTheme" />
+        <span class="hg-shell-user hg-muted">{{ session.username }}</span>
+        <BaseButton variant="ghost" size="sm" icon="logout" :aria-label="navCopy.signOut" v-hint.bottom="navCopy.signOut" @click="signOut" />
+      </div>
+    </div>
+  </header>
+  <main id="main" class="hg-shell-main" tabindex="-1">
+    <slot />
+  </main>
+  <TourOverlay />
+</template>
+
+<style scoped>
+.hg-skip {
+  position: absolute;
+  left: var(--hg-space-3);
+  top: -3rem;
+  z-index: 10;
+  padding: var(--hg-space-2) var(--hg-space-3);
+  background: var(--hg-accent);
+  color: var(--hg-on-accent);
+  border-radius: var(--hg-radius-md);
+}
+.hg-skip:focus {
+  top: var(--hg-space-3);
+}
+.hg-shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--hg-canvas) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hg-line);
+}
+.hg-shell-bar {
+  max-width: var(--hg-width-wide);
+  margin: 0 auto;
+  padding: var(--hg-space-3) var(--hg-space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--hg-space-6);
+}
+.hg-shell-brand {
+  text-decoration: none;
+}
+.hg-shell-nav {
+  display: flex;
+  gap: var(--hg-space-1);
+  flex: 1;
+}
+.hg-shell-nav a {
+  padding: var(--hg-space-2) var(--hg-space-3);
+  border-radius: var(--hg-radius-md);
+  color: var(--hg-ink-muted);
+  text-decoration: none;
+  font-weight: var(--hg-weight-medium);
+}
+.hg-shell-nav a:hover {
+  color: var(--hg-ink);
+  background: var(--hg-raised);
+}
+.hg-shell-nav a.router-link-exact-active,
+.hg-shell-nav a.is-section {
+  color: var(--hg-ink);
+  background: var(--hg-raised);
+}
+.hg-shell-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--hg-space-1);
+}
+.hg-shell-link {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 var(--hg-space-2);
+  border-radius: 50%;
+  background: var(--hg-status-building);
+}
+.hg-shell-link.is-up {
+  background: var(--hg-status-ready);
+}
+.hg-shell-user {
+  font-size: var(--hg-size-sm);
+  padding: 0 var(--hg-space-2);
+}
+.hg-shell-main {
+  max-width: var(--hg-width-wide);
+  margin: 0 auto;
+  padding: var(--hg-space-6) var(--hg-space-5) var(--hg-space-7);
+  outline: none;
+}
+@media (max-width: 44rem) {
+  .hg-shell-bar {
+    flex-wrap: wrap;
+    gap: var(--hg-space-2);
+    padding: var(--hg-space-2) var(--hg-space-4);
+  }
+  .hg-shell-tools {
+    margin-left: auto;
+  }
+  .hg-shell-user {
+    display: none;
+  }
+  .hg-shell-nav {
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+  }
+  .hg-shell-main {
+    padding: var(--hg-space-5) var(--hg-space-4) var(--hg-space-7);
+  }
+}
+</style>
