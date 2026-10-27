@@ -15,7 +15,8 @@ export const useProjectsStore = defineStore('projects', () => {
 
   function upsert(project: ProjectView) {
     const index = projects.value.findIndex((p) => p.id === project.id)
-    if (index === -1) projects.value = [...projects.value, project].sort((a, b) => a.name.localeCompare(b.name))
+    if (index === -1)
+      projects.value = [...projects.value, project].sort((a, b) => a.name.localeCompare(b.name))
     else projects.value.splice(index, 1, project)
   }
 

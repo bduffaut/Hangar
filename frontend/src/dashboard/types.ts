@@ -1,7 +1,7 @@
 // The public contract for dashboard extensions. An external package (your own widget library)
 // depends only on these types, never on the app's stores or component library.
 import type { MetricsSample, ProjectView, DeploymentView } from '@hangar/shared'
-import type { Component, DeepReadonly, Ref } from 'vue'
+import type { Component, Ref } from 'vue'
 
 /** How much of the dashboard's width a widget takes on wide screens. Narrow screens stack. */
 export type WidgetSize = 'full' | 'half' | 'third'
@@ -19,13 +19,13 @@ export interface DashboardWidget {
   order: number
 }
 
-/** Read-only data any widget may use. Values update live. */
+/** Data any widget may read (never write). Values update live. */
 export interface DashboardData {
-  projects: DeepReadonly<Ref<ProjectView[]>>
+  projects: Readonly<Ref<ProjectView[]>>
   /** Deployments in progress right now. */
-  activeDeployments: DeepReadonly<Ref<DeploymentView[]>>
+  activeDeployments: Readonly<Ref<DeploymentView[]>>
   /** Up to 15 minutes of host and container samples, oldest first. */
-  metrics: DeepReadonly<Ref<MetricsSample[]>>
+  metrics: Readonly<Ref<MetricsSample[]>>
 }
 
 export interface DashboardApi {

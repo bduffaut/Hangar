@@ -22,7 +22,10 @@ async function signIn() {
   error.value = null
   try {
     await session.login(username.value, password.value)
-    const next = typeof route.query.next === 'string' && route.query.next.startsWith('/') ? route.query.next : '/'
+    const next =
+      typeof route.query.next === 'string' && route.query.next.startsWith('/')
+        ? route.query.next
+        : '/'
     await router.replace(next)
   } catch (e) {
     error.value = messageOf(e)
@@ -59,7 +62,12 @@ async function signIn() {
   place-items: center;
   padding: var(--hg-space-5);
   background:
-    linear-gradient(180deg, transparent 0 calc(100% - 3rem), var(--hg-line) calc(100% - 3rem) calc(100% - 3rem + 1px), transparent 0),
+    linear-gradient(
+      180deg,
+      transparent 0 calc(100% - 3rem),
+      var(--hg-line) calc(100% - 3rem) calc(100% - 3rem + 1px),
+      transparent 0
+    ),
     var(--hg-canvas);
 }
 .hg-login-card {

@@ -46,6 +46,8 @@ services:
       HANGAR_SESSION_SECRET: dev-only-session-secret-not-for-production
       HANGAR_TRAEFIK_DYNAMIC_DIR: /var/lib/hangar/traefik
       HANGAR_MIGRATIONS_DIR: /repo/apps/server/drizzle
+      # Built dashboard (pnpm --filter @hangar/frontend build), so the tower works through Traefik too.
+      HANGAR_WEB_DIR: /repo/frontend/dist
       # The Vite dev server proxies /api here; direct calls on port 3000 are for tools and tests.
       HANGAR_DEV_ORIGINS: http://localhost:5173,http://localhost:3000,http://127.0.0.1:3000
     volumes:

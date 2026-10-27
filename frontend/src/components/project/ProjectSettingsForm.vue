@@ -1,0 +1,234 @@
+<script setup lang="ts">
+import {
+  confirmCopy,
+  type ProjectView,
+  toastCopy,
+  type TriggerMode,
+  triggerModeCopy,
+} from '@hangar/shared'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { api, messageOf } from '../../api/client.ts'
+import { useProjectsStore } from '../../stores/projects.ts'
+import {
+  BaseButton,
+  BaseDialog,
+  BaseField,
+  BaseInput,
+  BaseMessage,
+  BaseSelect,
+  type SelectOption,
+  useNotify,
+} from '../../ui/index.ts'
+import CopyField from '../CopyField.vue'
+import HgPanel from '../HgPanel.vue'
+
+const props = defineProps<{ project: ProjectView }>()
+const projects = useProjectsStore()
+const router = useRouter()
+const notify = useNotify()
+
+const branch = ref(props.project.branch)
+const rootDir = ref(props.project.rootDir)
+const port = ref(props.project.port === null ? '' : String(props.project.port))
+const memory = ref(String(props.project.memoryLimitMb))
+const triggerMode = ref<TriggerMode>(props.project.triggerMode)
+const busy = ref(false)
+const error = ref<string | null>(null)
+
+const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
+  (Object.keys(triggerModeCopy) as TriggerMode[]).map((mode) => ({
+    label: triggerModeCopy[mode].label,
+    value: mode,
+    hint: triggerModeCopy[mode].meaning,
+  })),
+)
+
+async function save() {
+  busy.value = true
+  error.value = null
+  try {
+    const updated = await api('updateProject', {
+      params: { id: props.project.id },
+      body: {
+        branch: branch.value.trim(),
+        rootDir: rootDir.value.trim(),
+        port: port.value.trim() ? Number(port.value) : null,
+        memoryLimitMb: Number(memory.value),
+        triggerMode: triggerMode.value,
+      },
+    })
+    projects.upsert(updated)
+    notify.success(toastCopy.saved, 'Changes apply on the next deploy.')
+  } catch (e) {
+    error.value = messageOf(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+// GitHub webhook details, for projects that deploy on push.
+const webhook = ref<{ url: string | null; secret: string } | null>(null)
+onMounted(async () => {
+  webhook.value = await api('projectWebhook', { params: { id: props.project.id } }).catch(
+    () => null,
+  )
+})
+
+// Deleting needs the project's name typed out.
+const deleting = ref(false)
+const confirmName = ref('')
+const deleteBusy = ref(false)
+async function remove() {
+  deleteBusy.value = true
+  try {
+    await api('deleteProject', { params: { id: props.project.id } })
+    projects.remove(props.project.id)
+    notify.success(toastCopy.projectDeleted)
+    await router.push({ name: 'home' })
+  } catch (e) {
+    notify.error(messageOf(e))
+  } finally {
+    deleteBusy.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="hg-settings">
+    <HgPanel title="Build and run" description="Changes apply on the next deploy.">
+      <form class="hg-settings-form" @submit.prevent="save">
+        <BaseField label="Branch" for="ps-branch">
+          <BaseInput id="ps-branch" v-model="branch" mono />
+        </BaseField>
+        <BaseField label="Root directory" for="ps-root" help="Empty for the repository root.">
+          <BaseInput id="ps-root" v-model="rootDir" mono placeholder="(repository root)" />
+        </BaseField>
+        <BaseField label="Port" for="ps-port" help="Empty to detect it, falling back to 3000.">
+          <BaseInput id="ps-port" v-model="port" mono inputmode="numeric" placeholder="auto" />
+        </BaseField>
+        <BaseField label="Memory limit (MB)" for="ps-memory">
+          <BaseInput id="ps-memory" v-model="memory" mono inputmode="numeric" />
+        </BaseField>
+        <div class="hg-settings-wide">
+          <BaseField
+            label="New commits"
+            for="ps-trigger"
+            :help="triggerModeCopy[triggerMode].meaning"
+          >
+            <BaseSelect id="ps-trigger" v-model="triggerMode" :options="triggerOptions" />
+          </BaseField>
+        </div>
+        <div v-if="error" class="hg-settings-wide">
+          <BaseMessage tone="error">{{ error }}</BaseMessage>
+        </div>
+        <div class="hg-settings-wide">
+          <BaseButton type="submit" variant="primary" label="Save changes" :loading="busy" />
+        </div>
+      </form>
+    </HgPanel>
+
+    <HgPanel
+      v-if="webhook"
+      title="GitHub webhook"
+      description="Add this in the repository's Settings, under Webhooks, with content type application/json and the push event."
+    >
+      <BaseMessage v-if="!webhook.url" tone="info">
+        Webhooks need public access. Set a public domain in Settings first. Until then, Hangar
+        checks for new commits every minute.
+      </BaseMessage>
+      <div v-else class="hg-webhook">
+        <div class="hg-webhook-item">
+          <span class="hg-webhook-label">Payload URL</span>
+          <CopyField :value="webhook.url" label="payload URL" />
+        </div>
+        <div class="hg-webhook-item">
+          <span class="hg-webhook-label">Secret</span>
+          <CopyField :value="webhook.secret" label="webhook secret" secret />
+        </div>
+      </div>
+    </HgPanel>
+
+    <HgPanel title="Delete project" class="hg-danger">
+      <p class="hg-muted">{{ confirmCopy.deleteProject.body }}</p>
+      <div class="hg-danger-action">
+        <BaseButton
+          variant="danger"
+          icon="trash"
+          :label="confirmCopy.deleteProject.action"
+          @click="deleting = true"
+        />
+      </div>
+    </HgPanel>
+
+    <BaseDialog v-model:visible="deleting" :title="confirmCopy.deleteProject.title">
+      <form class="hg-delete" @submit.prevent="remove">
+        <p>{{ confirmCopy.deleteProject.body }}</p>
+        <BaseField
+          :label="confirmCopy.deleteProject.typeToConfirm(project.name)"
+          for="ps-delete-name"
+        >
+          <BaseInput id="ps-delete-name" v-model="confirmName" mono />
+        </BaseField>
+        <div class="hg-delete-actions">
+          <BaseButton variant="ghost" label="Cancel" @click="deleting = false" />
+          <BaseButton
+            type="submit"
+            variant="danger"
+            :label="confirmCopy.deleteProject.action"
+            :disabled="confirmName !== project.name"
+            :loading="deleteBusy"
+          />
+        </div>
+      </form>
+    </BaseDialog>
+  </div>
+</template>
+
+<style scoped>
+.hg-settings {
+  display: grid;
+  gap: var(--hg-space-5);
+  max-width: 48rem;
+}
+.hg-settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--hg-space-5);
+}
+.hg-settings-wide {
+  grid-column: 1 / -1;
+}
+.hg-webhook {
+  display: grid;
+  gap: var(--hg-space-4);
+}
+.hg-webhook-item {
+  display: grid;
+  gap: var(--hg-space-2);
+}
+.hg-webhook-label {
+  font-weight: var(--hg-weight-medium);
+  font-size: var(--hg-size-sm);
+}
+.hg-danger {
+  border-color: color-mix(in srgb, var(--hg-danger) 45%, var(--hg-line));
+}
+.hg-danger-action {
+  margin-top: var(--hg-space-4);
+}
+.hg-delete {
+  display: grid;
+  gap: var(--hg-space-4);
+}
+.hg-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--hg-space-2);
+}
+@media (max-width: 36rem) {
+  .hg-settings-form {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

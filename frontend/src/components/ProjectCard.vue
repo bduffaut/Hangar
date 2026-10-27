@@ -6,14 +6,16 @@ import { formatBytes, relativeTime, shortSha } from '../lib/format.ts'
 import { useMetricsStore } from '../stores/metrics.ts'
 import { BaseIcon } from '../ui/index.ts'
 import RunwayLights from './RunwayLights.vue'
-import Sparkline from './Sparkline.vue'
+import TrendLine from './TrendLine.vue'
 import StatusBadge from './StatusBadge.vue'
 
 const props = defineProps<{ project: ProjectView }>()
 const metrics = useMetricsStore()
 const now = useNow()
 
-const memory = computed(() => metrics.seriesFor(props.project.id).map((p) => p.value?.memoryUsedBytes ?? null))
+const memory = computed(() =>
+  metrics.seriesFor(props.project.id).map((p) => p.value?.memoryUsedBytes ?? null),
+)
 const latestMemory = computed(() => memory.value.findLast((v) => v !== null) ?? null)
 const memoryLimit = computed(() => props.project.memoryLimitMb * 1024 * 1024)
 const stopped = computed(() => props.project.desiredState === 'stopped')
@@ -24,12 +26,20 @@ const latest = computed(() => props.project.latest)
   <article class="hg-project" :data-project="project.name">
     <header class="hg-project-header">
       <h3 class="hg-project-name">
-        <RouterLink :to="{ name: 'project', params: { name: project.name } }">{{ project.name }}</RouterLink>
+        <RouterLink :to="{ name: 'project', params: { name: project.name } }">{{
+          project.name
+        }}</RouterLink>
       </h3>
       <StatusBadge v-if="latest" :status="latest.status" size="sm" />
     </header>
 
-    <a v-if="project.url && project.current && !stopped" class="hg-project-url" :href="project.url" target="_blank" rel="noopener">
+    <a
+      v-if="project.url && project.current && !stopped"
+      class="hg-project-url"
+      :href="project.url"
+      target="_blank"
+      rel="noopener"
+    >
       {{ project.url.replace(/^https?:\/\//, '') }}
       <BaseIcon name="external" :size="14" />
     </a>
@@ -40,12 +50,25 @@ const latest = computed(() => props.project.latest)
     <footer class="hg-project-footer">
       <p v-if="latest" class="hg-project-commit">
         <code>{{ shortSha(latest.commitSha) }}</code>
-        <span class="hg-project-message">{{ latest.commitMessage ?? 'Waiting for commit details' }}</span>
+        <span class="hg-project-message">{{
+          latest.commitMessage ?? 'Waiting for commit details'
+        }}</span>
         <span class="hg-muted">{{ relativeTime(latest.createdAt, now) }}</span>
       </p>
       <div v-if="project.current && !stopped" class="hg-project-memory">
-        <Sparkline :values="memory" :max="memoryLimit" :label="`${project.name} memory use`" color="--hg-series-1" height="2rem" />
-        <span class="hg-muted">{{ latestMemory === null ? 'Memory: reading…' : `${formatBytes(latestMemory)} of ${project.memoryLimitMb} MB` }}</span>
+        <template v-if="latestMemory !== null">
+          <TrendLine
+            :values="memory"
+            :max="memoryLimit"
+            :label="`${project.name} memory use`"
+            color="--hg-series-1"
+            height="2rem"
+          />
+          <span class="hg-muted"
+            >Memory {{ formatBytes(latestMemory) }} of {{ project.memoryLimitMb }} MB</span
+          >
+        </template>
+        <span v-else class="hg-muted">Reading memory use…</span>
       </div>
     </footer>
   </article>

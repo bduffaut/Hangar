@@ -6,7 +6,7 @@ import BrandMark from '../brand/BrandMark.vue'
 import { useLiveStore } from '../stores/live.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
-import { BaseButton, BaseIcon, type IconName } from '../ui/index.ts'
+import { BaseButton, type IconName } from '../ui/index.ts'
 import TourOverlay from './TourOverlay.vue'
 
 const session = useSessionStore()
@@ -15,11 +15,13 @@ const router = useRouter()
 const theme = useTheme()
 
 const themes: { value: ThemePreference; icon: IconName; label: string }[] = [
-  { value: 'system', icon: 'monitor', label: 'Theme: match system' },
   { value: 'dark', icon: 'moon', label: 'Theme: dark' },
   { value: 'light', icon: 'sun', label: 'Theme: light' },
+  { value: 'system', icon: 'monitor', label: 'Theme: match system' },
 ]
-const currentTheme = computed(() => themes.find((t) => t.value === theme.preference.value) ?? themes[0]!)
+const currentTheme = computed(
+  () => themes.find((t) => t.value === theme.preference.value) ?? themes[0]!,
+)
 function cycleTheme() {
   const index = themes.findIndex((t) => t.value === theme.preference.value)
   theme.setPreference(themes[(index + 1) % themes.length]!.value)
@@ -52,9 +54,23 @@ async function signOut() {
           role="status"
           :aria-label="live.connected ? 'Live updates connected' : 'Reconnecting to live updates'"
         />
-        <BaseButton variant="ghost" size="sm" :icon="currentTheme.icon" :aria-label="currentTheme.label" v-hint.bottom="currentTheme.label" @click="cycleTheme" />
+        <BaseButton
+          v-hint.bottom="currentTheme.label"
+          variant="ghost"
+          size="sm"
+          :icon="currentTheme.icon"
+          :aria-label="currentTheme.label"
+          @click="cycleTheme"
+        />
         <span class="hg-shell-user hg-muted">{{ session.username }}</span>
-        <BaseButton variant="ghost" size="sm" icon="logout" :aria-label="navCopy.signOut" v-hint.bottom="navCopy.signOut" @click="signOut" />
+        <BaseButton
+          v-hint.bottom="navCopy.signOut"
+          variant="ghost"
+          size="sm"
+          icon="logout"
+          :aria-label="navCopy.signOut"
+          @click="signOut"
+        />
       </div>
     </div>
   </header>

@@ -1,3 +1,14 @@
 **/node_modules
 **/dist
 .git
+.cache
+**/.cache
+e2e
+fixtures
+docs
+*.md
+.github
+.claude
+CLAUDE.md
+.env
+.env.*

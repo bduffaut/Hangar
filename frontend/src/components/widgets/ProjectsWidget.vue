@@ -11,9 +11,18 @@ const { projects } = useDashboardData()
 <template>
   <section class="hg-projects" data-tour="projects" aria-labelledby="projects-heading">
     <h2 id="projects-heading" class="hg-visually-hidden">{{ navCopy.projects }}</h2>
-    <EmptyState v-if="projects.length === 0" :title="emptyCopy.projects.title" :body="emptyCopy.projects.body">
-      <RouterLink :to="{ name: 'new-project' }" custom #default="{ navigate }">
-        <BaseButton variant="primary" icon="plus" :label="emptyCopy.projects.action" @click="navigate" />
+    <EmptyState
+      v-if="projects.length === 0"
+      :title="emptyCopy.projects.title"
+      :body="emptyCopy.projects.body"
+    >
+      <RouterLink v-slot="{ navigate }" :to="{ name: 'new-project' }" custom>
+        <BaseButton
+          variant="primary"
+          icon="plus"
+          :label="emptyCopy.projects.action"
+          @click="navigate"
+        />
       </RouterLink>
     </EmptyState>
     <div v-else class="hg-project-grid">

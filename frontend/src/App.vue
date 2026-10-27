@@ -32,8 +32,10 @@ watch(
 
 const stop = live.onDeployment((deployment) => {
   const name = projects.byId.get(deployment.projectId)?.name ?? 'The app'
-  if (deployment.status === 'ready') notify.success(toastCopy.live(name), `Deployment #${deployment.number}`)
-  if (deployment.status === 'failed') notify.error(toastCopy.failed(name), `Deployment #${deployment.number}`)
+  if (deployment.status === 'ready')
+    notify.success(toastCopy.live(name), `Deployment #${deployment.number}`)
+  if (deployment.status === 'failed')
+    notify.error(toastCopy.failed(name), `Deployment #${deployment.number}`)
 })
 onBeforeUnmount(stop)
 </script>

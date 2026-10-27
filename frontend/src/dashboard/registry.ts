@@ -4,7 +4,8 @@ import type { DashboardPlugin, DashboardWidget } from './types.ts'
 const widgets = reactive(new Map<string, DashboardWidget>())
 
 export function registerWidget(widget: DashboardWidget): void {
-  if (widgets.has(widget.id)) throw new Error(`A dashboard widget "${widget.id}" is already registered`)
+  if (widgets.has(widget.id))
+    throw new Error(`A dashboard widget "${widget.id}" is already registered`)
   widgets.set(widget.id, widget)
 }
 
@@ -34,13 +35,17 @@ function readLayout(): SavedLayout {
 }
 
 const layout = ref<SavedLayout>(readLayout())
-watch(layout, (value) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
-  } catch {
-    // Private browsing: the layout lasts for this visit.
-  }
-}, { deep: true })
+watch(
+  layout,
+  (value) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(value))
+    } catch {
+      // Private browsing: the layout lasts for this visit.
+    }
+  },
+  { deep: true },
+)
 
 /** Widgets in the person's order; new widgets join in their default position. */
 export const orderedWidgets = computed(() => {
@@ -60,7 +65,9 @@ export function isWidgetShown(widget: DashboardWidget): boolean {
 
 export function setWidgetShown(widget: DashboardWidget, shown: boolean): void {
   const hidden = layout.value.hidden.filter((id) => id !== widget.id)
-  const order = layout.value.order.includes(widget.id) ? layout.value.order : [...layout.value.order, widget.id]
+  const order = layout.value.order.includes(widget.id)
+    ? layout.value.order
+    : [...layout.value.order, widget.id]
   layout.value = { order, hidden: shown ? hidden : [...hidden, widget.id] }
 }
 

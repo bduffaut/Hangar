@@ -56,11 +56,22 @@ const cardStyle = () => {
 </script>
 
 <template>
-  <div v-if="tour.current.value" class="hg-tour" role="dialog" aria-modal="true" :aria-label="tour.current.value.title">
+  <div
+    v-if="tour.current.value"
+    class="hg-tour"
+    role="dialog"
+    aria-modal="true"
+    :aria-label="tour.current.value.title"
+  >
     <div
       v-if="box"
       class="hg-tour-spotlight"
-      :style="{ top: `${box.top - 6}px`, left: `${box.left - 6}px`, width: `${box.width + 12}px`, height: `${box.height + 12}px` }"
+      :style="{
+        top: `${box.top - 6}px`,
+        left: `${box.left - 6}px`,
+        width: `${box.width + 12}px`,
+        height: `${box.height + 12}px`,
+      }"
     />
     <div ref="card" class="hg-tour-card" tabindex="-1" :style="cardStyle()">
       <p class="hg-tour-progress">{{ (tour.step.value ?? 0) + 1 }} of {{ tour.steps.length }}</p>
@@ -71,7 +82,11 @@ const cardStyle = () => {
         <BaseButton
           variant="primary"
           size="sm"
-          :label="(tour.step.value ?? 0) >= tour.steps.length - 1 ? guideCopy.tourDone : guideCopy.tourNext"
+          :label="
+            (tour.step.value ?? 0) >= tour.steps.length - 1
+              ? guideCopy.tourDone
+              : guideCopy.tourNext
+          "
           @click="tour.next()"
         />
       </div>

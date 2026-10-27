@@ -24,3 +24,15 @@ defineProps<{ tabs: { value: T; label: string; hint?: string }[] }>()
     </TabPanels>
   </Tabs>
 </template>
+
+<style scoped>
+/* Tabs sit on the page itself; the panels inside them provide their own surfaces. */
+:deep(.p-tabs),
+:deep(.p-tablist-tab-list),
+:deep(.p-tabpanels) {
+  background: transparent;
+}
+:deep(.p-tabpanels) {
+  padding: var(--hg-space-5) 0 0;
+}
+</style>

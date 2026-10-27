@@ -170,8 +170,10 @@ export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
   // deleted projects later, but cancelling stops the work now).
   await cancelActive(ctx, project).catch(() => {})
   await withAdvisoryLock(ctx.db, projectLockKey(project.id), async () => {
+    // The project is going away, so its containers are removed at once rather than stopped
+    // gracefully (which can take ten seconds each for an app that ignores SIGTERM).
     for (const container of await ctx.docker.listManagedApps(project.id)) {
-      await ctx.docker.removeContainer(container.id, CONTAINER_STOP_GRACE_SECONDS)
+      await ctx.docker.removeContainer(container.id)
     }
     await deleteProjectRow(ctx.db, project.id)
   })

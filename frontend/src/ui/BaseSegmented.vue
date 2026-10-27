@@ -3,7 +3,7 @@ import SelectButton from 'primevue/selectbutton'
 
 // A small set of mutually exclusive choices shown side by side.
 const model = defineModel<T>({ required: true })
-defineProps<{ options: { label: string; value: T }[]; ariaLabel: string }>()
+defineProps<{ options: { label: string; value: T }[]; label: string }>()
 </script>
 
 <template>
@@ -13,7 +13,7 @@ defineProps<{ options: { label: string; value: T }[]; ariaLabel: string }>()
     option-label="label"
     option-value="value"
     :allow-empty="false"
-    :aria-label="ariaLabel"
+    :aria-label="label"
     size="small"
   />
 </template>

@@ -1,5 +1,6 @@
 {
   "name": "hangar",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.34.9",
@@ -11,12 +12,14 @@
     "dev:down": "docker compose -f docker/compose.dev.yml down",
     "hangar": "docker exec hangar-core pnpm --silent --filter @hangar/server hangar",
     "hangar-admin": "docker exec -i hangar-core pnpm --silent --filter @hangar/server hangar-admin",
+    "ship": "node scripts/ship.mjs",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
-    "test": "vitest run --project shared --project server",
+    "test": "vitest run --project shared --project server --project frontend",
     "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "db:generate": "pnpm --filter @hangar/server db:generate"
   },
   "devDependencies": {

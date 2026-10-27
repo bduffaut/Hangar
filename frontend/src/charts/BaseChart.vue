@@ -20,7 +20,7 @@ const chart = shallowRef<Chart<T> | null>(null)
 function draw() {
   if (!canvas.value) return
   const { data, options } = props.build()
-  if (chart.value && chart.value.config.type === props.type) {
+  if (chart.value && (chart.value.config as { type?: string }).type === props.type) {
     chart.value.data = data
     chart.value.options = options
     chart.value.update('none')

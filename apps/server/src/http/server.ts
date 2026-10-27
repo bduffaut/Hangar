@@ -34,6 +34,8 @@ export interface Http {
   app: FastifyInstance
   ctx: Ctx
   access: AccessPolicyCache
+  /** Unknown GET paths outside /api/ get the dashboard's index.html (its router takes over). */
+  enableDashboardFallback(): void
 }
 
 const APP_NOT_RUNNING_PAGE = `<!doctype html>
@@ -124,11 +126,22 @@ export function createHttpServer(ctx: Ctx): Http {
     })
   })
 
-  app.setNotFoundHandler((_request, reply) => {
-    reply.code(404).send({ error: { code: 'not_found', message: 'No such endpoint' } })
+  let dashboardFallback = false
+  app.setNotFoundHandler((request, reply) => {
+    if (dashboardFallback && request.method === 'GET' && !request.url.startsWith('/api/')) {
+      return reply.header('Cache-Control', 'no-cache').sendFile('index.html')
+    }
+    return reply.code(404).send({ error: { code: 'not_found', message: 'No such endpoint' } })
   })
 
-  return { app, ctx, access }
+  return {
+    app,
+    ctx,
+    access,
+    enableDashboardFallback: () => {
+      dashboardFallback = true
+    },
+  }
 }
 
 export function setSessionCookie(

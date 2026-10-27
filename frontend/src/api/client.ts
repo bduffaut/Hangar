@@ -100,6 +100,7 @@ export async function api<N extends EndpointName>(
 
 /** A message for any thrown value, for toasts and inline errors. */
 export function messageOf(error: unknown): string {
-  if (error instanceof ApiError) return error.hint ? `${error.message} ${error.hint}` : error.message
+  if (error instanceof ApiError)
+    return error.hint ? `${error.message} ${error.hint}` : error.message
   return errorCopy.unexpected
 }

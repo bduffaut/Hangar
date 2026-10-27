@@ -40,3 +40,39 @@ FROM base AS dev
 RUN git config --system --add safe.directory '*'
 WORKDIR /repo
 CMD ["pnpm", "--filter", "@hangar/server", "dev"]
+
+# Production, step 1: install everything and build the dashboard and the server bundle.
+FROM base AS build
+WORKDIR /src
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/server/package.json apps/server/
+COPY packages/shared/package.json packages/shared/
+COPY frontend/package.json frontend/
+RUN pnpm install --frozen-lockfile
+COPY tsconfig.base.json ./
+COPY packages/shared packages/shared
+COPY apps/server apps/server
+COPY frontend frontend
+RUN pnpm --filter @hangar/frontend build \
+ && pnpm --filter @hangar/server build \
+ && pnpm --filter @hangar/server deploy --prod --legacy /out
+
+# Production, step 2: only what runs. The server bundle, its runtime libraries, the migrations,
+# and the built dashboard.
+FROM base AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    HANGAR_MIGRATIONS_DIR=/app/drizzle \
+    HANGAR_WEB_DIR=/app/web
+COPY --from=build /out/node_modules ./node_modules
+COPY --from=build /src/apps/server/dist ./dist
+COPY --from=build /src/apps/server/drizzle ./drizzle
+COPY --from=build /src/frontend/dist ./web
+RUN printf '#!/bin/sh\nexec node /app/dist/cli.js "$@"\n' > /usr/local/bin/hangar-admin \
+ && chmod 755 /usr/local/bin/hangar-admin
+ARG HANGAR_VERSION=dev
+ENV HANGAR_VERSION=${HANGAR_VERSION}
+EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+CMD ["node", "--enable-source-maps", "/app/dist/main.js"]

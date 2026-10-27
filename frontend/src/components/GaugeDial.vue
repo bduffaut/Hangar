@@ -5,7 +5,12 @@ import { BaseChart, baseOptions, chartColors } from '../charts/index.ts'
 
 // A half-circle gauge for a percentage, like an instrument dial. Turns amber above 75% and red
 // above 90%, so a full disk or a busy CPU stands out.
-const props = defineProps<{ percent: number | null; label: string; caption: string; detail: string }>()
+const props = defineProps<{
+  percent: number | null
+  label: string
+  caption: string
+  detail: string
+}>()
 
 const tone = computed(() => {
   const p = props.percent ?? 0
@@ -52,6 +57,8 @@ const build = computed(() => () => {
 <style scoped>
 .hg-gauge {
   margin: 0;
+  /* Grid items default to their content's width; this lets three dials share a phone screen. */
+  min-width: 0;
   display: grid;
   gap: var(--hg-space-2);
   justify-items: center;
@@ -59,8 +66,12 @@ const build = computed(() => () => {
 }
 .hg-gauge-dial {
   position: relative;
-  width: 9rem;
-  max-width: 100%;
+  width: min(9rem, 100%);
+}
+@media (max-width: 36rem) {
+  .hg-gauge-value {
+    font-size: var(--hg-size-md);
+  }
 }
 .hg-gauge-value {
   position: absolute;

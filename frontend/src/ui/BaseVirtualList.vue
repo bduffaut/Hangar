@@ -13,7 +13,6 @@ defineExpose({
   scrollToEnd(count: number) {
     scroller.value?.scrollToIndex(Math.max(0, count - 1))
   },
-  element: () => (scroller.value?.$el as HTMLElement | undefined) ?? null,
 })
 </script>
 

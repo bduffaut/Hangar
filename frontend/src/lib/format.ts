@@ -30,7 +30,11 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (hours < 24) return `${hours} h ago`
   const days = Math.round(hours / 24)
   if (days < 14) return `${days} day${days === 1 ? '' : 's'} ago`
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 export function absoluteTime(iso: string): string {
@@ -40,7 +44,10 @@ export function absoluteTime(iso: string): string {
 export const shortSha = (sha: string) => sha.slice(0, 7)
 
 /** How long a deployment ran, or null if it has not started. */
-export function deploymentDuration(d: { startedAt: string | null; finishedAt: string | null }, now = Date.now()): number | null {
+export function deploymentDuration(
+  d: { startedAt: string | null; finishedAt: string | null },
+  now = Date.now(),
+): number | null {
   if (!d.startedAt) return null
   return (d.finishedAt ? new Date(d.finishedAt).getTime() : now) - new Date(d.startedAt).getTime()
 }

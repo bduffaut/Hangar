@@ -55,8 +55,16 @@ const scheme = {
     hoverColor: 'var(--hg-ink)',
   },
   overlay: {
-    select: { background: 'var(--hg-panel)', borderColor: 'var(--hg-line)', color: 'var(--hg-ink)' },
-    popover: { background: 'var(--hg-panel)', borderColor: 'var(--hg-line)', color: 'var(--hg-ink)' },
+    select: {
+      background: 'var(--hg-panel)',
+      borderColor: 'var(--hg-line)',
+      color: 'var(--hg-ink)',
+    },
+    popover: {
+      background: 'var(--hg-panel)',
+      borderColor: 'var(--hg-line)',
+      color: 'var(--hg-ink)',
+    },
     modal: { background: 'var(--hg-panel)', borderColor: 'var(--hg-line)', color: 'var(--hg-ink)' },
   },
   list: {
@@ -71,16 +79,30 @@ const scheme = {
     },
   },
   navigation: {
-    item: { focusBackground: 'var(--hg-raised)', activeBackground: 'var(--hg-raised)', color: 'var(--hg-ink)', focusColor: 'var(--hg-ink)', activeColor: 'var(--hg-ink)' },
+    item: {
+      focusBackground: 'var(--hg-raised)',
+      activeBackground: 'var(--hg-raised)',
+      color: 'var(--hg-ink)',
+      focusColor: 'var(--hg-ink)',
+      activeColor: 'var(--hg-ink)',
+    },
   },
 }
 
 export const hangarPreset = definePreset(Aura, {
-  primitive: { borderRadius: { none: '0', xs: '2px', sm: '4px', md: '8px', lg: '12px', xl: '16px' } },
+  primitive: {
+    borderRadius: { none: '0', xs: '2px', sm: '4px', md: '8px', lg: '12px', xl: '16px' },
+  },
   semantic: {
     // A full scale is still needed for the few places Aura reads primary.50 … primary.950.
     primary: palette(palettes.dark.accent),
-    focusRing: { width: '2px', style: 'solid', color: 'var(--hg-accent)', offset: '2px', shadow: 'none' },
+    focusRing: {
+      width: '2px',
+      style: 'solid',
+      color: 'var(--hg-accent)',
+      offset: '2px',
+      shadow: 'none',
+    },
     colorScheme: { light: scheme, dark: scheme },
   },
 })

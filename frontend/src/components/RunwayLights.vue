@@ -36,7 +36,14 @@ const summary = computed(() => {
       :key="light?.id ?? `empty-${i}`"
       v-hint.top="light ? `#${light.number}: ${statusCopy[light.status].label}` : undefined"
       class="hg-light"
-      :class="light ? [`is-${light.status}`, ['queued', 'building', 'deploying'].includes(light.status) && 'is-live'] : 'is-empty'"
+      :class="
+        light
+          ? [
+              `is-${light.status}`,
+              ['queued', 'building', 'deploying'].includes(light.status) && 'is-live',
+            ]
+          : 'is-empty'
+      "
     />
   </div>
 </template>

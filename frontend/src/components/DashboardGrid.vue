@@ -16,17 +16,30 @@ const customizing = ref(false)
 <template>
   <div class="hg-dashboard">
     <template v-for="widget in orderedWidgets" :key="widget.id">
-      <div v-if="isWidgetShown(widget)" class="hg-dashboard-cell" :class="`is-${widget.size}`" :data-widget="widget.id">
+      <div
+        v-if="isWidgetShown(widget)"
+        class="hg-dashboard-cell"
+        :class="`is-${widget.size}`"
+        :data-widget="widget.id"
+      >
         <component :is="widget.component" />
       </div>
     </template>
   </div>
   <div class="hg-dashboard-footer">
-    <BaseButton variant="ghost" size="sm" icon="layout" label="Customize dashboard" @click="customizing = true" />
+    <BaseButton
+      variant="ghost"
+      size="sm"
+      icon="layout"
+      label="Customize dashboard"
+      @click="customizing = true"
+    />
   </div>
 
   <BaseDialog v-model:visible="customizing" title="Customize dashboard">
-    <p class="hg-muted hg-dialog-intro">Choose which sections appear and in what order. This is saved in this browser.</p>
+    <p class="hg-muted hg-dialog-intro">
+      Choose which sections appear and in what order. This is saved in this browser.
+    </p>
     <ul class="hg-widget-list">
       <li v-for="(widget, i) in orderedWidgets" :key="widget.id" class="hg-widget-row">
         <BaseSwitch
@@ -39,8 +52,22 @@ const customizing = ref(false)
           <span class="hg-muted">{{ widget.description }}</span>
         </label>
         <span class="hg-widget-move">
-          <BaseButton size="sm" variant="ghost" label="Up" :disabled="i === 0" :aria-label="`Move ${widget.title} up`" @click="moveWidget(widget, -1)" />
-          <BaseButton size="sm" variant="ghost" label="Down" :disabled="i === orderedWidgets.length - 1" :aria-label="`Move ${widget.title} down`" @click="moveWidget(widget, 1)" />
+          <BaseButton
+            size="sm"
+            variant="ghost"
+            label="Up"
+            :disabled="i === 0"
+            :aria-label="`Move ${widget.title} up`"
+            @click="moveWidget(widget, -1)"
+          />
+          <BaseButton
+            size="sm"
+            variant="ghost"
+            label="Down"
+            :disabled="i === orderedWidgets.length - 1"
+            :aria-label="`Move ${widget.title} down`"
+            @click="moveWidget(widget, 1)"
+          />
         </span>
       </li>
     </ul>

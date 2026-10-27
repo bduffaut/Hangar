@@ -29,7 +29,7 @@ export function useTour() {
   return {
     steps,
     step,
-    current: computed(() => (step.value === null ? null : steps[step.value] ?? null)),
+    current: computed(() => (step.value === null ? null : (steps[step.value] ?? null))),
     start: () => (step.value = 0),
     startIfNew: () => {
       if (!remembered()) step.value = 0

@@ -54,7 +54,9 @@ export function baseOptions<T extends ChartType>(): ChartOptions<T> {
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 250 },
+    animation: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? false
+      : { duration: 250 },
     plugins: {
       legend: { display: false },
       tooltip: {

@@ -20,7 +20,13 @@ const copy = useClipboard()
       :aria-label="revealed ? `Hide ${label}` : `Show ${label}`"
       @click="revealed = !revealed"
     />
-    <BaseButton size="sm" variant="ghost" icon="copy" :aria-label="`Copy ${label}`" @click="copy(value)" />
+    <BaseButton
+      size="sm"
+      variant="ghost"
+      icon="copy"
+      :aria-label="`Copy ${label}`"
+      @click="copy(value)"
+    />
   </div>
 </template>
 

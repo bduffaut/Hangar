@@ -12,7 +12,10 @@ defineProps<{ id: string; invalid?: boolean; autocomplete?: string; placeholder?
     :invalid="invalid"
     :feedback="false"
     :placeholder="placeholder"
-    :input-props="{ autocomplete: autocomplete ?? 'current-password', 'aria-describedby': `${id}-help ${id}-error` }"
+    :input-props="{
+      autocomplete: autocomplete ?? 'current-password',
+      'aria-describedby': `${id}-help ${id}-error`,
+    }"
     toggle-mask
     fluid
   />

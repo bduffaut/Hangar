@@ -21,17 +21,27 @@ const rows = computed(() =>
 
 <template>
   <HgPanel title="Latest activity" :padded="false">
-    <p v-if="rows.length === 0" class="hg-muted hg-activity-empty">Nothing has been deployed yet.</p>
+    <p v-if="rows.length === 0" class="hg-muted hg-activity-empty">
+      Nothing has been deployed yet.
+    </p>
     <ol v-else class="hg-activity">
       <li v-for="row in rows" :key="row.deployment.id">
-        <RouterLink :to="{ name: 'deployment', params: { id: row.deployment.id } }" class="hg-activity-row">
+        <RouterLink
+          :to="{ name: 'deployment', params: { id: row.deployment.id } }"
+          class="hg-activity-row"
+        >
           <StatusBadge :status="row.deployment.status" size="sm" />
           <span class="hg-activity-main">
             <strong>{{ row.project }}</strong>
-            <span class="hg-muted"> #{{ row.deployment.number }}, {{ triggerCopy[row.deployment.trigger].toLowerCase() }}</span>
+            <span class="hg-muted">
+              #{{ row.deployment.number }},
+              {{ triggerCopy[row.deployment.trigger].toLowerCase() }}</span
+            >
           </span>
           <code class="hg-muted">{{ shortSha(row.deployment.commitSha) }}</code>
-          <span class="hg-muted hg-activity-time">{{ relativeTime(row.deployment.createdAt, now) }}</span>
+          <span class="hg-muted hg-activity-time">{{
+            relativeTime(row.deployment.createdAt, now)
+          }}</span>
         </RouterLink>
       </li>
     </ol>

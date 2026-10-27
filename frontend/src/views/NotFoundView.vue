@@ -10,7 +10,7 @@ useDocumentTitle('Not found')
 <template>
   <main class="hg-not-found">
     <EmptyState :title="notFoundCopy.title" :body="notFoundCopy.body">
-      <RouterLink :to="{ name: 'home' }" custom #default="{ navigate }">
+      <RouterLink v-slot="{ navigate }" :to="{ name: 'home' }" custom>
         <BaseButton variant="primary" :label="notFoundCopy.action" @click="navigate" />
       </RouterLink>
     </EmptyState>

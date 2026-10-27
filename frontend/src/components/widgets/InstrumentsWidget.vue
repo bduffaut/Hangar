@@ -5,9 +5,9 @@ import { api } from '../../api/client.ts'
 import { useDashboardData } from '../../dashboard/index.ts'
 import { formatBytes } from '../../lib/format.ts'
 import { useMetricsStore } from '../../stores/metrics.ts'
-import Gauge from '../Gauge.vue'
+import GaugeDial from '../GaugeDial.vue'
 import HgPanel from '../HgPanel.vue'
-import Sparkline from '../Sparkline.vue'
+import TrendLine from '../TrendLine.vue'
 
 const metrics = useMetricsStore()
 const { metrics: samples } = useDashboardData()
@@ -22,29 +22,33 @@ onBeforeUnmount(() => metrics.release())
 const host = computed(() => samples.value.at(-1)?.host ?? null)
 const percent = (used: number, total: number) => (total > 0 ? (used / total) * 100 : 0)
 const cpuSeries = computed(() => samples.value.map((s) => s.host.cpuPercent))
-const memorySeries = computed(() => samples.value.map((s) => percent(s.host.memoryUsedBytes, s.host.memoryTotalBytes)))
+const memorySeries = computed(() =>
+  samples.value.map((s) => percent(s.host.memoryUsedBytes, s.host.memoryTotalBytes)),
+)
 </script>
 
 <template>
   <HgPanel :title="instrumentsCopy.title" data-tour="instruments">
     <template #actions>
-      <span v-if="info" class="hg-muted hg-version">{{ instrumentsCopy.version }} {{ info.version }}</span>
+      <span v-if="info" class="hg-muted hg-version"
+        >{{ instrumentsCopy.version }} {{ info.version }}</span
+      >
     </template>
     <p v-if="!host" class="hg-muted">{{ instrumentsCopy.waiting }}</p>
     <div v-else class="hg-instruments">
-      <Gauge
+      <GaugeDial
         :percent="host.cpuPercent"
         :caption="instrumentsCopy.cpu"
         :label="`${Math.round(host.cpuPercent)}% busy`"
         detail="Across all cores"
       />
-      <Gauge
+      <GaugeDial
         :percent="percent(host.memoryUsedBytes, host.memoryTotalBytes)"
         :caption="instrumentsCopy.memory"
         :label="`${formatBytes(host.memoryUsedBytes)} used`"
         :detail="`${formatBytes(host.memoryUsedBytes)} of ${formatBytes(host.memoryTotalBytes)}`"
       />
-      <Gauge
+      <GaugeDial
         :percent="percent(host.diskUsedBytes, host.diskTotalBytes)"
         :caption="instrumentsCopy.disk"
         :label="`${formatBytes(host.diskUsedBytes)} used`"
@@ -53,11 +57,16 @@ const memorySeries = computed(() => samples.value.map((s) => percent(s.host.memo
       <div class="hg-trends">
         <div class="hg-trend">
           <span>{{ instrumentsCopy.cpu }}, last 15 min</span>
-          <Sparkline :values="cpuSeries" :max="100" label="CPU use over the last 15 minutes" />
+          <TrendLine :values="cpuSeries" :max="100" label="CPU use over the last 15 minutes" />
         </div>
         <div class="hg-trend">
           <span>{{ instrumentsCopy.memory }}, last 15 min</span>
-          <Sparkline :values="memorySeries" :max="100" label="Memory use over the last 15 minutes" color="--hg-series-1" />
+          <TrendLine
+            :values="memorySeries"
+            :max="100"
+            label="Memory use over the last 15 minutes"
+            color="--hg-series-1"
+          />
         </div>
       </div>
     </div>

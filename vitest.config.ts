@@ -6,6 +6,7 @@ export default defineConfig({
     projects: [
       { test: { name: 'shared', root: 'packages/shared', include: ['src/**/*.test.ts'] } },
       { test: { name: 'server', root: 'apps/server', include: ['src/**/*.test.ts'] } },
+      { test: { name: 'frontend', root: 'frontend', include: ['src/**/*.test.ts'] } },
       {
         // Needs the dev stack (`pnpm dev`); run with `pnpm test:integration`.
         test: {

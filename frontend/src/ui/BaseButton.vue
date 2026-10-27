@@ -21,7 +21,8 @@ const props = withDefaults(
 defineEmits<{ click: [event: MouseEvent] }>()
 
 const library = computed(() => ({
-  severity: props.variant === 'danger' ? 'danger' : props.variant === 'primary' ? undefined : 'secondary',
+  severity:
+    props.variant === 'danger' ? 'danger' : props.variant === 'primary' ? undefined : 'secondary',
   variant: props.variant === 'ghost' ? ('text' as const) : undefined,
   size: props.size === 'sm' ? ('small' as const) : undefined,
 }))

@@ -21,7 +21,11 @@ import {
 } from '../src/modules/deployments/service.ts'
 import { setEnv } from '../src/modules/env-vars/service.ts'
 import { getProjectByName, listProjects, type Project } from '../src/modules/projects/repo.ts'
-import { createProject, updateProjectSettings } from '../src/modules/projects/service.ts'
+import {
+  createProject,
+  deleteProject,
+  updateProjectSettings,
+} from '../src/modules/projects/service.ts'
 import { getSettings } from '../src/modules/settings/repo.ts'
 
 const USAGE = `Usage: pnpm hangar <command>
@@ -35,6 +39,7 @@ const USAGE = `Usage: pnpm hangar <command>
   cancel <name>                             Cancel the project's queued or building deployment
   history <name>                            Recent deployments
   logs <name> [number]                      Build log of a deployment (default: latest)
+  delete <name>                             Delete a project, its containers, and its images
   reconcile | gc                            Queue a reconcile or cleanup run`
 
 const config = loadConfig(process.env)
@@ -194,6 +199,12 @@ try {
       await printLogs(d.id)
       console.log(`\n${describe(d)}`)
       if (d.failureReason) console.log(d.failureReason)
+      break
+    }
+    case 'delete': {
+      const p = await project(args[0])
+      await deleteProject(ctx, p)
+      console.log(`Deleted ${p.name}`)
       break
     }
     case 'reconcile':

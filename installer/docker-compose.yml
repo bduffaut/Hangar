@@ -1,0 +1,65 @@
+# The Hangar stack, installed at /opt/hangar. Values come from /opt/hangar/.env (written by
+# install.sh, readable by root only). Apps deployed by Hangar are separate containers it manages.
+name: hangar
+
+services:
+  hangar-db:
+    image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+    container_name: hangar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hangar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run install.sh first}
+      POSTGRES_DB: hangar
+    volumes:
+      - hangar-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hangar -d hangar']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [hangar]
+
+  hangar-proxy:
+    image: traefik:v3.5@sha256:16acb89c6db341182970d6fdafece31303b0a380a8ed7aa51682e225229bf1d2
+    container_name: hangar-proxy
+    restart: unless-stopped
+    command: ['--configFile=/etc/traefik/traefik.yml']
+    # HANGAR_BIND_IP limits who can reach Hangar: 0.0.0.0 is every network the server is on;
+    # a single address (like a Tailscale IP) keeps it to that network only.
+    ports:
+      - ${HANGAR_BIND_IP:-0.0.0.0}:80:80
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - traefik-dynamic:/etc/traefik/dynamic:ro
+    networks: [hangar]
+
+  hangar-core:
+    image: ${HANGAR_IMAGE:?run install.sh first}
+    container_name: hangar-core
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://hangar:${POSTGRES_PASSWORD}@hangar-db:5432/hangar
+      HANGAR_INSTANCE_KEY: ${HANGAR_INSTANCE_KEY}
+      HANGAR_SESSION_SECRET: ${HANGAR_SESSION_SECRET}
+      HANGAR_LAN_IP: ${HANGAR_LAN_IP}
+      HANGAR_VERSION: ${HANGAR_VERSION}
+    # The Docker socket lets core build and run apps. /proc and / inside a container already show
+    # the host's CPU, memory, and disk, so no host directories are mounted.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - traefik-dynamic:/var/lib/hangar/traefik
+      - hangar-builds:/tmp/hangar-builds
+    depends_on:
+      hangar-db:
+        condition: service_healthy
+    networks: [hangar]
+
+volumes:
+  hangar-db-data:
+  traefik-dynamic:
+  hangar-builds:
+
+networks:
+  hangar:
+    external: true

@@ -13,7 +13,9 @@ const withHistory = computed(() => projects.value.filter((p) => p.recent.length 
 const build = computed(() => () => {
   const c = chartColors()
   const base = baseOptions<'bar'>()
-  const statuses = DEPLOYMENT_STATUSES.filter((s) => withHistory.value.some((p) => p.recent.some((d) => d.status === s)))
+  const statuses = DEPLOYMENT_STATUSES.filter((s) =>
+    withHistory.value.some((p) => p.recent.some((d) => d.status === s)),
+  )
   const data: ChartData<'bar'> = {
     labels: withHistory.value.map((p) => p.name),
     datasets: statuses.map((status) => ({
@@ -32,13 +34,29 @@ const build = computed(() => () => {
       legend: {
         display: true,
         position: 'bottom',
-        labels: { color: c.muted, boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 },
+        labels: {
+          color: c.muted,
+          boxWidth: 10,
+          boxHeight: 10,
+          useBorderRadius: true,
+          borderRadius: 2,
+        },
       },
       tooltip: { ...base.plugins?.tooltip, displayColors: true },
     },
     scales: {
-      x: { stacked: true, grid: { color: c.line }, ticks: { color: c.muted, precision: 0 }, border: { display: false } },
-      y: { stacked: true, grid: { display: false }, ticks: { color: c.ink }, border: { display: false } },
+      x: {
+        stacked: true,
+        grid: { color: c.line },
+        ticks: { color: c.muted, precision: 0 },
+        border: { display: false },
+      },
+      y: {
+        stacked: true,
+        grid: { display: false },
+        ticks: { color: c.ink },
+        border: { display: false },
+      },
     },
   }
   return { data, options }
@@ -48,8 +66,19 @@ const height = computed(() => `${Math.max(7, withHistory.value.length * 2.25 + 4
 </script>
 
 <template>
-  <HgPanel title="Deployment results" description="How the last 12 deployments of each project ended.">
-    <p v-if="withHistory.length === 0" class="hg-muted">Results appear after the first deployment.</p>
-    <BaseChart v-else type="bar" :build="build" label="Recent deployment results per project" :height="height" />
+  <HgPanel
+    title="Deployment results"
+    description="How the last 12 deployments of each project ended."
+  >
+    <p v-if="withHistory.length === 0" class="hg-muted">
+      Results appear after the first deployment.
+    </p>
+    <BaseChart
+      v-else
+      type="bar"
+      :build="build"
+      label="Recent deployment results per project"
+      :height="height"
+    />
   </HgPanel>
 </template>

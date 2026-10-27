@@ -7,10 +7,15 @@ import { BaseButton, BaseVirtualList } from '../ui/index.ts'
 
 // The Flight Recorder: a terminal-style view of a build log. It follows new lines while you are
 // at the bottom, pauses when you scroll up, and offers a way back to the latest line.
-const props = defineProps<{ lines: LogLineView[]; filename: string; live: boolean; height?: string }>()
+const props = defineProps<{
+  lines: LogLineView[]
+  filename: string
+  live: boolean
+  height?: string
+}>()
 
 const LINE_HEIGHT = 21
-const list = ref<InstanceType<typeof BaseVirtualList> | null>(null)
+const list = ref<{ scrollToEnd(count: number): void } | null>(null)
 const following = ref(true)
 const copy = useClipboard()
 
@@ -41,6 +46,7 @@ watch(
   },
 )
 
+// eslint-disable-next-line no-control-regex -- strips terminal color codes
 const plainText = () => props.lines.map((l) => l.line.replace(/\u001b\[[0-9;]*m/g, '')).join('\n')
 
 function download() {
@@ -58,8 +64,20 @@ function download() {
     <div class="hg-recorder-toolbar">
       <span class="hg-recorder-count">{{ lines.length }} lines</span>
       <span class="hg-recorder-tools">
-        <BaseButton size="sm" variant="ghost" icon="copy" :label="flightRecorderCopy.copy" @click="copy(plainText(), flightRecorderCopy.copied)" />
-        <BaseButton size="sm" variant="ghost" icon="download" :label="flightRecorderCopy.download" @click="download" />
+        <BaseButton
+          size="sm"
+          variant="ghost"
+          icon="copy"
+          :label="flightRecorderCopy.copy"
+          @click="copy(plainText(), flightRecorderCopy.copied)"
+        />
+        <BaseButton
+          size="sm"
+          variant="ghost"
+          icon="download"
+          :label="flightRecorderCopy.download"
+          @click="download"
+        />
       </span>
     </div>
     <div class="hg-recorder-body" role="log" aria-live="off" :aria-label="flightRecorderCopy.title">
@@ -73,9 +91,19 @@ function download() {
         @scroll="onScroll"
       >
         <template #default="{ item }">
-          <div class="hg-line" :class="{ 'is-system': item.stream === 'system', 'is-stderr': item.stream === 'stderr' }">
+          <div
+            class="hg-line"
+            :class="{
+              'is-system': item.stream === 'system',
+              'is-stderr': item.stream === 'stderr',
+            }"
+          >
             <span class="hg-line-number" aria-hidden="true">{{ item.seq + 1 }}</span>
-            <span class="hg-line-text"><span v-for="(seg, i) in item.segments" :key="i" :class="seg.classes">{{ seg.text }}</span></span>
+            <span class="hg-line-text"
+              ><span v-for="(seg, i) in item.segments" :key="i" :class="seg.classes">{{
+                seg.text
+              }}</span></span
+            >
           </div>
         </template>
       </BaseVirtualList>
@@ -177,14 +205,34 @@ function download() {
   }
 }
 /* Terminal colors come from the theme (tokens.ts → terminal). */
-.ansi-fg-black { color: var(--hg-term-black); }
-.ansi-fg-red { color: var(--hg-term-red); }
-.ansi-fg-green { color: var(--hg-term-green); }
-.ansi-fg-yellow { color: var(--hg-term-yellow); }
-.ansi-fg-blue { color: var(--hg-term-blue); }
-.ansi-fg-magenta { color: var(--hg-term-magenta); }
-.ansi-fg-cyan { color: var(--hg-term-cyan); }
-.ansi-fg-white { color: var(--hg-term-white); }
-.ansi-bold { font-weight: 700; }
-.ansi-dim { opacity: 0.65; }
+.ansi-fg-black {
+  color: var(--hg-term-black);
+}
+.ansi-fg-red {
+  color: var(--hg-term-red);
+}
+.ansi-fg-green {
+  color: var(--hg-term-green);
+}
+.ansi-fg-yellow {
+  color: var(--hg-term-yellow);
+}
+.ansi-fg-blue {
+  color: var(--hg-term-blue);
+}
+.ansi-fg-magenta {
+  color: var(--hg-term-magenta);
+}
+.ansi-fg-cyan {
+  color: var(--hg-term-cyan);
+}
+.ansi-fg-white {
+  color: var(--hg-term-white);
+}
+.ansi-bold {
+  font-weight: 700;
+}
+.ansi-dim {
+  opacity: 0.65;
+}
 </style>

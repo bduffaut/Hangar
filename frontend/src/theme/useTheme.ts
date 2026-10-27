@@ -9,13 +9,13 @@ const systemDark = window.matchMedia('(prefers-color-scheme: dark)')
 function readPreference(): ThemePreference {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored === 'dark' || stored === 'light' ? stored : 'system'
+    return stored === 'system' || stored === 'light' ? stored : 'dark'
   } catch {
-    return 'system'
+    return 'dark'
   }
 }
 
-/** Dark by default (unless the system asks for light), with the choice remembered per browser. */
+/** Dark by default; light or matching the system are options. Remembered per browser. */
 const preference = ref<ThemePreference>(readPreference())
 const systemPrefersDark = ref(systemDark.matches)
 systemDark.addEventListener('change', (event) => (systemPrefersDark.value = event.matches))
@@ -35,7 +35,7 @@ export function useTheme() {
     setPreference(next: ThemePreference) {
       preference.value = next
       try {
-        if (next === 'system') localStorage.removeItem(STORAGE_KEY)
+        if (next === 'dark') localStorage.removeItem(STORAGE_KEY)
         else localStorage.setItem(STORAGE_KEY, next)
       } catch {
         // Private browsing: the choice lasts for this visit.

@@ -8,7 +8,13 @@ export interface SelectOption<V> {
 }
 
 const model = defineModel<T | null>()
-defineProps<{ id: string; options: SelectOption<T>[]; placeholder?: string; filter?: boolean; loading?: boolean }>()
+defineProps<{
+  id: string
+  options: SelectOption<T>[]
+  placeholder?: string
+  filter?: boolean
+  loading?: boolean
+}>()
 </script>
 
 <template>

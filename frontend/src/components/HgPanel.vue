@@ -1,7 +1,9 @@
 <script setup lang="ts">
 // A flat section of the page with an optional title row. Hierarchy comes from tone and spacing,
 // not shadows.
-defineProps<{ title?: string; description?: string; padded?: boolean }>()
+withDefaults(defineProps<{ title?: string; description?: string; padded?: boolean }>(), {
+  padded: true,
+})
 </script>
 
 <template>
