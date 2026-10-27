@@ -36,6 +36,9 @@ Things we deliberately do **not** use: a dependency-injection framework, a repos
 | D16 | Child processes (git, railpack, buildx) get a **minimal environment** (`PATH`, `HOME`, `DOCKER_HOST`, …) plus what the step needs. Base variables win over project env vars.                                                                                    | Hangar's own secrets (`DATABASE_URL`, instance key) never reach a build, and a project env var named `PATH` cannot break the build tooling.                                                                                                                                                     |
 | D17 | Hangar requires Docker's **containerd image store**. The installer enables it (`"features": {"containerd-snapshotter": true}` in `daemon.json`) and the builder checks for it before a Railpack build.                                                          | Railpack's BuildKit frontend uses merge operations, which Docker's built-in BuildKit supports only with the containerd store (the default for new installs since Docker 29). The alternative, a separate BuildKit container, adds a moving part that D5 avoids.                                 |
 | D18 | The API answers **only on the Control Tower's own hostnames** (`tower.<lanDomain>`, the bare LAN IP, an exposed `tower.<publicDomain>`). Any other Host gets the "app not running" page, and state-changing requests must carry an `Origin` from the same list. | Apps on sibling `*.sslip.io` names are same-site with the tower, and a DNS-rebinding page can point any name at the server. A host allowlist plus an origin check closes both, in addition to the session's CSRF token.                                                                         |
+| D19 | The dashboard uses **PrimeVue 4.5.5 with `@primeuix/themes` 2.0.3 (MIT)**, only through the `Base*` wrappers in `frontend/src/ui/`.                                                                                                                             | PrimeVue 5 changed to a commercial license. The wrappers (enforced by a lint rule) mean the library can be replaced by rewriting one folder.                                                                                                                                                    |
+| D20 | **One Hangar per Docker host.** Container names (`hangar-core`, …) are fixed, and startup cleanup removes every managed app container its own database does not list.                                                                                           | Two instances sharing a Docker daemon would remove each other's apps. The installer cannot create a second instance, and dev smoke tests run a second core with `HANGAR_ROLE=api` (no worker).                                                                                                  |
+| D21 | Traefik publishes port 80 on **`HANGAR_BIND_IP`** (default every address). A server on a private network such as Tailscale binds to that address only.                                                                                                          | Docker-published ports bypass host firewalls such as ufw, so binding is the reliable way to keep Hangar off other networks.                                                                                                                                                                     |
 | D12 | Encrypted values use one envelope format everywhere (see [Encryption](#encryption)), so `env_vars` has no separate IV column.                                                                                                                                   | One helper, one format, versioned for future key rotation.                                                                                                                                                                                                                                      |
 | D13 | In development the server runs **inside a container** (`core-dev`) on the `hangar` network, using the same base image as production.                                                                                                                            | Container DNS names, the Docker socket, `git`, `buildx`, and `railpack` behave identically in dev and prod, on any host OS.                                                                                                                                                                     |
 | D14 | Repository and images live under the GitHub account **`bduffaut`**: `github.com/bduffaut/hangar`, `ghcr.io/bduffaut/hangar-core`. The test flight is a separate public repo, `github.com/bduffaut/hangar-test-flight`.                                          | A personal account is enough for the MVP. GitHub redirects transferred repos, so moving to an org later is cheap. A tiny separate repo keeps the onboarding clone fast.                                                                                                                         |
@@ -62,11 +65,11 @@ hangar-core ──────────────────────�
 
 ### Compose stack (`/opt/hangar/docker-compose.yml`)
 
-| Container      | Image                                            | Notes                                                                                                                                                                                                                                |
-| -------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `hangar-core`  | `ghcr.io/bduffaut/hangar-core:${HANGAR_VERSION}` | API, worker, SPA. Mounts `/var/run/docker.sock`, `/proc:/host/proc:ro`, `/:/host/root:ro`, and the `traefik-dynamic` volume (read-write).                                                                                            |
-| `hangar-db`    | `postgres:18`                                    | Named volume `hangar-db-data`. Not published to the host.                                                                                                                                                                            |
-| `hangar-proxy` | `traefik:v3`                                     | Publishes `80:80`. Mounts `traefik-dynamic` (read-only). Static config `traefik.yml` defines entrypoints `web` (:80), `public` (:8081), `traefik` (:8082, API, internal only), and the file provider watching the dynamic directory. |
+| Container      | Image                                                                                                 | Notes                                                                                                                                                                                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hangar-core`  | `${HANGAR_IMAGE}` (the published `ghcr.io/bduffaut/hangar-core:<version>`, or a locally loaded image) | API, worker, and the built dashboard. Mounts `/var/run/docker.sock` and the `traefik-dynamic` volume (read-write). No host directories: `/proc/stat`, `/proc/meminfo`, and `statfs('/')` inside a container already report the host's CPU, memory, and Docker disk. |
+| `hangar-db`    | `postgres:18`                                                                                         | Named volume `hangar-db-data`. Not published to the host.                                                                                                                                                                                                           |
+| `hangar-proxy` | `traefik:v3`                                                                                          | Publishes `80:80`. Mounts `traefik-dynamic` (read-only). Static config `traefik.yml` defines entrypoints `web` (:80), `public` (:8081), `traefik` (:8082, API, internal only), and the file provider watching the dynamic directory.                                |
 
 All three join the external Docker network `hangar`. Every app container and the managed `cloudflared` container join it too.
 
@@ -419,26 +422,34 @@ Responses are parsed through their contract schema, which drops any field it doe
 
 ## Frontend
 
-- **Stack:** Vue 3, TypeScript, Vite, Vue Router, Pinia, Tailwind CSS v4.
-- **Theming:** colors are CSS variables, dark by default, light optional, choice remembered per browser.
-- **Status colors:** gray (queued), amber (building), blue (deploying), green (ready), red (failed), muted gray (cancelled). An in-progress deploy's dot has a subtle pulse, disabled under `prefers-reduced-motion`.
-- **`StatusBadge`:** label, tooltip, and color all come from `copy.ts`.
-- **`LogViewer` (Flight Recorder):** virtualized list, ANSI rendering with `anser`, auto-scroll that pauses when the user scrolls up and shows a "Jump to latest" button, copy and download.
-- **`useEventStream`:** wraps `EventSource`, exposes reactive state, and closes on unmount.
-- **Routes:**
+Lives in `frontend/` (`@hangar/frontend`). Vue 3, TypeScript, Vite, Vue Router, Pinia, Chart.js, PrimeVue (D19).
 
-| Path               | View                                                                          |
-| ------------------ | ----------------------------------------------------------------------------- |
-| `/setup`           | Preflight Checklist (redirects here while setup is incomplete)                |
-| `/login`           | Login                                                                         |
-| `/`                | Instruments strip + project grid                                              |
-| `/projects/new`    | Create project                                                                |
-| `/projects/:name`  | Tabs: Deployments, Radio, Environment, Settings (danger zone inside Settings) |
-| `/deployments/:id` | Flight Recorder                                                               |
-| `/settings`        | Domains, GitHub, Cloudflare Tunnel, appearance                                |
-| `*`                | 404                                                                           |
+| Folder        | Role                                                                                                                                                                                                                                                                                          |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme/`      | `tokens.ts` is the only source of colors, fonts, sizes, and motion (WCAG AA checked). `css.ts` turns them into `--hg-*` variables; `preset.ts` points PrimeVue at the same variables. Dark by default; light or match-system per browser.                                                     |
+| `ui/`         | `Base*` components wrapping PrimeVue, plus `useNotify` and `useConfirmAction`. The only folder allowed to import PrimeVue (lint rule).                                                                                                                                                        |
+| `charts/`     | `BaseChart`, the only place that creates Chart.js charts. Colors come from the theme; charts redraw on theme change.                                                                                                                                                                          |
+| `api/`        | `client.ts` calls endpoints by name from the shared contract (typed params, query, body, result; CSRF header). `streams.ts` wraps `EventSource`.                                                                                                                                              |
+| `stores/`     | Pinia: `session`, `projects`, `live` (one status stream while signed in), `metrics` (reference-counted stream).                                                                                                                                                                               |
+| `dashboard/`  | The home screen's widget system: `DashboardWidget` and `DashboardPlugin` types, a registry, a per-browser layout, and `plugins.ts`, where external widget libraries are added.                                                                                                                |
+| `components/` | App components built from `ui/` and `charts/`: `StatusBadge`, `RunwayLights`, `ProjectCard`, `GaugeDial`, `TrendLine`, `LogViewer` (Flight Recorder: virtualized, ANSI colors rendered as text, follows the tail, copy and download), `AppShell`, `TourOverlay`, `widgets/`, `project/` tabs. |
+| `views/`      | One per route (below).                                                                                                                                                                                                                                                                        |
 
-- **Responsive:** mobile-first. The project grid collapses to one column; the log viewer goes full-width with a sticky toolbar.
+All wording comes from `packages/shared/src/copy.ts`; brand name and tagline are in its `brand` export, the logo in `frontend/src/brand/`.
+
+| Path                    | View                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `/setup`                | Preflight Checklist: account, address, GitHub (optional), test flight            |
+| `/login`                | Sign in                                                                          |
+| `/`                     | Dashboard widgets: Instruments, projects, latest activity, deployment results    |
+| `/projects/new`         | Create project (GitHub picker when connected)                                    |
+| `/projects/:name/:tab?` | Tabs: Deployments (build-time and resource charts), Radio, Environment, Settings |
+| `/deployments/:id`      | Flight Recorder, failure explanation, cancel, rollback                           |
+| `/settings`             | Address, GitHub, public access (Cloudflare Tunnel), appearance, system           |
+| `/guide`                | How Hangar works; restarts the first-visit tour                                  |
+| `*`                     | 404                                                                              |
+
+Core serves the built dashboard (`HANGAR_WEB_DIR`) on tower hostnames only, with a strict Content-Security-Policy (`script-src 'self'`, no framing), `nosniff`, and `Referrer-Policy: same-origin`. Unknown non-API paths get `index.html`.
 
 ---
 
@@ -448,19 +459,23 @@ Responses are parsed through their contract schema, which drops any field it doe
 
 1. Check root, distro (Ubuntu 22.04/24.04, Debian 12; otherwise ask to continue), architecture (amd64/arm64), RAM ≥ 2 GB, free disk ≥ 10 GB, port 80 free, port 443 (warn only).
 2. Install Docker Engine and the Compose plugin from Docker's official repository if missing; enable the service. Ensure the containerd image store is on (D17). On an existing Docker that has images under the classic store, ask first: switching hides those images until it is switched back.
-3. Create `/opt/hangar`; download `docker-compose.yml` and `traefik.yml` for the target release.
-4. Generate `.env` only if absent (idempotent): `HANGAR_VERSION`, `POSTGRES_PASSWORD`, `HANGAR_SESSION_SECRET`, `HANGAR_INSTANCE_KEY`, `HANGAR_LAN_IP`.
-5. Create the `hangar` network if missing, `docker compose pull`, `docker compose up -d`.
-6. Wait for `GET /api/health` through Traefik.
+3. Create `/opt/hangar` and copy `docker-compose.yml`, `traefik.yml`, and `lib.sh` next to the script (downloading them for a release comes with publishing).
+4. Generate `.env` only if absent (idempotent, `0600 root:root`): `HANGAR_VERSION`, `HANGAR_IMAGE`, `HANGAR_BIND_IP` (D21), `HANGAR_LAN_IP`, `POSTGRES_PASSWORD`, `HANGAR_SESSION_SECRET`, `HANGAR_INSTANCE_KEY`. On a re-run only the image and bind address are updated.
+5. Create the `hangar` network if missing, `docker compose pull` (only Postgres and Traefik with `HANGAR_SKIP_PULL=1`), `docker compose up -d`.
+6. Wait for core's Docker health check.
 7. Run `hangar-admin issue-setup-code` (prints "already set up" if a user exists).
-8. Install `hangar-update` and `hangar-uninstall` to `/usr/local/bin`.
+8. Install `hangar-update`, `hangar-uninstall`, and `hangar-admin` (runs the CLI inside core) to `/usr/local/bin`.
 9. Print the success banner with the Control Tower URL (and the bare-IP fallback) and the boarding pass.
 
 Each themed line is followed by a dimmed plain description. Errors and the boarding-pass instructions are plain.
 
 ### `hangar-update`
 
-Resolve the latest release tag, `pg_dump` to `/opt/hangar/backups/pre-update-<version>.sql.gz` (keep the last 3), download that release's compose files, update `HANGAR_VERSION`, `pull`, `up -d`, and wait for health. Migrations run when core starts.
+`pg_dump` to `/opt/hangar/backups/pre-update-<timestamp>.sql.gz` (`0600`, keep the last 3), `pull`, `up -d`, and wait for health. Migrations run when core starts. Resolving the latest release comes with publishing.
+
+### `pnpm ship` (development)
+
+`scripts/ship.mjs` builds the runtime image locally, streams it to a server with `docker save | ssh … docker load`, copies `installer/`, and runs `install.sh` there with `HANGAR_SKIP_PULL=1` and `HANGAR_BIND_IP`. Nothing is published.
 
 ### `hangar-uninstall`
 
@@ -470,7 +485,7 @@ Stop and remove the stack, managed app containers, and the tunnel. Ask separatel
 
 - Base: Node 24 LTS on Debian slim.
 - Includes `git`, the Docker CLI, the `buildx` plugin, and pinned `railpack`.
-- Contains the bundled server, the built SPA, and the `hangar-admin` CLI.
+- Contains the bundled server (`apps/server/scripts/build.mjs`: esbuild, npm packages external), production `node_modules` (`pnpm deploy --prod`), migrations, the built dashboard, and the `hangar-admin` CLI. Runs `node /app/dist/main.js` with a Docker `HEALTHCHECK` on `/api/health`.
 - Published for `linux/amd64` and `linux/arm64` to `ghcr.io/bduffaut/hangar-core` on tags `vX.Y.Z` and `latest`.
 
 ---
@@ -493,12 +508,12 @@ The host OS is Windows 11 with WSL2 (Ubuntu) and Docker Desktop using WSL integr
 
 ## Testing
 
-| Layer       | Tool                                                  | Covers                                                                                                                                                                                                                           |
-| ----------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit        | Vitest                                                | Shared schemas, state machine transitions, `seal`/`open`, webhook HMAC, hostname rules and reserved names, `dynamic.yml` rendering, every status and failure code present in `copy.ts`.                                          |
-| Integration | Vitest + the dev stack                                | Each fixture deploys and responds at its hostname; `broken-healthcheck` fails while the previous version keeps serving; rollback restores the previous image; cancel kills a build; restart mid-build recovers to `interrupted`. |
-| End to end  | Playwright                                            | Preflight Checklist, create project, watch a deploy reach ready, roll back.                                                                                                                                                      |
-| Installer   | Manual checklist on a clean Ubuntu 24.04 Multipass VM | Install, re-run install, update, uninstall.                                                                                                                                                                                      |
+| Layer       | Tool                                                  | Covers                                                                                                                                                                                                                                                                                                              |
+| ----------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit        | Vitest                                                | Shared schemas, state machine transitions, `seal`/`open`, webhook HMAC, hostname rules and reserved names, `dynamic.yml` rendering, every status and failure code present in `copy.ts`.                                                                                                                             |
+| Integration | Vitest + the dev stack                                | Each fixture deploys and responds at its hostname; `broken-healthcheck` fails while the previous version keeps serving; rollback restores the previous image; cancel kills a build; restart mid-build recovers to `interrupted`.                                                                                    |
+| End to end  | Playwright (`e2e/`)                                   | Preflight Checklist with a real test flight; then, at desktop and phone sizes: tour, create project, Flight Recorder to ready, env vars and redeploy, rollback, Radio, delete. The browser runs in Playwright's Docker image on the `hangar` network; global setup builds the dashboard and resets the dev account. |
+| Installer   | Manual checklist on a clean Ubuntu 24.04 Multipass VM | Install, re-run install, update, uninstall.                                                                                                                                                                                                                                                                         |
 
 CI (GitHub Actions): lint, typecheck, unit tests, and integration tests on every push. Multi-arch image build and publish on `v*` tags.
 
@@ -517,9 +532,9 @@ Each stage is finished only when its exit criteria pass.
 3. **API.** Contract, auth and sessions, setup and `hangar-admin`, projects, deployments, env vars, SSE, poller, webhooks, cancel.
    _Exit:_ the full flow works over HTTP; unit tests pass. **Done** (`flow.test.ts` drives it through Traefik; `api.test.ts` covers auth and validation against a throwaway database).
 4. **Control Tower.** `copy.ts` first, then all views.
-   _Exit:_ Playwright flows pass, on desktop and phone widths.
+   _Exit:_ Playwright flows pass, on desktop and phone widths. **Done** (`pnpm test:e2e`).
 5. **Ship.** Production image, compose files, installer scripts, multi-arch CI, `hangar-test-flight` repo.
-   _Exit:_ a blank Ubuntu 24.04 VM goes from nothing to a live app in under ten minutes.
+   _Exit:_ a blank Ubuntu 24.04 VM goes from nothing to a live app in under ten minutes. **In progress:** production image, installer, update, uninstall, and `pnpm ship` are done and verified on the owner's server (Ubuntu 26.04, bound to its Tailscale address). Publishing (multi-arch images, release downloads, the `get.hangar.sh` script) waits for the owner's go-ahead.
 6. **Polish.** Empty states, error copy, loading lines, 404, logo and favicon, README with screenshot, GIF, and the trust warning.
 
 ---
