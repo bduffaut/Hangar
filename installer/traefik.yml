@@ -1,0 +1,27 @@
+# Static Traefik configuration. Routes live in the dynamic directory and are written by hangar-core.
+entryPoints:
+  web:
+    address: ':80'
+  public:
+    address: ':8081' # reached only by cloudflared over the hangar network
+  traefik:
+    address: ':8082' # API and ping; never published to the host in production
+
+api:
+  insecure: true
+  dashboard: false
+
+ping:
+  entryPoint: traefik
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: INFO
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false

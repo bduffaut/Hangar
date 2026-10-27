@@ -1,2 +1,5 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize to LF everywhere; shell scripts must never get CRLF
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.gif binary

@@ -1,0 +1,9 @@
+export const DEFAULT_APP_PORT = 3000
+export const DEFAULT_MEMORY_LIMIT_MB = 512
+
+export const BUILD_TIMEOUT_MS = 15 * 60_000
+export const HEALTH_CHECK_TIMEOUT_MS = 60_000
+export const POLL_INTERVAL_MS = 60_000
+
+export const IMAGES_KEPT_PER_PROJECT = 5
+export const LOGS_KEPT_PER_PROJECT = 20
