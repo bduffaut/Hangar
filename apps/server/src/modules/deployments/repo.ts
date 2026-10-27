@@ -1,5 +1,5 @@
 import type { DeploymentStatus, DeploymentTrigger, LogStream } from '@hangar/shared'
-import { and, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, desc, eq, gt, inArray, isNotNull, lt, sql } from 'drizzle-orm'
 import type { Db } from '../../db/client.ts'
 import { deploymentLogs, deployments, projects } from '../../db/schema.ts'
 
@@ -185,4 +185,25 @@ export async function listLatestDeployments(db: Db, projectIds: string[]): Promi
 export async function listDeploymentsById(db: Db, ids: string[]): Promise<Deployment[]> {
   if (ids.length === 0) return []
   return db.select().from(deployments).where(inArray(deployments.id, ids))
+}
+
+/** The env var fingerprint of the project's most recent build before `beforeNumber`. */
+export async function previousSecretsHash(
+  db: Db,
+  projectId: string,
+  beforeNumber: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ secretsHash: deployments.secretsHash })
+    .from(deployments)
+    .where(
+      and(
+        eq(deployments.projectId, projectId),
+        lt(deployments.number, beforeNumber),
+        isNotNull(deployments.secretsHash),
+      ),
+    )
+    .orderBy(desc(deployments.number))
+    .limit(1)
+  return row?.secretsHash ?? null
 }

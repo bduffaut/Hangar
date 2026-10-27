@@ -106,6 +106,8 @@ export const deployments = pgTable(
     failureCode: failureCode(),
     failureReason: text(),
     imageTag: text(),
+    /** SHA-256 of the env vars a build used (see builder.ts), to detect a stale build cache. */
+    secretsHash: text(),
     containerId: text(),
     port: integer(),
     trigger: deploymentTrigger().notNull(),

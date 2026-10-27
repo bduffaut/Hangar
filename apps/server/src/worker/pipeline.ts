@@ -13,12 +13,18 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Ctx } from '../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
-import { type Deployment, getDeployment, updateDeployment } from '../modules/deployments/repo.ts'
+import {
+  type Deployment,
+  getDeployment,
+  previousSecretsHash,
+  updateDeployment,
+} from '../modules/deployments/repo.ts'
 import { goLive, transition } from '../modules/deployments/service.ts'
 import { getEnv } from '../modules/env-vars/service.ts'
 import { getProject, listCurrentDeployments, type Project } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/secrets.ts'
+import { secretsHash } from '../platform/builder.ts'
 import { appImageRef } from '../platform/names.ts'
 import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
 import { startAppContainer } from './app-container.ts'
@@ -191,6 +197,13 @@ async function build(
 
   const contextDir = await resolveContextDir(sourceDir, project.rootDir)
   const tag = deployment.imageTag!
+  // Env vars reach builds as secrets, which do not invalidate cached build steps. When they changed
+  // since the project's last build (or are new), build from scratch so no step uses stale values.
+  const hash = secretsHash(env)
+  const previousHash = await previousSecretsHash(ctx.db, project.id, deployment.number)
+  const noCache = Object.keys(env).length > 0 && hash !== previousHash
+  await updateDeployment(ctx.db, deployment.id, { secretsHash: hash })
+  if (noCache) log.system('Env vars changed since the last build; building without the cache')
   await step('build_failed', signal, () =>
     ctx.builder.build({
       contextDir,
@@ -198,6 +211,7 @@ async function build(
       workDir,
       tag,
       secrets: env,
+      noCache,
       cacheKey: project.id,
       signal,
       onLine: log.write,

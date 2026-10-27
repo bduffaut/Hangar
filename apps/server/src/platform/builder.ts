@@ -17,6 +17,11 @@ export interface BuildRequest {
   secrets: Record<string, string>
   /** Isolates Railpack's cache mounts per project. */
   cacheKey: string
+  /**
+   * Build without BuildKit's cache. Secret mounts do not invalidate cached steps, so a Dockerfile
+   * build must skip the cache when the secrets changed. (Railpack builds use `secrets-hash`.)
+   */
+  noCache?: boolean
   signal?: AbortSignal
   onLine: LineHandler
   /** Called once the build method is known, before any output. */
@@ -43,6 +48,18 @@ async function usesContainerdStore(): Promise<boolean> {
     captureStdout: true,
   })
   return stdout.includes('io.containerd.snapshotter')
+}
+
+/** A fingerprint of a build's env vars (names and values), never stored alongside them. */
+export function secretsHash(secrets: Record<string, string>): string {
+  return createHash('sha256')
+    .update(
+      Object.entries(secrets)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n'),
+    )
+    .digest('hex')
 }
 
 async function hasDockerfile(contextDir: string): Promise<boolean> {
@@ -102,6 +119,7 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
       request.onMethod?.(method)
       const args = ['buildx', 'build', '--load', '--progress', 'plain', '--tag', request.tag]
       args.push(...(await secretArgs(request)))
+      if (request.noCache && method === 'dockerfile') args.push('--no-cache')
 
       if (method === 'railpack') {
         if (!options.railpackFrontend) {
@@ -113,19 +131,11 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
         })
         if (!(await containerdStore)) throw new Error(CONTAINERD_STORE_REQUIRED)
         const planFile = await railpackPlan(request)
-        const secretsHash = createHash('sha256')
-          .update(
-            Object.entries(request.secrets)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([key, value]) => `${key}=${value}`)
-              .join('\n'),
-          )
-          .digest('hex')
         args.push(
           '--build-arg',
           `BUILDKIT_SYNTAX=${options.railpackFrontend}`,
           '--build-arg',
-          `secrets-hash=${secretsHash}`,
+          `secrets-hash=${secretsHash(request.secrets)}`,
           '--build-arg',
           `cache-key=${request.cacheKey}`,
           '--file',
