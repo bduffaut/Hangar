@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { confirmCopy, projectTabsCopy, toastCopy, triggerModeCopy } from '@hangar/shared'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import EmptyState from '../components/EmptyState.vue'
@@ -41,13 +41,21 @@ const now = useNow()
 
 const name = computed(() => String(route.params.name))
 const project = computed(() => projects.byName.get(name.value) ?? null)
-const loading = ref(!projects.loaded)
+const loading = ref(true)
 useDocumentTitle(name)
 
-onMounted(async () => {
-  if (!projects.loaded) await projects.load().catch(() => {})
-  loading.value = false
-})
+// A project created moments ago elsewhere (another tab, the CLI) may not be in the list yet, so a
+// missing name gets one fresh look before the page says it does not exist.
+watch(
+  name,
+  async () => {
+    loading.value = !project.value
+    await projects.ensureLoaded().catch(() => {})
+    if (!project.value) await projects.load().catch(() => {})
+    loading.value = false
+  },
+  { immediate: true },
+)
 
 // The tab lives in the address, so links and the back button work.
 const tab = computed<Tab>({
@@ -135,6 +143,7 @@ const running = computed(
           icon="rocket"
           label="Deploy"
           :loading="busy === 'deploy'"
+          :disabled="busy !== null"
           @click="deploy"
         />
         <BaseButton
@@ -142,6 +151,7 @@ const running = computed(
           icon="restart"
           label="Restart"
           :loading="busy === 'restart'"
+          :disabled="busy !== null"
           @click="restart"
         />
         <BaseButton
@@ -149,6 +159,7 @@ const running = computed(
           :icon="project.desiredState === 'running' ? 'stop' : 'play'"
           :label="project.desiredState === 'running' ? 'Stop' : 'Start'"
           :loading="busy === 'stop' || busy === 'start'"
+          :disabled="busy !== null"
           @click="toggleRunning"
         />
       </template>

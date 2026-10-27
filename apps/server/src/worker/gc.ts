@@ -12,6 +12,10 @@ import { deleteExpiredSessions } from '../modules/auth/repo.ts'
 import { listProjects } from '../modules/projects/repo.ts'
 import { appImageRepository } from '../platform/names.ts'
 
+/** BuildKit cache unused for a week goes; the rest is capped at 10 GiB. */
+const BUILD_CACHE_UNUSED_HOURS = 24 * 7
+const BUILD_CACHE_MAX_BYTES = 10 * 1024 ** 3
+
 /**
  * Keeps each project's newest rollback-able images plus any a current or in-flight deployment needs,
  * prunes old build logs, and removes build directories nothing is using.
@@ -22,12 +26,17 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
     const images = await listImages(ctx.db, project.id)
     // Keep the newest images a rollback could use (ready deployments), the live one, and any an
     // in-flight deployment is building or about to run. Failed builds do not take a slot.
+    // A rollback reuses its source's image, so slots count distinct images, not deployments.
     const keep = new Set<string>()
-    let rollbackable = 0
+    const rollbackable = new Set<string>()
     for (const image of images) {
-      const recent = image.status === 'ready' && rollbackable++ < IMAGES_KEPT_PER_PROJECT
+      const tag = image.imageTag!
+      const recent =
+        image.status === 'ready' &&
+        (rollbackable.has(tag) || rollbackable.size < IMAGES_KEPT_PER_PROJECT)
+      if (recent) rollbackable.add(tag)
       if (recent || image.id === project.currentDeploymentId || !isTerminal(image.status)) {
-        keep.add(image.imageTag!)
+        keep.add(tag)
       }
     }
     for (const tag of await ctx.docker.listTags(appImageRepository(project.name))) {
@@ -55,6 +64,9 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
   const prunedLogs = await pruneLogs(ctx.db, LOGS_KEPT_PER_PROJECT)
   const removedDirs = await sweepBuildDirs(ctx)
   const expiredSessions = await deleteExpiredSessions(ctx.db)
+  await ctx.builder
+    .pruneCache({ unusedForHours: BUILD_CACHE_UNUSED_HOURS, maxBytes: BUILD_CACHE_MAX_BYTES })
+    .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not trim the build cache'))
   ctx.log.info({ removedImages, prunedLogs, removedDirs, expiredSessions }, 'Cleanup finished')
 }
 

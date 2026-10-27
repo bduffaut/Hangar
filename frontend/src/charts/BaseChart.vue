@@ -1,11 +1,12 @@
 <script setup lang="ts" generic="T extends ChartType">
 import type { ChartData, ChartOptions } from 'chart.js'
-import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue'
 import { isDark } from '../theme/useTheme.ts'
 import { Chart, type ChartType } from './setup.ts'
 
-// The one place that creates Chart.js charts. `build` returns data and options from the current
-// theme, so a theme switch redraws the chart in the new colors.
+// The one place that creates Chart.js charts. `build` returns data and options; it runs inside a
+// reactive effect, so the chart redraws whenever anything `build` reads changes (new samples,
+// new deployments) and when the theme switches.
 const props = defineProps<{
   type: T
   build: () => { data: ChartData<T>; options: ChartOptions<T> }
@@ -15,32 +16,40 @@ const props = defineProps<{
 }>()
 
 const canvas = ref<HTMLCanvasElement | null>(null)
-const chart = shallowRef<Chart<T> | null>(null)
+// Bumped after a theme switch so the effect re-reads the new theme colors.
+const themeVersion = ref(0)
+// A plain variable, not a ref: the effect must not track the chart instance itself.
+let chart: Chart<T> | null = null
 
-function draw() {
-  if (!canvas.value) return
-  const { data, options } = props.build()
-  if (chart.value && (chart.value.config as { type?: string }).type === props.type) {
-    chart.value.data = data
-    chart.value.options = options
-    chart.value.update('none')
-    return
-  }
-  chart.value?.destroy()
-  chart.value = new Chart(canvas.value, { type: props.type, data, options })
-}
-
-onMounted(draw)
-watch(() => props.build, draw)
 watch(isDark, () => {
-  chart.value?.destroy()
-  chart.value = null
-  // Wait for the new theme variables to apply before reading them.
-  requestAnimationFrame(draw)
+  chart?.destroy()
+  chart = null
+  // Wait a frame for the new theme variables to apply before reading them.
+  requestAnimationFrame(() => themeVersion.value++)
 })
-onBeforeUnmount(() => chart.value?.destroy())
 
-defineExpose({ redraw: draw })
+let stop: (() => void) | null = null
+onMounted(() => {
+  stop = watchEffect(() => {
+    void themeVersion.value
+    if (!canvas.value) return
+    const { data, options } = props.build()
+    if (chart && (chart.config as { type?: string }).type === props.type) {
+      chart.data = data
+      chart.options = options
+      chart.update('none')
+      return
+    }
+    chart?.destroy()
+    chart = new Chart(canvas.value, { type: props.type, data, options })
+  })
+})
+
+onBeforeUnmount(() => {
+  stop?.()
+  chart?.destroy()
+  chart = null
+})
 </script>
 
 <template>
@@ -53,5 +62,9 @@ defineExpose({ redraw: draw })
 .hg-chart {
   position: relative;
   width: 100%;
+  /* Chart.js sizes the canvas from its container; without these a chart in a grid or flex cell
+     can push its cell wider on every resize and grow without end. */
+  min-width: 0;
+  overflow: hidden;
 }
 </style>

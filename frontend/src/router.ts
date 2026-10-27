@@ -87,6 +87,8 @@ router.onError((error, to) => {
 router.beforeEach(async (to) => {
   const session = useSessionStore()
   await session.load()
+  // App.vue shows a retry screen; let the navigation finish so the address bar is right.
+  if (session.unreachable) return true
   if (session.needsSetup && to.name !== 'setup') return { name: 'setup' }
   if (to.name === 'setup' && !session.needsSetup && !session.signedIn) return { name: 'login' }
   if (to.name === 'login' && session.signedIn) return { name: 'home' }

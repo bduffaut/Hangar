@@ -147,6 +147,16 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
       const result = await run('docker', args, { signal: request.signal, onLine: request.onLine })
       if (result.code !== 0) throw new CommandError('docker buildx build', result.code, result.tail)
     },
+
+    /**
+     * Trims BuildKit's cache: entries unused for `unusedFor`, then the oldest until the total fits
+     * in `maxBytes`. Without this, cache from every build (and deleted projects) grows forever.
+     */
+    async pruneCache(options: { unusedForHours: number; maxBytes: number }): Promise<void> {
+      const prune = ['buildx', 'prune', '--force']
+      await runChecked('docker', [...prune, '--filter', `until=${options.unusedForHours}h`])
+      await runChecked('docker', [...prune, '--max-used-space', String(options.maxBytes)])
+    },
   }
 }
 

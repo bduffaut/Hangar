@@ -13,10 +13,11 @@ const props = defineProps<{ project: ProjectView }>()
 const metrics = useMetricsStore()
 const now = useNow()
 
-const memory = computed(() =>
-  metrics.seriesFor(props.project.id).map((p) => p.value?.memoryUsedBytes ?? null),
-)
+const series = computed(() => metrics.seriesFor(props.project.id))
+const memory = computed(() => series.value.map((p) => p.value?.memoryUsedBytes ?? null))
+const cpu = computed(() => series.value.map((p) => p.value?.cpuPercent ?? null))
 const latestMemory = computed(() => memory.value.findLast((v) => v !== null) ?? null)
+const latestCpu = computed(() => cpu.value.findLast((v) => v !== null) ?? null)
 const memoryLimit = computed(() => props.project.memoryLimitMb * 1024 * 1024)
 const stopped = computed(() => props.project.desiredState === 'stopped')
 const latest = computed(() => props.project.latest)
@@ -57,16 +58,27 @@ const latest = computed(() => props.project.latest)
       </p>
       <div v-if="project.current && !stopped" class="hg-project-memory">
         <template v-if="latestMemory !== null">
-          <TrendLine
-            :values="memory"
-            :max="memoryLimit"
-            :label="`${project.name} memory use`"
-            color="--hg-series-1"
-            height="2rem"
-          />
-          <span class="hg-muted"
-            >Memory {{ formatBytes(latestMemory) }} of {{ project.memoryLimitMb }} MB</span
-          >
+          <div class="hg-project-gauge">
+            <TrendLine
+              :values="memory"
+              :max="memoryLimit"
+              :label="`${project.name} memory use`"
+              color="--hg-series-1"
+              height="2rem"
+            />
+            <span class="hg-muted"
+              >Memory {{ formatBytes(latestMemory) }} of {{ project.memoryLimitMb }} MB</span
+            >
+          </div>
+          <div class="hg-project-gauge">
+            <TrendLine
+              :values="cpu"
+              :label="`${project.name} CPU use`"
+              color="--hg-series-0"
+              height="2rem"
+            />
+            <span class="hg-muted">CPU {{ Math.round(latestCpu ?? 0) }}%</span>
+          </div>
         </template>
         <span v-else class="hg-muted">Reading memory use…</span>
       </div>
@@ -121,6 +133,7 @@ const latest = computed(() => props.project.latest)
 }
 .hg-project-footer {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--hg-space-3);
 }
 .hg-project-commit {
@@ -137,7 +150,16 @@ const latest = computed(() => props.project.latest)
 }
 .hg-project-memory {
   display: grid;
-  gap: var(--hg-space-1);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--hg-space-3);
   font-size: var(--hg-size-xs);
+}
+.hg-project-memory > .hg-muted {
+  grid-column: 1 / -1;
+}
+.hg-project-gauge {
+  display: grid;
+  gap: var(--hg-space-1);
+  min-width: 0;
 }
 </style>

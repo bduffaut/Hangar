@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { appHostname, navCopy, type TriggerMode, triggerModeCopy } from '@hangar/shared'
+import {
+  appHostname,
+  errorCopy,
+  MEMORY_LIMIT_MAX_MB,
+  MEMORY_LIMIT_MIN_MB,
+  navCopy,
+  parseWholeNumber,
+  type TriggerMode,
+  triggerModeCopy,
+} from '@hangar/shared'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
@@ -44,6 +53,16 @@ const branch = ref('')
 const rootDir = ref('')
 const port = ref('')
 const memory = ref('512')
+const portValue = computed(() =>
+  port.value.trim() ? parseWholeNumber(port.value, 1, 65535) : null,
+)
+const portError = computed(() =>
+  port.value.trim() && portValue.value === null ? errorCopy.port : null,
+)
+const memoryValue = computed(() =>
+  parseWholeNumber(memory.value, MEMORY_LIMIT_MIN_MB, MEMORY_LIMIT_MAX_MB),
+)
+const memoryError = computed(() => (memoryValue.value === null ? errorCopy.memory : null))
 const triggerMode = ref<TriggerMode>('poll')
 const advanced = ref(false)
 const busy = ref(false)
@@ -109,6 +128,7 @@ const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
 )
 
 async function create() {
+  if (portError.value || memoryError.value) return
   busy.value = true
   error.value = null
   try {
@@ -118,8 +138,8 @@ async function create() {
         repoUrl: repoUrl.value.trim(),
         branch: branch.value.trim() || undefined,
         rootDir: rootDir.value.trim() || undefined,
-        port: port.value.trim() ? Number(port.value) : null,
-        memoryLimitMb: Number(memory.value) || 512,
+        port: portValue.value,
+        memoryLimitMb: memoryValue.value!,
         triggerMode: triggerMode.value,
       },
     })
@@ -223,12 +243,26 @@ async function create() {
         <BaseField
           label="Port"
           for="new-port"
+          :error="portError"
           help="Leave empty to detect it, falling back to 3000."
         >
-          <BaseInput id="new-port" v-model="port" inputmode="numeric" placeholder="auto" mono />
+          <BaseInput
+            id="new-port"
+            v-model="port"
+            :invalid="!!portError"
+            inputmode="numeric"
+            placeholder="auto"
+            mono
+          />
         </BaseField>
-        <BaseField label="Memory limit (MB)" for="new-memory">
-          <BaseInput id="new-memory" v-model="memory" inputmode="numeric" mono />
+        <BaseField label="Memory limit (MB)" for="new-memory" :error="memoryError">
+          <BaseInput
+            id="new-memory"
+            v-model="memory"
+            :invalid="!!memoryError"
+            inputmode="numeric"
+            mono
+          />
         </BaseField>
         <BaseField
           label="New commits"
@@ -252,7 +286,7 @@ async function create() {
         icon="rocket"
         label="Create and deploy"
         :loading="busy"
-        :disabled="!repoUrl.trim() || !name"
+        :disabled="!repoUrl.trim() || !name || !!portError || !!memoryError"
       />
       <RouterLink v-slot="{ navigate }" :to="{ name: 'home' }" custom>
         <BaseButton variant="ghost" label="Cancel" @click="navigate" />

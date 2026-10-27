@@ -1,4 +1,6 @@
 export const DEFAULT_APP_PORT = 3000
+/** Where a Cloudflare Tunnel sends public traffic: Traefik's public entrypoint (installer/traefik.yml). */
+export const TUNNEL_SERVICE_URL = 'http://hangar-proxy:8081'
 export const DEFAULT_MEMORY_LIMIT_MB = 512
 
 export const BUILD_TIMEOUT_MS = 15 * 60_000

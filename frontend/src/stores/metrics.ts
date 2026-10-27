@@ -1,7 +1,7 @@
 import type { MetricsSample } from '@hangar/shared'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { openStream, type Stream } from '../api/streams.ts'
+import { openStream, type Stream, streamUrl } from '../api/streams.ts'
 
 /**
  * Host and container metrics. The server samples only while someone listens, so components
@@ -29,7 +29,7 @@ export const useMetricsStore = defineStore('metrics', () => {
     acquire() {
       users++
       if (stream) return
-      stream = openStream('/api/metrics/stream', {
+      stream = openStream(streamUrl('metrics'), {
         history: (data: { samples: MetricsSample[] }) => (samples.value = data.samples),
         sample: (sample: MetricsSample) => {
           samples.value = [...samples.value.slice(-179), sample]

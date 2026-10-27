@@ -1,8 +1,8 @@
 import { readFile, statfs } from 'node:fs/promises'
 import path from 'node:path'
 
-// Host CPU, memory, and disk, read from the host's /proc and root filesystem, which the production
-// compose file mounts into hangar-core at /host/proc and /host/root.
+// Host CPU, memory, and disk. Inside a container /proc already reports the host's CPU and memory,
+// and / sits on the host's disk, so no host directories are mounted (see HANGAR_HOST_PROC).
 
 export interface HostMetrics {
   cpuPercent: number

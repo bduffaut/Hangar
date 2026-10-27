@@ -1,6 +1,7 @@
 import type { Ctx } from '../context.ts'
 import { queueDeployment } from '../modules/deployments/service.ts'
 import { listProjects, updateProject } from '../modules/projects/repo.ts'
+import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/secrets.ts'
 
 const MAX_BACKOFF_MS = 30 * 60_000
@@ -16,7 +17,14 @@ const backoff = new Map<string, { failures: number; until: number }>()
  */
 export async function pollProjects(ctx: Ctx): Promise<void> {
   const token = await getGithubToken(ctx)
-  const projects = (await listProjects(ctx.db)).filter((p) => p.triggerMode === 'poll')
+  const { publicDomain } = await getSettings(ctx.db)
+  // A stopped app stays stopped: new commits wait until it is started or deployed by hand.
+  // Webhook projects are polled too while there is no public domain for GitHub to reach.
+  const projects = (await listProjects(ctx.db)).filter(
+    (p) =>
+      p.desiredState === 'running' &&
+      (p.triggerMode === 'poll' || (p.triggerMode === 'webhook' && !publicDomain)),
+  )
   for (const project of projects) {
     const state = backoff.get(project.id)
     if (state && Date.now() < state.until) continue

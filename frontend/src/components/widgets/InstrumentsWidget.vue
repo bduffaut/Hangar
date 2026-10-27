@@ -1,23 +1,20 @@
 <script setup lang="ts">
 import { instrumentsCopy } from '@hangar/shared'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { api } from '../../api/client.ts'
-import { useDashboardData } from '../../dashboard/index.ts'
+import type { DashboardWidgetProps } from '../../dashboard/index.ts'
 import { formatBytes } from '../../lib/format.ts'
-import { useMetricsStore } from '../../stores/metrics.ts'
 import GaugeDial from '../GaugeDial.vue'
 import HgPanel from '../HgPanel.vue'
 import TrendLine from '../TrendLine.vue'
 
-const metrics = useMetricsStore()
-const { metrics: samples } = useDashboardData()
+const props = defineProps<DashboardWidgetProps>()
+const samples = computed(() => props.data.metrics.value)
 const info = ref<{ version: string; imageDiskBytes: number } | null>(null)
 
 onMounted(async () => {
-  metrics.acquire()
   info.value = await api('systemInfo').catch(() => null)
 })
-onBeforeUnmount(() => metrics.release())
 
 const host = computed(() => samples.value.at(-1)?.host ?? null)
 const percent = (used: number, total: number) => (total > 0 ? (used / total) * 100 : 0)
@@ -96,6 +93,8 @@ const memorySeries = computed(() =>
 @media (max-width: 52rem) {
   .hg-instruments {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* Captions wrap to different heights on narrow screens; keep the dials in one line. */
+    align-items: start;
   }
   .hg-trends {
     grid-column: 1 / -1;

@@ -34,7 +34,11 @@ const summary = computed(() => {
     <span
       v-for="(light, i) in lights"
       :key="light?.id ?? `empty-${i}`"
-      v-hint.top="light ? `#${light.number}: ${statusCopy[light.status].label}` : undefined"
+      v-hint.top="
+        light
+          ? `#${light.number}: ${statusCopy[light.status].label}, ${statusCopy[light.status].meaning.toLowerCase()}`
+          : undefined
+      "
       class="hg-light"
       :class="
         light

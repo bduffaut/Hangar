@@ -56,6 +56,9 @@ export function webhookRoutes({ app, ctx }: Http) {
         if (project.triggerMode !== 'webhook') {
           return reply.code(202).send({ ignored: 'this project does not deploy on webhooks' })
         }
+        if (project.desiredState === 'stopped') {
+          return reply.code(202).send({ ignored: 'the app is stopped' })
+        }
 
         let json: unknown = null
         try {

@@ -103,6 +103,7 @@ export const triggerModeCopy = {
 
 export const navCopy = {
   projects: 'Projects',
+  projectCount: (n: number) => `${n} ${n === 1 ? 'app' : 'apps'} in the hangar`,
   settings: 'Settings',
   guide: 'Guide',
   signOut: 'Sign out',
@@ -153,6 +154,9 @@ export const emptyCopy = {
   radio: {
     notRunning: 'The app is not running, so there is no live output.',
     quiet: 'Connected. The app has not printed anything yet.',
+    connecting: 'Tuning in…',
+    reconnecting: 'Connection lost. Reconnecting…',
+    ended: 'The app stopped. Reconnect after it starts again.',
   },
 } as const
 
@@ -203,6 +207,7 @@ export const authCopy = {
   password: 'Password',
   signIn: 'Sign in',
   sessionExpired: 'Your session ended. Sign in again.',
+  unreachableTitle: 'Hangar is not responding',
 } as const
 
 /** The Preflight Checklist: first-run setup. Plain words only in instructions. */
@@ -225,12 +230,16 @@ export const setupCopy = {
       ipLabel: 'Server address',
       ipHelp: 'The address other devices use to reach this server.',
       preview: 'Your apps will be at',
+      exampleApp: 'An app called blog',
+      publicNote:
+        'This address works on your network only. To reach apps from anywhere on your own domain, set up public access later in Settings.',
       action: 'Continue',
     },
     github: {
       title: 'Connect GitHub (optional)',
       body: 'Public repositories work without this. For private ones, create a fine-grained token with read access to Contents and Metadata.',
       tokenLabel: 'GitHub token',
+      connectedAs: (login: string) => `Connected to GitHub as ${login}.`,
       createLink: 'Create a token on GitHub',
       action: 'Connect',
       skip: 'Skip for now',
@@ -239,6 +248,8 @@ export const setupCopy = {
       title: 'Take a test flight',
       body: 'Deploy a small sample site to see the whole process: build, health check, and going live.',
       action: 'Deploy the sample',
+      watchLog: 'Watch the build log',
+      openIt: 'Open it:',
       skip: 'Skip',
       done: 'Go to the Control Tower',
     },
@@ -310,6 +321,8 @@ export const notFoundCopy = {
 } as const
 
 export const errorCopy = {
+  port: 'Enter a port from 1 to 65535, or leave it empty.',
+  memory: 'Enter a whole number of megabytes from 64 to 65536.',
   network: 'Hangar did not respond. Check that the server is running and reachable.',
   unexpected: 'Something went wrong. Try again.',
 } as const

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { emptyCopy, type ProjectView, toastCopy } from '@hangar/shared'
+import { emptyCopy, ENV_KEY_PATTERN, type ProjectView, toastCopy } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { api, messageOf } from '../../api/client.ts'
-import { BaseButton, BaseInput, BaseMessage, useNotify } from '../../ui/index.ts'
+import { BaseButton, BaseInput, BaseMessage, BaseSkeleton, useNotify } from '../../ui/index.ts'
 import EmptyState from '../EmptyState.vue'
 import HgPanel from '../HgPanel.vue'
 
@@ -12,7 +12,6 @@ const props = defineProps<{ project: ProjectView }>()
 const emit = defineEmits<{ deploy: [] }>()
 const notify = useNotify()
 
-const KEY = /^[A-Za-z_][A-Za-z0-9_]*$/
 const keys = ref<string[]>([])
 const revealed = ref<Record<string, string>>({})
 const editing = ref(false)
@@ -20,9 +19,17 @@ const rows = ref<{ key: string; value: string }[]>([])
 const busy = ref(false)
 const error = ref<string | null>(null)
 const savedSinceDeploy = ref(false)
+const loaded = ref(false)
+const loadError = ref('')
 
 async function load() {
-  keys.value = (await api('listEnv', { params: { id: props.project.id } })).keys
+  loadError.value = ''
+  try {
+    keys.value = (await api('listEnv', { params: { id: props.project.id } })).keys
+    loaded.value = true
+  } catch (e) {
+    loadError.value = messageOf(e)
+  }
 }
 onMounted(load)
 
@@ -62,7 +69,7 @@ const problems = computed(() => {
   const seen = new Set<string>()
   return rows.value.map((row) => {
     if (!row.key && !row.value) return null
-    if (!KEY.test(row.key))
+    if (!ENV_KEY_PATTERN.test(row.key))
       return 'Use letters, digits, and underscores, not starting with a digit.'
     if (seen.has(row.key)) return 'This name is used twice.'
     seen.add(row.key)
@@ -106,7 +113,7 @@ function deployNow() {
   >
     <template #actions>
       <BaseButton
-        v-if="!editing"
+        v-if="!editing && loaded"
         size="sm"
         icon="settings"
         :label="keys.length ? 'Edit' : 'Add variables'"
@@ -128,7 +135,12 @@ function deployNow() {
       </span>
     </BaseMessage>
 
-    <template v-if="!editing">
+    <div v-if="loadError" class="hg-env-error">
+      <BaseMessage tone="error">{{ loadError }}</BaseMessage>
+      <BaseButton size="sm" icon="restart" label="Try again" @click="load" />
+    </div>
+    <BaseSkeleton v-else-if="!loaded" height="4rem" />
+    <template v-else-if="!editing">
       <EmptyState
         v-if="keys.length === 0"
         :title="emptyCopy.env.title"
@@ -164,7 +176,9 @@ function deployNow() {
             mono
             :invalid="!!problems[i]"
           />
-          <p v-if="problems[i]" class="hg-env-problem">{{ problems[i] }}</p>
+          <p v-if="problems[i]" :id="`env-key-${i}-error`" class="hg-env-problem">
+            {{ problems[i] }}
+          </p>
         </div>
         <div>
           <label class="hg-visually-hidden" :for="`env-value-${i}`">Value</label>
@@ -195,6 +209,11 @@ function deployNow() {
 </template>
 
 <style scoped>
+.hg-env-error {
+  display: grid;
+  gap: var(--hg-space-3);
+  justify-items: start;
+}
 .hg-env-list {
   margin: 0;
   display: grid;

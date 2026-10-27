@@ -68,6 +68,8 @@ COPY --from=build /out/node_modules ./node_modules
 COPY --from=build /src/apps/server/dist ./dist
 COPY --from=build /src/apps/server/drizzle ./drizzle
 COPY --from=build /src/frontend/dist ./web
+# The stack files travel with each release so hangar-update can refresh them.
+COPY installer ./installer
 RUN printf '#!/bin/sh\nexec node /app/dist/cli.js "$@"\n' > /usr/local/bin/hangar-admin \
  && chmod 755 /usr/local/bin/hangar-admin
 ARG HANGAR_VERSION=dev

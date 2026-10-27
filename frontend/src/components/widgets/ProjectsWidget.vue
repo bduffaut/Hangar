@@ -1,18 +1,24 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { emptyCopy, navCopy } from '@hangar/shared'
-import { useDashboardData } from '../../dashboard/index.ts'
-import { BaseButton } from '../../ui/index.ts'
+import type { DashboardWidgetProps } from '../../dashboard/index.ts'
+import { BaseButton, BaseSkeleton } from '../../ui/index.ts'
 import EmptyState from '../EmptyState.vue'
 import ProjectCard from '../ProjectCard.vue'
 
-const { projects } = useDashboardData()
+const props = defineProps<DashboardWidgetProps>()
+const projects = computed(() => props.data.projects.value)
+const loaded = computed(() => props.data.projectsLoaded.value)
 </script>
 
 <template>
   <section class="hg-projects" data-tour="projects" aria-labelledby="projects-heading">
     <h2 id="projects-heading" class="hg-visually-hidden">{{ navCopy.projects }}</h2>
+    <div v-if="!loaded" class="hg-project-grid" aria-busy="true">
+      <BaseSkeleton v-for="i in 3" :key="i" height="11rem" />
+    </div>
     <EmptyState
-      v-if="projects.length === 0"
+      v-else-if="projects.length === 0"
       :title="emptyCopy.projects.title"
       :body="emptyCopy.projects.body"
     >

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChartData, ChartOptions } from 'chart.js'
+import type { ChartData, ChartOptions } from '../charts/index.ts'
 import { computed } from 'vue'
 import { BaseChart, baseOptions, chartColors, fade } from '../charts/index.ts'
 

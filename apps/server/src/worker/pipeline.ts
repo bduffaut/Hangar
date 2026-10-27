@@ -200,8 +200,14 @@ async function build(
   // Env vars reach builds as secrets, which do not invalidate cached build steps. When they changed
   // since the project's last build (or are new), build from scratch so no step uses stale values.
   const hash = secretsHash(env)
-  const previousHash = await previousSecretsHash(ctx.db, project.id, deployment.number)
-  const noCache = Object.keys(env).length > 0 && hash !== previousHash
+  // The build cache does not know secret values, so layers from a build with other values could be
+  // reused. Compare with the last attempt (which filled the cache, even if it failed) and the last
+  // success (what is live); a first build has nothing to compare with.
+  const previousHashes = await Promise.all([
+    previousSecretsHash(ctx.db, project.id, deployment.number),
+    previousSecretsHash(ctx.db, project.id, deployment.number, { readyOnly: true }),
+  ])
+  const noCache = previousHashes.some((previous) => previous !== null && previous !== hash)
   await updateDeployment(ctx.db, deployment.id, { secretsHash: hash })
   if (noCache) log.system('Env vars changed since the last build; building without the cache')
   await step('build_failed', signal, () =>

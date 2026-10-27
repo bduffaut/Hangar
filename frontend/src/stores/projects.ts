@@ -9,21 +9,37 @@ const RUNWAY_LIGHTS = 12
 export const useProjectsStore = defineStore('projects', () => {
   const projects = ref<ProjectView[]>([])
   const loaded = ref(false)
+  let inFlight: Promise<void> | null = null
 
   const byId = computed(() => new Map(projects.value.map((p) => [p.id, p])))
   const byName = computed(() => new Map(projects.value.map((p) => [p.name, p])))
 
   function upsert(project: ProjectView) {
     const index = projects.value.findIndex((p) => p.id === project.id)
-    if (index === -1)
+    if (index === -1) {
       projects.value = [...projects.value, project].sort((a, b) => a.name.localeCompare(b.name))
-    else projects.value.splice(index, 1, project)
+    } else projects.value.splice(index, 1, project)
+  }
+
+  /** Loads the list; callers at the same moment share one request. */
+  function load(): Promise<void> {
+    inFlight ??= api('listProjects')
+      .then((list) => {
+        projects.value = list
+        loaded.value = true
+      })
+      .finally(() => (inFlight = null))
+    return inFlight
   }
 
   /** Applies a status change without refetching: updates latest, current, and the runway. */
   function applyDeployment(deployment: DeploymentView) {
     const project = byId.value.get(deployment.projectId)
-    if (!project) return
+    if (!project) {
+      // A project created elsewhere (another tab, the CLI): fetch the list again.
+      if (loaded.value) void load().catch(() => {})
+      return
+    }
     const next: ProjectView = { ...project }
     if (!next.latest || deployment.number >= next.latest.number) next.latest = deployment
     if (deployment.isCurrent) next.current = deployment
@@ -41,15 +57,18 @@ export const useProjectsStore = defineStore('projects', () => {
     byName,
     upsert,
     applyDeployment,
-    async load() {
-      projects.value = await api('listProjects')
-      loaded.value = true
-    },
+    load,
+    /** Loads once; later calls reuse the list the live stream keeps current. */
+    ensureLoaded: () => (loaded.value ? Promise.resolve() : load()),
     async refresh(id: string) {
       upsert(await api('getProject', { params: { id } }))
     },
     remove(id: string) {
       projects.value = projects.value.filter((p) => p.id !== id)
+    },
+    reset() {
+      projects.value = []
+      loaded.value = false
     },
   }
 })

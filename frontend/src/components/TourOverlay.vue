@@ -8,23 +8,39 @@ const tour = useTour()
 const box = ref<{ top: number; left: number; width: number; height: number } | null>(null)
 const card = ref<HTMLElement | null>(null)
 
-function measure() {
-  const target = tour.current.value
-    ? document.querySelector<HTMLElement>(`[data-tour="${tour.current.value.target}"]`)
-    : null
-  if (!target) {
+function target() {
+  const step = tour.current.value
+  return step ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`) : null
+}
+
+function place(element: HTMLElement | null) {
+  if (!element) {
     box.value = null
     return
   }
-  target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  const rect = target.getBoundingClientRect()
+  const rect = element.getBoundingClientRect()
   box.value = { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
 }
 
+function measure() {
+  const element = target()
+  element?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  place(element)
+}
+
+// Focus returns to where it was when the tour ends.
+let returnFocus: HTMLElement | null = null
+
 watch(
   () => tour.step.value,
-  async (step) => {
-    if (step === null) return
+  async (step, previous) => {
+    if (step === null) {
+      returnFocus?.focus()
+      returnFocus = null
+      return
+    }
+    if (previous === null || previous === undefined)
+      returnFocus = document.activeElement as HTMLElement | null
     await nextTick()
     measure()
     // Measure again once the smooth scroll settles.
@@ -34,14 +50,44 @@ watch(
   { immediate: true },
 )
 
+// Escape ends the tour; Tab stays inside the card while it is open.
 const onKey = (event: KeyboardEvent) => {
-  if (tour.step.value !== null && event.key === 'Escape') tour.finish()
+  if (tour.step.value === null || !card.value) return
+  if (event.key === 'Escape') {
+    tour.finish()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const focusable = [...card.value.querySelectorAll<HTMLElement>('button:not([disabled])')]
+  if (focusable.length === 0) return
+  const first = focusable[0]!
+  const last = focusable.at(-1)!
+  const inside = card.value.contains(document.activeElement)
+  if (event.shiftKey && (document.activeElement === first || !inside)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && (document.activeElement === last || !inside)) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+// The highlight follows its target when the page scrolls or resizes.
+let frame = 0
+const remeasure = () => {
+  if (tour.step.value === null || frame) return
+  frame = requestAnimationFrame(() => {
+    frame = 0
+    place(target())
+  })
 }
 window.addEventListener('keydown', onKey)
-window.addEventListener('resize', measure)
+window.addEventListener('resize', remeasure)
+window.addEventListener('scroll', remeasure, { passive: true, capture: true })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
-  window.removeEventListener('resize', measure)
+  window.removeEventListener('resize', remeasure)
+  window.removeEventListener('scroll', remeasure, { capture: true })
+  if (frame) cancelAnimationFrame(frame)
 })
 
 const cardStyle = () => {
@@ -103,7 +149,7 @@ const cardStyle = () => {
 .hg-tour-spotlight {
   position: fixed;
   border-radius: var(--hg-radius-lg);
-  box-shadow: 0 0 0 9999px rgba(5, 10, 20, 0.62);
+  box-shadow: 0 0 0 9999px var(--hg-scrim);
   outline: 2px solid var(--hg-accent);
   transition: all var(--hg-motion-base) var(--hg-motion-easing);
   pointer-events: none;

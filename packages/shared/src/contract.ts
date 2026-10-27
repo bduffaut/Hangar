@@ -240,5 +240,7 @@ export const streams = {
   metrics: '/api/metrics/stream',
 } as const
 
+export type StreamName = keyof typeof streams
+
 /** Unauthenticated, HMAC-verified. Reachable from the public entrypoint. */
 export const GITHUB_WEBHOOK_PATH = '/api/webhooks/github/:id'

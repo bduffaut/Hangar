@@ -49,6 +49,9 @@ if ! docker ps --filter name='^hangar-proxy$' -q 2>/dev/null | grep -q .; then
   fi
 fi
 ok "Port 80 is free on ${HANGAR_BIND_IP}"
+if ss -ltnH "( sport = :443 )" | grep -q .; then
+  warn "Port 443 is in use. Hangar does not need it today, but HTTPS on this server would later."
+fi
 
 step "Fueling up Docker..." "Making sure Docker Engine and the Compose plugin are installed."
 if ! command -v docker >/dev/null 2>&1; then
@@ -139,6 +142,14 @@ exec docker exec -i hangar-core hangar-admin "$@"
 ADMIN
 chmod 0755 /usr/local/bin/hangar-admin
 ok "Installed hangar-update, hangar-uninstall, and hangar-admin"
+
+# A re-run with an explicit address updates the running Hangar too (the database owns the address
+# after the first start, so a changed .env alone would not reach it).
+if [ -n "$GIVEN_LAN_IP" ]; then
+  docker exec hangar-core hangar-admin set-lan-ip "$GIVEN_LAN_IP" >/dev/null 2>&1 \
+    && ok "Server address set to $GIVEN_LAN_IP" \
+    || warn "Could not apply the address $GIVEN_LAN_IP. Run: sudo hangar-admin set-lan-ip $GIVEN_LAN_IP"
+fi
 
 domain="$(echo "$lan_ip" | tr . -).sslip.io"
 code=$(docker exec hangar-core hangar-admin issue-setup-code)

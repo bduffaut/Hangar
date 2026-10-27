@@ -1,6 +1,5 @@
 import { contract, isTerminal, type LogLineView, schemas, streams } from '@hangar/shared'
 import { z } from 'zod'
-import { UserError } from '../../errors.ts'
 import { eventStream, type Http, OK, route } from '../../http/server.ts'
 import { getProjectOrThrow } from '../projects/service.ts'
 import {
@@ -45,14 +44,6 @@ export function deploymentRoutes(http: Http) {
 
   route(http, contract.rollbackDeployment, async ({ params }) => {
     const source = await getDeploymentOrThrow(ctx, params.id)
-    if (source.imageTag && !(await ctx.docker.imageExists(source.imageTag))) {
-      throw new UserError(
-        409,
-        'image_missing',
-        'The image for this deployment has been cleaned up, so it cannot be rolled back to.',
-        'Hangar keeps the five most recent successful images per project.',
-      )
-    }
     return viewOf(ctx, await queueRollback(ctx, source))
   })
 

@@ -6,7 +6,13 @@ import { DEPLOYMENT_TRIGGERS, DESIRED_STATES, LOG_STREAMS, TRIGGER_MODES } from 
 import { FAILURE_CODES } from './failures.ts'
 import { DEPLOYMENT_STATUSES } from './statuses.ts'
 import { ENV_KEY_PATTERN } from './constants.ts'
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, USERNAME_PATTERN } from './validation.ts'
+import {
+  MEMORY_LIMIT_MAX_MB,
+  MEMORY_LIMIT_MIN_MB,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  USERNAME_PATTERN,
+} from './validation.ts'
 
 const id = z.uuid()
 const timestamp = z.iso.datetime({ offset: true })
@@ -89,7 +95,7 @@ export const projectInput = z.object({
   rootDir: z.string().max(500).optional(),
   /** Omit or null to detect it from the image, falling back to 3000. */
   port: port.nullable().optional(),
-  memoryLimitMb: z.number().int().min(64).max(65536).optional(),
+  memoryLimitMb: z.number().int().min(MEMORY_LIMIT_MIN_MB).max(MEMORY_LIMIT_MAX_MB).optional(),
   triggerMode: z.enum(TRIGGER_MODES).optional(),
   /** Deploy the branch head right away (default true). */
   deploy: z.boolean().optional(),

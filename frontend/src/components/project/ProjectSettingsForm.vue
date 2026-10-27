@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import {
   confirmCopy,
+  errorCopy,
+  MEMORY_LIMIT_MAX_MB,
+  MEMORY_LIMIT_MIN_MB,
+  parseWholeNumber,
   type ProjectView,
   toastCopy,
   type TriggerMode,
@@ -33,6 +37,16 @@ const rootDir = ref(props.project.rootDir)
 const port = ref(props.project.port === null ? '' : String(props.project.port))
 const memory = ref(String(props.project.memoryLimitMb))
 const triggerMode = ref<TriggerMode>(props.project.triggerMode)
+const portValue = computed(() =>
+  port.value.trim() ? parseWholeNumber(port.value, 1, 65535) : null,
+)
+const portError = computed(() =>
+  port.value.trim() && portValue.value === null ? errorCopy.port : null,
+)
+const memoryValue = computed(() =>
+  parseWholeNumber(memory.value, MEMORY_LIMIT_MIN_MB, MEMORY_LIMIT_MAX_MB),
+)
+const memoryError = computed(() => (memoryValue.value === null ? errorCopy.memory : null))
 const busy = ref(false)
 const error = ref<string | null>(null)
 
@@ -45,6 +59,7 @@ const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
 )
 
 async function save() {
+  if (portError.value || memoryError.value) return
   busy.value = true
   error.value = null
   try {
@@ -53,8 +68,8 @@ async function save() {
       body: {
         branch: branch.value.trim(),
         rootDir: rootDir.value.trim(),
-        port: port.value.trim() ? Number(port.value) : null,
-        memoryLimitMb: Number(memory.value),
+        port: portValue.value,
+        memoryLimitMb: memoryValue.value!,
         triggerMode: triggerMode.value,
       },
     })
@@ -104,11 +119,29 @@ async function remove() {
         <BaseField label="Root directory" for="ps-root" help="Empty for the repository root.">
           <BaseInput id="ps-root" v-model="rootDir" mono placeholder="(repository root)" />
         </BaseField>
-        <BaseField label="Port" for="ps-port" help="Empty to detect it, falling back to 3000.">
-          <BaseInput id="ps-port" v-model="port" mono inputmode="numeric" placeholder="auto" />
+        <BaseField
+          label="Port"
+          for="ps-port"
+          :error="portError"
+          help="Empty to detect it, falling back to 3000."
+        >
+          <BaseInput
+            id="ps-port"
+            v-model="port"
+            :invalid="!!portError"
+            mono
+            inputmode="numeric"
+            placeholder="auto"
+          />
         </BaseField>
-        <BaseField label="Memory limit (MB)" for="ps-memory">
-          <BaseInput id="ps-memory" v-model="memory" mono inputmode="numeric" />
+        <BaseField label="Memory limit (MB)" for="ps-memory" :error="memoryError">
+          <BaseInput
+            id="ps-memory"
+            v-model="memory"
+            :invalid="!!memoryError"
+            mono
+            inputmode="numeric"
+          />
         </BaseField>
         <div class="hg-settings-wide">
           <BaseField
@@ -123,7 +156,13 @@ async function remove() {
           <BaseMessage tone="error">{{ error }}</BaseMessage>
         </div>
         <div class="hg-settings-wide">
-          <BaseButton type="submit" variant="primary" label="Save changes" :loading="busy" />
+          <BaseButton
+            type="submit"
+            variant="primary"
+            label="Save changes"
+            :loading="busy"
+            :disabled="!!portError || !!memoryError"
+          />
         </div>
       </form>
     </HgPanel>

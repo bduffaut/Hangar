@@ -22,6 +22,7 @@ ls -1t "$backups"/pre-update-*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f
 ok "Backup saved to $backups/pre-update-$stamp.sql.gz"
 
 step "Refueling..." "Downloading the newest images and restarting Hangar."
+previous_image=$(awk -F= '/^HANGAR_IMAGE=/ {print $2}' "$HANGAR_DIR/.env")
 if [ -n "${HANGAR_VERSION:-}" ]; then
   sed -i "s|^HANGAR_VERSION=.*|HANGAR_VERSION=$HANGAR_VERSION|; s|^HANGAR_IMAGE=.*|HANGAR_IMAGE=ghcr.io/bduffaut/hangar-core:$HANGAR_VERSION|" "$HANGAR_DIR/.env"
 fi
@@ -33,7 +34,34 @@ if [ "${HANGAR_SKIP_PULL:-0}" = 1 ]; then
 else
   compose pull --quiet
 fi
+# Each release carries its own stack files (compose, proxy config, scripts); use the new ones.
+staging=$(mktemp -d)
+container=$(docker create "$image")
+if docker cp "$container:/app/installer/." "$staging" >/dev/null 2>&1; then
+  install -m 0644 "$staging/docker-compose.yml" "$HANGAR_DIR/docker-compose.yml"
+  install -m 0644 "$staging/traefik.yml" "$HANGAR_DIR/traefik.yml"
+  install -m 0644 "$staging/lib.sh" "$HANGAR_DIR/lib.sh"
+  install -m 0755 "$staging/update.sh" /usr/local/bin/hangar-update
+  install -m 0755 "$staging/uninstall.sh" /usr/local/bin/hangar-uninstall
+  ok "Refreshed the stack files from the new release"
+else
+  warn "This release does not include stack files; keeping the current ones."
+fi
+docker rm "$container" >/dev/null
+rm -rf "$staging"
+for network in hangar hangar-apps; do
+  docker network inspect "$network" >/dev/null 2>&1 || docker network create "$network" >/dev/null
+done
+
 compose up -d --remove-orphans
-wait_for_core || fail "Hangar did not become healthy after the update." "See what went wrong: docker logs hangar-core. Your backup is in $backups."
+if ! wait_for_core; then
+  db="docker exec hangar-db"
+  printf '\n  To go back to the version you had before:\n' >&2
+  printf '    1. In %s/.env, set HANGAR_IMAGE=%s\n' "$HANGAR_DIR" "$previous_image" >&2
+  printf '    2. %s dropdb -U hangar --force hangar && %s createdb -U hangar hangar\n' "$db" "$db" >&2
+  printf '    3. gunzip -c %s/pre-update-%s.sql.gz | docker exec -i hangar-db psql -q -U hangar hangar\n' "$backups" "$stamp" >&2
+  printf '    4. docker compose --project-directory %s up -d\n' "$HANGAR_DIR" >&2
+  fail "Hangar did not become healthy after the update." "See what went wrong: docker logs hangar-core"
+fi
 ok "Hangar is back up"
 printf '\n%sMaintenance complete.%s\n' "$GREEN$BOLD" "$RESET"

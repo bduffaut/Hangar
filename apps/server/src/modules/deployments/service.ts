@@ -116,6 +116,14 @@ export async function queueRollback(ctx: Ctx, source: Deployment): Promise<Deplo
   if (source.status !== 'ready' || !source.imageTag) {
     throw new DeploymentError('Only a deployment that went live can be rolled back to')
   }
+  if (!(await ctx.docker.imageExists(source.imageTag))) {
+    throw new UserError(
+      409,
+      'image_missing',
+      'The image for this deployment has been cleaned up, so it cannot be rolled back to.',
+      'Hangar keeps the five most recent successful images per project.',
+    )
+  }
   return enqueue(ctx, {
     projectId: source.projectId,
     commitSha: source.commitSha,
@@ -156,6 +164,16 @@ export async function cancelActive(ctx: Ctx, project: Project): Promise<Deployme
   if (!active) throw new DeploymentError(`${project.name} has nothing to cancel`)
   await requestCancel(ctx, active.id)
   return active
+}
+
+/** Cancels every deployment of the project still waiting or building (before deleting it). */
+export async function cancelAllActive(ctx: Ctx, project: Project): Promise<void> {
+  for (const deployment of await listDeployments(ctx.db, project.id, 5)) {
+    if (isTerminal(deployment.status) || deployment.status === 'deploying') continue
+    await requestCancel(ctx, deployment.id).catch((error: unknown) => {
+      ctx.log.warn({ err: error, deployment: deployment.id }, 'Could not cancel a deployment')
+    })
+  }
 }
 
 // Reads for the API.

@@ -26,6 +26,8 @@ export interface Palette {
   consoleInk: string
   /** Destructive actions. */
   danger: string
+  /** Dims the page behind the guided tour. */
+  scrim: string
 }
 
 /**
@@ -45,6 +47,7 @@ export const palettes: Record<ColorScheme, Palette> = {
     console: '#0A1322',
     consoleInk: '#D4DEEC',
     danger: '#F2555A',
+    scrim: 'rgba(5, 10, 20, 0.62)',
   },
   light: {
     canvas: '#EDF1F7',
@@ -58,6 +61,7 @@ export const palettes: Record<ColorScheme, Palette> = {
     console: '#0F1A2B',
     consoleInk: '#D4DEEC',
     danger: '#C9302C',
+    scrim: 'rgba(19, 33, 58, 0.45)',
   },
 }
 
@@ -142,6 +146,8 @@ export const layout = {
   narrow: '40rem',
   /** Main content width. */
   wide: '76rem',
+  /** Height of the log viewers. */
+  console: 'min(65vh, 40rem)',
 } as const
 
 export const motion = {

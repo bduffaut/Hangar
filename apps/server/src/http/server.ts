@@ -52,17 +52,31 @@ Open the Control Tower to check its status.</p></body></html>`
  */
 function trackProxyAddresses(host: string) {
   const addresses = new Set<string>()
-  const refresh = () =>
-    lookup(host, { all: true })
+  let lastRefresh = 0
+  const refresh = () => {
+    lastRefresh = Date.now()
+    return lookup(host, { all: true })
       .then((found) => {
         addresses.clear()
         for (const { address } of found) addresses.add(address)
       })
       .catch(() => addresses.clear())
+  }
   void refresh()
   setInterval(refresh, 60_000).unref()
-  return (address: string) => addresses.has(address.replace(/^::ffff:/, ''))
+  const isProxy = (address: string) => addresses.has(address.replace(/^::ffff:/, ''))
+  return Object.assign(isProxy, {
+    /** Like isProxy, but looks the address up again first when it is unknown (proxy restarted). */
+    async confirm(address: string): Promise<boolean> {
+      if (isProxy(address)) return true
+      if (Date.now() - lastRefresh > 5_000) await refresh()
+      return isProxy(address)
+    },
+  })
 }
+
+const isLoopback = (address: string) =>
+  address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 
 export function createHttpServer(ctx: Ctx): Http {
   const isProxy = trackProxyAddresses(ctx.config.proxyHost)
@@ -71,6 +85,8 @@ export function createHttpServer(ctx: Ctx): Http {
     // Trust the one X-Forwarded-For hop Traefik adds, and only when the request came from Traefik.
     trustProxy: (address: string, hop: number) => hop === 0 && isProxy(address),
     bodyLimit: 1024 * 1024,
+    // Live streams (SSE) never end on their own; close them on shutdown instead of waiting.
+    forceCloseConnections: true,
   })
   const access = createAccessPolicy(ctx)
 
@@ -79,6 +95,13 @@ export function createHttpServer(ctx: Ctx): Http {
   app.decorateRequest('auth', null)
 
   app.addHook('onRequest', async (request, reply) => {
+    // In production every request arrives through Traefik, except the container's own health
+    // check. Anything else is an app on the shared app network calling core directly to skip the
+    // proxy's checks, so it gets nothing.
+    const peer = request.socket.remoteAddress ?? ''
+    if (ctx.config.isProduction && !isLoopback(peer) && !(await isProxy.confirm(peer))) {
+      return reply.code(404).type('text/plain').send('Not found')
+    }
     const area = classifyRequest(await access.get(), {
       host: request.headers.host,
       path: request.url,

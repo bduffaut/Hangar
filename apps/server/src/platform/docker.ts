@@ -6,6 +6,8 @@ import Dockerode from 'dockerode'
  * cannot reach the database or anything else on the platform network.
  */
 export const APP_NETWORK = 'hangar-apps'
+const APP_PIDS_LIMIT = 4096
+const APP_CPU_SHARES = 512
 
 // Every container Hangar creates carries these labels; cleanup finds containers by label, never by name.
 export const LABELS = {
@@ -117,10 +119,10 @@ export function createDocker(docker = new Dockerode()) {
       }
     },
 
-    /** Creates and starts an app container on the hangar network. Replaces a leftover with the same name. */
+    /** Creates and starts an app container on the app network. Replaces a leftover with the same name. */
     async runApp(spec: AppContainerSpec): Promise<string> {
       const leftover = await inspectContainer(spec.name)
-      if (leftover) await docker.getContainer(leftover.Id).remove({ force: true })
+      if (leftover) await docker.getContainer(leftover.Id).remove({ force: true, v: true })
 
       const container = await docker.createContainer({
         name: spec.name,
@@ -136,6 +138,10 @@ export function createDocker(docker = new Dockerode()) {
           NetworkMode: APP_NETWORK,
           RestartPolicy: { Name: 'unless-stopped' },
           Memory: spec.memoryLimitMb * 1024 * 1024,
+          // A runaway app (fork loop, busy loop) must not starve the database or Hangar itself:
+          // cap its processes, and give it half the default CPU weight when the CPU is contended.
+          PidsLimit: APP_PIDS_LIMIT,
+          CpuShares: APP_CPU_SHARES,
           LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         },
       })
@@ -172,7 +178,7 @@ export function createDocker(docker = new Dockerode()) {
       try {
         const container = docker.getContainer(idOrName)
         if (graceSeconds > 0) await container.stop({ t: graceSeconds }).catch(() => {})
-        await container.remove({ force: true })
+        await container.remove({ force: true, v: true })
       } catch (error) {
         if (!isNotFound(error)) throw error
       }

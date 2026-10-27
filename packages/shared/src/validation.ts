@@ -53,3 +53,13 @@ export function normalizeRootDir(value: string): string | null {
 export const USERNAME_PATTERN = /^[a-z0-9][a-z0-9_.-]{2,31}$/
 export const PASSWORD_MIN_LENGTH = 10
 export const PASSWORD_MAX_LENGTH = 256
+
+export const MEMORY_LIMIT_MIN_MB = 64
+export const MEMORY_LIMIT_MAX_MB = 65536
+
+/** Parses a whole number typed into a form, or null if it is not one within [min, max]. */
+export function parseWholeNumber(text: string, min: number, max: number): number | null {
+  if (!/^\d+$/.test(text.trim())) return null
+  const value = Number(text.trim())
+  return value >= min && value <= max ? value : null
+}

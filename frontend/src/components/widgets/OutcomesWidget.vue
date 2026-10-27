@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { DEPLOYMENT_STATUSES, statusCopy } from '@hangar/shared'
-import type { ChartData, ChartOptions } from 'chart.js'
+import type { ChartData, ChartOptions } from '../../charts/index.ts'
 import { computed } from 'vue'
 import { BaseChart, baseOptions, chartColors } from '../../charts/index.ts'
-import { useDashboardData } from '../../dashboard/index.ts'
+import type { DashboardWidgetProps } from '../../dashboard/index.ts'
 import HgPanel from '../HgPanel.vue'
 
 // How each project's recent deployments ended: a quick read of which apps deploy reliably.
-const { projects } = useDashboardData()
+const props = defineProps<DashboardWidgetProps>()
+const projects = computed(() => props.data.projects.value)
 const withHistory = computed(() => projects.value.filter((p) => p.recent.length > 0))
 
 const build = computed(() => () => {

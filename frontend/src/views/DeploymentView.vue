@@ -10,8 +10,8 @@ import {
 } from '@hangar/shared'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { api, messageOf } from '../api/client.ts'
-import { openStream, type Stream } from '../api/streams.ts'
+import { api, ApiError, messageOf } from '../api/client.ts'
+import { openStream, type Stream, streamUrl } from '../api/streams.ts'
 import EmptyState from '../components/EmptyState.vue'
 import HgPanel from '../components/HgPanel.vue'
 import LogViewer from '../components/LogViewer.vue'
@@ -22,7 +22,14 @@ import { useNow } from '../composables/useNow.ts'
 import { absoluteTime, deploymentDuration, formatDuration, shortSha } from '../lib/format.ts'
 import { useLiveStore } from '../stores/live.ts'
 import { useProjectsStore } from '../stores/projects.ts'
-import { BaseButton, BaseIcon, BaseSkeleton, useConfirmAction, useNotify } from '../ui/index.ts'
+import {
+  BaseButton,
+  BaseIcon,
+  BaseMessage,
+  BaseSkeleton,
+  useConfirmAction,
+  useNotify,
+} from '../ui/index.ts'
 
 const route = useRoute()
 const live = useLiveStore()
@@ -33,7 +40,8 @@ const now = useNow(1000)
 
 const id = computed(() => String(route.params.id))
 const deployment = ref<DeploymentView | null>(null)
-const notFound = ref(false)
+const loadState = ref<'loading' | 'ready' | 'not_found' | 'error'>('loading')
+const loadError = ref('')
 const lines = ref<LogLineView[]>([])
 const streaming = ref(false)
 let stream: Stream | null = null
@@ -47,43 +55,63 @@ useDocumentTitle(() =>
     : flightRecorderCopy.title,
 )
 
-// The log stream replays the saved lines, then follows new ones. If the connection drops, the
-// browser reconnects and resumes after the last line it received.
+// The log stream replays the saved lines, then follows new ones. Every (re)connection asks only
+// for lines after the last one received, so nothing is shown twice.
 function follow(deploymentId: string) {
   stream?.close()
   lines.value = []
   streaming.value = true
-  stream = openStream(`/api/deployments/${deploymentId}/logs/stream`, {
-    log: (line: LogLineView) => {
-      if (line.seq > (lines.value.at(-1)?.seq ?? -1)) lines.value.push(line)
+  stream = openStream(
+    () =>
+      streamUrl('deploymentLogs', { id: deploymentId }, { after: lines.value.at(-1)?.seq ?? -1 }),
+    {
+      log: (line: LogLineView) => {
+        if (line.seq > (lines.value.at(-1)?.seq ?? -1)) lines.value.push(line)
+      },
+      done: () => {
+        streaming.value = false
+        stream?.close()
+      },
     },
-    done: () => {
-      streaming.value = false
-      stream?.close()
-    },
-  })
+  )
 }
 
-watch(
-  id,
-  async (deploymentId) => {
-    notFound.value = false
+// Guards against answers arriving out of order (fast navigation) or after leaving the page.
+let request = 0
+let unmounted = false
+
+async function load(deploymentId: string, { quiet = false } = {}) {
+  const mine = ++request
+  if (!quiet) {
+    loadState.value = 'loading'
     deployment.value = null
-    try {
-      deployment.value = await api('getDeployment', { params: { id: deploymentId } })
-      follow(deploymentId)
-    } catch {
-      notFound.value = true
-    }
-  },
-  { immediate: true },
-)
+  }
+  try {
+    const found = await api('getDeployment', { params: { id: deploymentId } })
+    if (mine !== request || unmounted) return
+    deployment.value = found
+    loadState.value = 'ready'
+    if (!quiet) follow(deploymentId)
+  } catch (e) {
+    if (mine !== request || unmounted || quiet) return
+    loadState.value = e instanceof ApiError && e.status === 404 ? 'not_found' : 'error'
+    loadError.value = messageOf(e)
+  }
+}
+
+watch(id, (deploymentId) => load(deploymentId), { immediate: true })
 
 const stopListening = live.onDeployment((d) => {
   if (d.id === deployment.value?.id) deployment.value = d
 })
+// Status changes may have been missed while the event stream was down.
+const stopReconnect = live.onReconnect(() => {
+  if (loadState.value === 'ready') void load(id.value, { quiet: true })
+})
 onBeforeUnmount(() => {
+  unmounted = true
   stopListening()
+  stopReconnect()
   stream?.close()
 })
 
@@ -178,7 +206,11 @@ async function rollback() {
 
     <dl class="hg-facts">
       <div>
-        <dt :title="flightRecorderCopy.tailNumberMeaning">{{ flightRecorderCopy.tailNumber }}</dt>
+        <dt>
+          <span v-hint="flightRecorderCopy.tailNumberMeaning" tabindex="0">{{
+            flightRecorderCopy.tailNumber
+          }}</span>
+        </dt>
         <dd>
           <code>{{ shortSha(deployment.commitSha) }}</code>
         </dd>
@@ -226,7 +258,7 @@ async function rollback() {
   </template>
 
   <EmptyState
-    v-else-if="notFound"
+    v-else-if="loadState === 'not_found'"
     title="That deployment does not exist."
     body="It may belong to a deleted project."
   >
@@ -234,6 +266,11 @@ async function rollback() {
       <BaseButton variant="primary" label="Back to projects" @click="navigate" />
     </RouterLink>
   </EmptyState>
+
+  <div v-else-if="loadState === 'error'" class="hg-deploy-loading">
+    <BaseMessage tone="error">{{ loadError }}</BaseMessage>
+    <BaseButton label="Try again" icon="restart" @click="load(id)" />
+  </div>
 
   <div v-else class="hg-deploy-loading">
     <BaseSkeleton width="14rem" height="2.25rem" />

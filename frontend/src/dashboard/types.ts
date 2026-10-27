@@ -6,11 +6,20 @@ import type { Component, Ref } from 'vue'
 /** How much of the dashboard's width a widget takes on wide screens. Narrow screens stack. */
 export type WidgetSize = 'full' | 'half' | 'third'
 
+/**
+ * The props every widget component receives. Widgets get all their data this way, so an external
+ * widget package needs nothing from inside the app except these types.
+ */
+export interface DashboardWidgetProps {
+  data: DashboardData
+}
+
 export interface DashboardWidget {
   /** Unique and stable: saved layouts refer to it. Prefix with your package name. */
   id: string
   title: string
   description: string
+  /** A Vue component accepting `DashboardWidgetProps`. */
   component: Component
   size: WidgetSize
   /** Shown until the person turns it off. */
@@ -22,9 +31,14 @@ export interface DashboardWidget {
 /** Data any widget may read (never write). Values update live. */
 export interface DashboardData {
   projects: Readonly<Ref<ProjectView[]>>
+  /** False until the project list has loaded once (so an empty list is not mistaken for none). */
+  projectsLoaded: Readonly<Ref<boolean>>
   /** Deployments in progress right now. */
   activeDeployments: Readonly<Ref<DeploymentView[]>>
-  /** Up to 15 minutes of host and container samples, oldest first. */
+  /**
+   * Up to 15 minutes of host and container samples, oldest first. Kept streaming while the
+   * dashboard is on screen.
+   */
   metrics: Readonly<Ref<MetricsSample[]>>
 }
 

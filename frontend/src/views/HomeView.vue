@@ -13,16 +13,13 @@ const projects = useProjectsStore()
 const tour = useTour()
 
 onMounted(async () => {
-  await projects.load().catch(() => {})
+  await projects.ensureLoaded().catch(() => {})
   tour.startIfNew()
 })
 </script>
 
 <template>
-  <PageHeader
-    :title="navCopy.projects"
-    :subtitle="`${projects.projects.length} ${projects.projects.length === 1 ? 'app' : 'apps'} in the hangar`"
-  >
+  <PageHeader :title="navCopy.projects" :subtitle="navCopy.projectCount(projects.projects.length)">
     <template #actions>
       <RouterLink v-slot="{ navigate }" :to="{ name: 'new-project' }" custom>
         <BaseButton

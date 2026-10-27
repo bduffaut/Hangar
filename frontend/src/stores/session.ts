@@ -8,6 +8,8 @@ export const useSessionStore = defineStore('session', () => {
   const session = ref<Session | null>(null)
   const needsSetup = ref<boolean | null>(null)
   const loaded = ref(false)
+  /** True when the server could not be reached on first load. */
+  const unreachable = ref(false)
 
   const signedIn = computed(() => session.value !== null)
   const username = computed(() => session.value?.user.username ?? null)
@@ -22,7 +24,13 @@ export const useSessionStore = defineStore('session', () => {
   /** Learns the current state once, on first navigation. */
   async function load() {
     if (loaded.value) return
-    needsSetup.value = (await api('setupStatus')).needsSetup
+    try {
+      needsSetup.value = (await api('setupStatus')).needsSetup
+    } catch {
+      unreachable.value = true
+      return
+    }
+    unreachable.value = false
     if (!needsSetup.value) apply(await api('me').catch(() => null))
     loaded.value = true
   }
@@ -30,6 +38,7 @@ export const useSessionStore = defineStore('session', () => {
   return {
     session,
     needsSetup,
+    unreachable,
     signedIn,
     username,
     load,

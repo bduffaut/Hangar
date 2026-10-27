@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { navCopy, type SettingsView, toastCopy } from '@hangar/shared'
+import { brand, navCopy, type SettingsView, toastCopy, TUNNEL_SERVICE_URL } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { api, messageOf } from '../api/client.ts'
+import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
@@ -41,10 +42,18 @@ function apply(next: SettingsView) {
   exposeTower.value = next.exposeTowerPublicly
 }
 
-onMounted(async () => {
-  apply(await api('getSettings'))
+const loadError = ref('')
+async function load() {
+  loadError.value = ''
+  try {
+    apply(await api('getSettings'))
+  } catch (e) {
+    loadError.value = messageOf(e)
+    return
+  }
   info.value = await api('systemInfo').catch(() => null)
-})
+}
+onMounted(load)
 
 async function act(key: string, action: () => Promise<void>) {
   busy.value = key
@@ -104,7 +113,12 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
 <template>
   <PageHeader :title="navCopy.settings" />
 
-  <div v-if="!settings" class="hg-settings-loading">
+  <div v-if="loadError" class="hg-settings-loading">
+    <BaseMessage tone="error">{{ loadError }}</BaseMessage>
+    <div><BaseButton icon="restart" label="Try again" @click="load" /></div>
+  </div>
+
+  <div v-else-if="!settings" class="hg-settings-loading">
     <BaseSkeleton height="10rem" />
     <BaseSkeleton height="10rem" />
   </div>
@@ -118,12 +132,12 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
         <BaseField
           label="Server address"
           for="set-ip"
-          help="Change this if the server's IP address changes; every app address updates with it."
+          help="Change this if the server's IP address changes; every app address updates with it. If you lose access after a change, run sudo hangar-admin set-lan-ip <address> on the server."
         >
           <BaseInput id="set-ip" v-model="lanIp" mono inputmode="numeric" />
         </BaseField>
         <p v-if="settings.towerUrl" class="hg-muted hg-note">
-          Control Tower: <a :href="settings.towerUrl">{{ settings.towerUrl }}</a>
+          {{ brand.dashboardName }}: <a :href="settings.towerUrl">{{ settings.towerUrl }}</a>
         </p>
         <BaseMessage v-if="errors.address" tone="error">{{ errors.address }}</BaseMessage>
         <div>
@@ -132,6 +146,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             variant="primary"
             label="Save address"
             :loading="busy === 'address'"
+            :disabled="busy !== null"
           />
         </div>
       </form>
@@ -158,7 +173,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             variant="primary"
             icon="github"
             label="Connect"
-            :disabled="!githubToken.trim()"
+            :disabled="!githubToken.trim() || busy !== null"
             :loading="busy === 'github'"
             @click="saveGithub(githubToken.trim())"
           />
@@ -166,6 +181,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             v-if="settings.githubConnected"
             variant="ghost"
             label="Disconnect"
+            :disabled="busy !== null"
             @click="saveGithub(null)"
           />
         </div>
@@ -183,8 +199,8 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             tunnel.
           </li>
           <li>
-            Add a public hostname <code>*.your-domain.com</code> with the service
-            <code>http://hangar-proxy:8081</code>.
+            Add a public hostname <code>*.your-domain.com</code> with this service:
+            <CopyField :value="TUNNEL_SERVICE_URL" label="Tunnel service" />
           </li>
           <li>Copy the tunnel token and paste it below, with your domain.</li>
         </ol>
@@ -198,10 +214,10 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
         <div class="hg-switch-row">
           <BaseSwitch id="set-expose" v-model="exposeTower" :disabled="!publicDomain.trim()" />
           <label for="set-expose">
-            Also make the Control Tower public
+            Also make the {{ brand.dashboardName }} public
             <span class="hg-muted hg-switch-help"
-              >Off is safer: the Control Tower controls the whole server. Keep it on your network
-              unless you need it elsewhere.</span
+              >Off is safer: the {{ brand.dashboardName }} controls the whole server. Keep it on
+              your network unless you need it elsewhere.</span
             >
           </label>
         </div>
@@ -211,6 +227,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             variant="primary"
             label="Save domain"
             :loading="busy === 'public'"
+            :disabled="busy !== null"
             @click="savePublic"
           />
         </div>
@@ -233,7 +250,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
           <BaseButton
             variant="primary"
             label="Save token"
-            :disabled="!tunnelToken.trim()"
+            :disabled="!tunnelToken.trim() || busy !== null"
             :loading="busy === 'tunnel'"
             @click="saveTunnel(tunnelToken.trim())"
           />
@@ -241,6 +258,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
             v-if="settings.tunnelConfigured"
             variant="ghost"
             label="Remove tunnel"
+            :disabled="busy !== null"
             @click="saveTunnel(null)"
           />
         </div>

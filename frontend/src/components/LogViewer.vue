@@ -19,9 +19,14 @@ const list = ref<{ scrollToEnd(count: number): void } | null>(null)
 const following = ref(true)
 const copy = useClipboard()
 
-const rows = computed(() =>
-  props.lines.map((line) => ({ ...line, segments: parseAnsi(line.line) })),
-)
+// Parsing colors is done once per line, not again for every line each time one arrives.
+const parsed = new WeakMap<LogLineView, ReturnType<typeof parseAnsi>>()
+const segmentsOf = (line: LogLineView) => {
+  let segments = parsed.get(line)
+  if (!segments) parsed.set(line, (segments = parseAnsi(line.line)))
+  return segments
+}
+const rows = computed(() => props.lines.map((line) => ({ ...line, segments: segmentsOf(line) })))
 
 function atBottom(element: HTMLElement) {
   return element.scrollHeight - element.scrollTop - element.clientHeight < LINE_HEIGHT * 2
@@ -67,6 +72,7 @@ function download() {
         <BaseButton
           size="sm"
           variant="ghost"
+          tone="console"
           icon="copy"
           :label="flightRecorderCopy.copy"
           @click="copy(plainText(), flightRecorderCopy.copied)"
@@ -74,6 +80,7 @@ function download() {
         <BaseButton
           size="sm"
           variant="ghost"
+          tone="console"
           icon="download"
           :label="flightRecorderCopy.download"
           @click="download"
@@ -87,7 +94,7 @@ function download() {
         ref="list"
         :items="rows"
         :item-height="LINE_HEIGHT"
-        :height="height ?? 'min(65vh, 40rem)'"
+        :height="height ?? 'var(--hg-width-console)'"
         @scroll="onScroll"
       >
         <template #default="{ item }">
@@ -142,9 +149,6 @@ function download() {
   font-size: var(--hg-size-xs);
   color: color-mix(in srgb, var(--hg-console-ink) 70%, transparent);
 }
-.hg-recorder-toolbar :deep(.p-button) {
-  color: var(--hg-console-ink);
-}
 .hg-recorder-tools {
   display: flex;
 }
@@ -159,7 +163,9 @@ function download() {
 }
 .hg-line {
   display: grid;
-  grid-template-columns: 3.5rem 1fr;
+  grid-template-columns: 3.5rem max-content;
+  min-width: 100%;
+  width: max-content;
   height: 21px;
   line-height: 21px;
   white-space: pre;
@@ -168,14 +174,16 @@ function download() {
   background: color-mix(in srgb, var(--hg-console-ink) 5%, transparent);
 }
 .hg-line-number {
+  position: sticky;
+  left: 0;
+  background: var(--hg-console);
   padding-right: var(--hg-space-3);
   text-align: right;
   color: color-mix(in srgb, var(--hg-console-ink) 35%, transparent);
   user-select: none;
 }
 .hg-line-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  padding-right: var(--hg-space-4);
 }
 .is-system {
   color: var(--hg-term-accent);

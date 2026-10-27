@@ -24,6 +24,8 @@ async function main() {
 
   const shutdown = async (signal: string) => {
     log.info({ signal }, 'Shutting down')
+    // Docker kills the process after 10 seconds; leave before that even if something hangs.
+    setTimeout(() => process.exit(1), 8000).unref()
     await app?.close()
     await worker?.stop()
     await close()

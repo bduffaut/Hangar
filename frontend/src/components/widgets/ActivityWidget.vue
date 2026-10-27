@@ -2,13 +2,14 @@
 import { triggerCopy } from '@hangar/shared'
 import { computed } from 'vue'
 import { useNow } from '../../composables/useNow.ts'
-import { useDashboardData } from '../../dashboard/index.ts'
+import type { DashboardWidgetProps } from '../../dashboard/index.ts'
 import { relativeTime, shortSha } from '../../lib/format.ts'
 import HgPanel from '../HgPanel.vue'
 import StatusBadge from '../StatusBadge.vue'
 
 // The newest deployment of every project, most recent first: what happened lately.
-const { projects } = useDashboardData()
+const props = defineProps<DashboardWidgetProps>()
+const projects = computed(() => props.data.projects.value)
 const now = useNow()
 
 const rows = computed(() =>

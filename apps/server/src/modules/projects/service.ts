@@ -21,7 +21,7 @@ import {
   listLatestDeployments,
   listRecentStatuses,
 } from '../deployments/repo.ts'
-import { cancelActive } from '../deployments/service.ts'
+import { cancelAllActive } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { getSettings } from '../settings/repo.ts'
 import { getGithubToken } from '../settings/secrets.ts'
@@ -168,7 +168,7 @@ export async function updateProjectSettings(
 export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
   // A running build would otherwise finish and leave an image behind (cleanup removes images of
   // deleted projects later, but cancelling stops the work now).
-  await cancelActive(ctx, project).catch(() => {})
+  await cancelAllActive(ctx, project)
   await withAdvisoryLock(ctx.db, projectLockKey(project.id), async () => {
     // The project is going away, so its containers are removed at once rather than stopped
     // gracefully (which can take ten seconds each for an app that ignores SIGTERM).
@@ -293,4 +293,14 @@ export async function projectView(ctx: Ctx, project: Project): Promise<ProjectVi
 
 export async function allProjectViews(ctx: Ctx): Promise<ProjectView[]> {
   return projectViews(ctx, await listProjects(ctx.db))
+}
+
+const RUNTIME_LOG_TAIL = 500
+
+/** The live output of the project's current container (its last lines first), or null if none runs. */
+export async function followRuntimeLogs(ctx: Ctx, project: Project, signal: AbortSignal) {
+  const [container] = (await ctx.docker.listManagedApps(project.id)).filter(
+    (c) => c.deploymentId === project.currentDeploymentId,
+  )
+  return container ? ctx.docker.followLogs(container.id, RUNTIME_LOG_TAIL, signal) : null
 }

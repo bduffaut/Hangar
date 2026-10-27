@@ -3,12 +3,13 @@ import {
   confirmCopy,
   type DeploymentView,
   emptyCopy,
+  flightRecorderCopy,
   type ProjectView,
   statusCopy,
   toastCopy,
   triggerCopy,
 } from '@hangar/shared'
-import type { ChartData, ChartOptions } from 'chart.js'
+import type { ChartData, ChartOptions } from '../../charts/index.ts'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api, messageOf } from '../../api/client.ts'
 import { BaseChart, baseOptions, chartColors, withAlpha } from '../../charts/index.ts'
@@ -22,7 +23,7 @@ import {
 } from '../../lib/format.ts'
 import { useLiveStore } from '../../stores/live.ts'
 import { useMetricsStore } from '../../stores/metrics.ts'
-import { BaseButton, useConfirmAction, useNotify } from '../../ui/index.ts'
+import { BaseButton, BaseMessage, useConfirmAction, useNotify } from '../../ui/index.ts'
 import EmptyState from '../EmptyState.vue'
 import HgPanel from '../HgPanel.vue'
 import StatusBadge from '../StatusBadge.vue'
@@ -36,13 +37,19 @@ const now = useNow(1000)
 
 const deployments = ref<DeploymentView[]>([])
 const loaded = ref(false)
+const loadError = ref('')
 
 async function load() {
-  deployments.value = await api('listDeployments', {
-    params: { id: props.project.id },
-    query: { limit: 30 },
-  })
-  loaded.value = true
+  loadError.value = ''
+  try {
+    deployments.value = await api('listDeployments', {
+      params: { id: props.project.id },
+      query: { limit: 30 },
+    })
+    loaded.value = true
+  } catch (e) {
+    loadError.value = messageOf(e)
+  }
 }
 
 const stop = live.onDeployment((d) => {
@@ -54,22 +61,29 @@ const stop = live.onDeployment((d) => {
   if (d.isCurrent)
     deployments.value = deployments.value.map((x) => ({ ...x, isCurrent: x.id === d.id }))
 })
+// Deployments may have changed while the event stream was down.
+const stopReconnect = live.onReconnect(() => void load())
 onMounted(() => {
   void load()
   metrics.acquire()
 })
 onBeforeUnmount(() => {
   stop()
+  stopReconnect()
   metrics.release()
 })
 
+const busy = ref(false)
 async function rollback(d: DeploymentView) {
   if (!(await confirm(confirmCopy.rollback))) return
+  busy.value = true
   try {
     await api('rollbackDeployment', { params: { id: d.id } })
     notify.success(toastCopy.rollbackQueued, `Back to #${d.number}`)
   } catch (e) {
     notify.error(messageOf(e))
+  } finally {
+    busy.value = false
   }
 }
 
@@ -215,23 +229,28 @@ const resources = computed(() => () => {
       </HgPanel>
       <HgPanel title="Resources" description="CPU and memory of the running app, last 15 minutes.">
         <p v-if="!hasResources" class="hg-muted">Collecting samples from the running app…</p>
-        <p v-else-if="latestResources" class="hg-resources-now">
-          Now: {{ formatBytes(latestResources.memoryUsedBytes) }} of {{ project.memoryLimitMb }} MB
-          memory, {{ Math.round(latestResources.cpuPercent) }}% CPU
-        </p>
-        <BaseChart
-          v-else
-          type="line"
-          :build="resources"
-          label="CPU and memory use over the last 15 minutes"
-          height="11rem"
-        />
+        <template v-else>
+          <p v-if="latestResources" class="hg-resources-now">
+            Now: {{ formatBytes(latestResources.memoryUsedBytes) }} of
+            {{ project.memoryLimitMb }} MB memory, {{ Math.round(latestResources.cpuPercent) }}% CPU
+          </p>
+          <BaseChart
+            type="line"
+            :build="resources"
+            label="CPU and memory use over the last 15 minutes"
+            height="11rem"
+          />
+        </template>
       </HgPanel>
     </div>
 
     <HgPanel title="History" :padded="false">
+      <div v-if="loadError" class="hg-history-error">
+        <BaseMessage tone="error">{{ loadError }}</BaseMessage>
+        <BaseButton size="sm" icon="restart" label="Try again" @click="load" />
+      </div>
       <EmptyState
-        v-if="loaded && deployments.length === 0"
+        v-else-if="loaded && deployments.length === 0"
         class="hg-history-empty"
         :title="emptyCopy.deployments.title"
         :body="emptyCopy.deployments.body"
@@ -242,7 +261,12 @@ const resources = computed(() => () => {
             <tr>
               <th scope="col">Status</th>
               <th scope="col">Deployment</th>
-              <th scope="col" title="The short commit ID">Tail number</th>
+              <th scope="col">
+                <span v-hint="flightRecorderCopy.tailNumberMeaning" tabindex="0">{{
+                  flightRecorderCopy.tailNumber
+                }}</span>
+              </th>
+              <th scope="col">Branch</th>
               <th scope="col">Duration</th>
               <th scope="col">When</th>
               <th scope="col"><span class="hg-visually-hidden">Actions</span></th>
@@ -265,6 +289,7 @@ const resources = computed(() => () => {
               <td>
                 <code>{{ shortSha(d.commitSha) }}</code>
               </td>
+              <td class="hg-muted">{{ d.branch }}</td>
               <td class="hg-muted">
                 {{
                   deploymentDuration(d, now) === null
@@ -282,6 +307,7 @@ const resources = computed(() => () => {
                   variant="ghost"
                   icon="rewind"
                   label="Rollback"
+                  :disabled="busy"
                   @click="rollback(d)"
                 />
               </td>
@@ -294,6 +320,12 @@ const resources = computed(() => () => {
 </template>
 
 <style scoped>
+.hg-history-error {
+  display: grid;
+  gap: var(--hg-space-3);
+  justify-items: start;
+  padding: var(--hg-space-4);
+}
 .hg-deployments {
   display: grid;
   gap: var(--hg-space-5);
@@ -392,7 +424,8 @@ const resources = computed(() => () => {
     min-width: 0;
   }
   .hg-table td:nth-child(3),
-  .hg-table td:nth-child(4) {
+  .hg-table td:nth-child(4),
+  .hg-table td:nth-child(5) {
     display: none;
   }
   .hg-cell-message {

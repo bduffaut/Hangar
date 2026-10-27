@@ -12,6 +12,7 @@ const inProgress = computed(() => ['queued', 'building', 'deploying'].includes(p
 <template>
   <span
     v-hint.top="copy.meaning"
+    tabindex="0"
     class="hg-status"
     :class="[`is-${status}`, size === 'sm' && 'is-small']"
     :data-status="status"

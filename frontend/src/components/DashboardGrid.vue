@@ -1,16 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  useDashboardData,
   isWidgetShown,
   moveWidget,
   orderedWidgets,
   resetLayout,
   setWidgetShown,
 } from '../dashboard/index.ts'
+import { useMetricsStore } from '../stores/metrics.ts'
 import { BaseButton, BaseDialog, BaseSwitch } from '../ui/index.ts'
 
-// Lays out the registered widgets. Wide widgets span the row; half and third widgets share it.
+// Lays out the registered widgets and hands each one the dashboard's data. Wide widgets span the
+// row; half and third widgets share it. Metrics stream while the dashboard is on screen.
 const customizing = ref(false)
+const data = useDashboardData()
+const metrics = useMetricsStore()
+onMounted(() => metrics.acquire())
+onBeforeUnmount(() => metrics.release())
 </script>
 
 <template>
@@ -22,7 +29,7 @@ const customizing = ref(false)
         :class="`is-${widget.size}`"
         :data-widget="widget.id"
       >
-        <component :is="widget.component" />
+        <component :is="widget.component" :data="data" />
       </div>
     </template>
   </div>

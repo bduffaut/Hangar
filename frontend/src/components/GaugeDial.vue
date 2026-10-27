@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChartData, ChartOptions } from 'chart.js'
+import type { ChartData, ChartOptions } from '../charts/index.ts'
 import { computed } from 'vue'
 import { BaseChart, baseOptions, chartColors } from '../charts/index.ts'
 
@@ -61,12 +61,15 @@ const build = computed(() => () => {
   min-width: 0;
   display: grid;
   gap: var(--hg-space-2);
+  /* Stretch (not center) so the dial's width is measured against the cell, not its content. */
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   text-align: center;
 }
 .hg-gauge-dial {
   position: relative;
-  width: min(9rem, 100%);
+  width: 100%;
+  max-width: 9rem;
 }
 @media (max-width: 36rem) {
   .hg-gauge-value {

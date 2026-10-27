@@ -5,6 +5,7 @@ import {
   isValidDomain,
   isValidRepoUrl,
   normalizeRootDir,
+  parseWholeNumber,
 } from './validation.ts'
 
 describe('isValidBranchName', () => {
@@ -88,5 +89,15 @@ describe('normalizeRootDir', () => {
   })
   it.each(['../x', 'a/../../b', 'a/./b', 'a//b', 'a\\b'])('rejects %s', (dir) => {
     expect(normalizeRootDir(dir)).toBeNull()
+  })
+})
+
+describe('parseWholeNumber', () => {
+  it('accepts whole numbers in range', () => {
+    expect(parseWholeNumber('8080', 1, 65535)).toBe(8080)
+    expect(parseWholeNumber(' 64 ', 64, 65536)).toBe(64)
+  })
+  it.each(['', '0', '65536', '3.5', '1e3', '-1', 'abc', '80x'])('rejects %s', (text) => {
+    expect(parseWholeNumber(text, 1, 65535)).toBeNull()
   })
 })

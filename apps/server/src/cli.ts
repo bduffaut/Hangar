@@ -1,15 +1,18 @@
 // hangar-admin: administration from the server's command line. In production it runs inside
 // hangar-core (`docker exec -it hangar-core hangar-admin …`); the installer calls it too.
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@hangar/shared'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, schemas } from '@hangar/shared'
 import { ConfigError, loadConfig } from './config.ts'
 import { createContext } from './context.ts'
 import { createLogger } from './logger.ts'
 import { issueSetupCode, resetPassword } from './modules/auth/service.ts'
+import { updateSettings } from './modules/settings/service.ts'
 
 const USAGE = `Usage: hangar-admin <command>
 
   issue-setup-code           Print a new one-time setup code (only before the first account exists)
-  reset-password <username>  Set a new password, read from standard input; signs out all sessions`
+  reset-password <username>  Set a new password, read from standard input; signs out all sessions
+  set-lan-ip <address>       Change the address devices use to reach Hangar (if the server's IP
+                             changed and the Control Tower no longer opens)`
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = []
@@ -46,6 +49,14 @@ async function main() {
         }
         await resetPassword(ctx, username, password)
         console.error(`Password changed for ${username}. All of its sessions were signed out.`)
+        break
+      }
+      case 'set-lan-ip': {
+        const parsed = schemas.settingsPatch.shape.lanIp.safeParse(args[0])
+        if (!parsed.success || !parsed.data) throw new Error(`Give an IPv4 address.\n\n${USAGE}`)
+        await updateSettings(ctx, { lanIp: parsed.data })
+        const domain = parsed.data.replaceAll('.', '-')
+        console.error(`Hangar now answers at http://tower.${domain}.sslip.io and http://${parsed.data}`)
         break
       }
       default:

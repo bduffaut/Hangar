@@ -7,6 +7,7 @@ import {
   allProjectViews,
   createProject,
   deleteProject,
+  followRuntimeLogs,
   getProjectOrThrow,
   projectView,
   restartProject,
@@ -15,7 +16,6 @@ import {
   webhookInfo,
 } from './service.ts'
 
-const RUNTIME_LOG_TAIL = 500
 
 export function projectRoutes(http: Http) {
   const { ctx } = http
@@ -78,14 +78,11 @@ export function projectRoutes(http: Http) {
     schemas.idParams,
     (params) => getProjectOrThrow(ctx, params.id),
     async (stream, project) => {
-      const [container] = (await ctx.docker.listManagedApps(project.id)).filter(
-        (c) => c.deploymentId === project.currentDeploymentId,
-      )
-      if (!container) {
+      const output = await followRuntimeLogs(ctx, project, stream.signal)
+      if (!output) {
         stream.send('end', { reason: 'not_running' })
         return stream.close()
       }
-      const output = await ctx.docker.followLogs(container.id, RUNTIME_LOG_TAIL, stream.signal)
       stream.onClose(() => output.destroy())
       const lines = createInterface({ input: output, crlfDelay: Infinity })
       lines.on('line', (line) => stream.send('log', { line }))

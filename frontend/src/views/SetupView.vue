@@ -9,7 +9,7 @@ import {
   TEST_FLIGHT,
   towerHostname,
 } from '@hangar/shared'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import BrandMark from '../brand/BrandMark.vue'
@@ -67,8 +67,9 @@ const createAccount = () =>
       username: username.value,
       password: password.value,
     })
-    await loadAddress()
+    // The account exists now; move on even if reading the suggested address fails.
     step.value = 1
+    await loadAddress().catch(() => {})
   })
 
 // Step 2: address
@@ -137,6 +138,13 @@ watch(
 
 const flightUrl = computed(() => flight.value?.url ?? null)
 const finish = () => router.push({ name: 'home' })
+
+// Each step replaces the last, so move keyboard and screen-reader focus to its heading.
+watch(step, async () => {
+  error.value = null
+  await nextTick()
+  document.getElementById('step-title')?.focus()
+})
 </script>
 
 <template>
@@ -163,7 +171,7 @@ const finish = () => router.push({ name: 'home' })
 
     <main class="hg-setup-main">
       <section v-if="step === 0" class="hg-setup-panel" aria-labelledby="step-title">
-        <h2 id="step-title">{{ setupCopy.steps.account.title }}</h2>
+        <h2 id="step-title" tabindex="-1">{{ setupCopy.steps.account.title }}</h2>
         <p class="hg-muted">{{ setupCopy.steps.account.body }}</p>
         <form class="hg-setup-form" @submit.prevent="createAccount">
           <BaseField
@@ -204,7 +212,7 @@ const finish = () => router.push({ name: 'home' })
       </section>
 
       <section v-else-if="step === 1" class="hg-setup-panel" aria-labelledby="step-title">
-        <h2 id="step-title">{{ setupCopy.steps.address.title }}</h2>
+        <h2 id="step-title" tabindex="-1">{{ setupCopy.steps.address.title }}</h2>
         <p class="hg-muted">{{ setupCopy.steps.address.body }}</p>
         <form class="hg-setup-form" @submit.prevent="saveAddress">
           <BaseField
@@ -222,12 +230,13 @@ const finish = () => router.push({ name: 'home' })
               </dd>
             </div>
             <div>
-              <dt>An app called blog</dt>
+              <dt>{{ setupCopy.steps.address.exampleApp }}</dt>
               <dd>
                 <code>http://{{ preview.app }}</code>
               </dd>
             </div>
           </dl>
+          <p class="hg-muted">{{ setupCopy.steps.address.publicNote }}</p>
           <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
           <BaseButton
             type="submit"
@@ -239,7 +248,7 @@ const finish = () => router.push({ name: 'home' })
       </section>
 
       <section v-else-if="step === 2" class="hg-setup-panel" aria-labelledby="step-title">
-        <h2 id="step-title">{{ setupCopy.steps.github.title }}</h2>
+        <h2 id="step-title" tabindex="-1">{{ setupCopy.steps.github.title }}</h2>
         <p class="hg-muted">{{ setupCopy.steps.github.body }}</p>
         <p>
           <a
@@ -271,19 +280,20 @@ const finish = () => router.push({ name: 'home' })
       </section>
 
       <section v-else class="hg-setup-panel" aria-labelledby="step-title">
-        <h2 id="step-title">{{ setupCopy.steps.testFlight.title }}</h2>
+        <h2 id="step-title" tabindex="-1">{{ setupCopy.steps.testFlight.title }}</h2>
         <p class="hg-muted">{{ setupCopy.steps.testFlight.body }}</p>
-        <BaseMessage v-if="githubLogin" tone="success"
-          >Connected to GitHub as {{ githubLogin }}.</BaseMessage
-        >
+        <BaseMessage v-if="githubLogin" tone="success">{{
+          setupCopy.steps.github.connectedAs(githubLogin)
+        }}</BaseMessage>
         <div v-if="flightDeployment" class="hg-flight" aria-live="polite">
           <StatusBadge :status="flightDeployment.status" />
           <p>{{ statusCopy[flightDeployment.status].meaning }}.</p>
-          <RouterLink :to="{ name: 'deployment', params: { id: flightDeployment.id } }"
-            >Watch the build log</RouterLink
-          >
+          <RouterLink :to="{ name: 'deployment', params: { id: flightDeployment.id } }">{{
+            setupCopy.steps.testFlight.watchLog
+          }}</RouterLink>
           <p v-if="flightDeployment.status === 'ready' && flightUrl">
-            Open it: <a :href="flightUrl" target="_blank" rel="noopener">{{ flightUrl }}</a>
+            {{ setupCopy.steps.testFlight.openIt }}
+            <a :href="flightUrl" target="_blank" rel="noopener">{{ flightUrl }}</a>
           </p>
         </div>
         <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
@@ -378,7 +388,7 @@ const finish = () => router.push({ name: 'home' })
   gap: var(--hg-space-5);
   margin-top: var(--hg-space-2);
 }
-.hg-setup-form > :deep(.p-button) {
+.hg-setup-form > .hg-button {
   justify-self: start;
 }
 .hg-setup-actions {

@@ -15,6 +15,8 @@ const props = withDefaults(
     /** Accessible name when the button shows only an icon. */
     ariaLabel?: string
     fluid?: boolean
+    /** `console`: light text for dark terminal panels such as the log viewer. */
+    tone?: 'default' | 'console'
   }>(),
   { variant: 'secondary', size: 'md', type: 'button' },
 )
@@ -40,6 +42,7 @@ const library = computed(() => ({
     :aria-label="ariaLabel"
     :fluid="fluid"
     class="hg-button"
+    :class="{ 'is-console': tone === 'console' }"
     @click="$emit('click', $event)"
   >
     <template v-if="icon" #icon>
@@ -53,5 +56,8 @@ const library = computed(() => ({
 .hg-button {
   font-weight: var(--hg-weight-medium);
   gap: var(--hg-space-2);
+}
+.hg-button.is-console {
+  color: var(--hg-console-ink);
 }
 </style>

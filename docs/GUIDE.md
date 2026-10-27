@@ -311,7 +311,7 @@ The dashboard lives in `frontend/src/`. It is organized so that colors, wording,
 - **Logo:** edit `frontend/src/brand/BrandMark.vue` and `favicon.svg`.
 - **Component library:** rewrite the files in `frontend/src/ui/` to use the new library, keeping the same `Base*` names and options.
 - **Your own dashboard widgets:**
-  1. Your package exports `defineDashboardPlugin({ name, install({ registerWidget }) { … } })`. Each widget has an id, a title, a Vue component, and a size. It reads live data through `useDashboardData()`, which gives read-only projects, active deployments, and metrics.
+  1. Your package exports `defineDashboardPlugin({ name, install({ registerWidget }) { … } })`. Each widget has an id, a title, a Vue component, and a size. It receives everything it shows through one prop, `data`: the projects (and whether they have loaded), the deployments in progress, and recent resource readings. A widget never touches Hangar's internals, so it can live in its own package.
   2. Install it with `pnpm --filter @hangar/frontend add <your-package>`.
   3. Add it to the list in `frontend/src/dashboard/plugins.ts`.
 
@@ -327,16 +327,16 @@ The dashboard lives in `frontend/src/`. It is organized so that colors, wording,
 
 ## 9. Keeping things secure
 
-| Risk                                | What Hangar does                                                                                                                                                                                                                                      |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Someone else claiming your server   | The first account needs the **boarding pass**, a one-time 140-bit code. Only its hash is stored.                                                                                                                                                      |
-| Password guessing                   | Passwords are hashed with argon2. Sign-in is limited per address and per account, and an account locks for 15 minutes after 10 failures.                                                                                                              |
-| Other websites acting as you        | The API only answers on Control Tower addresses, changes must come from the dashboard's own page, and each session has a CSRF token. The session cookie is not readable by scripts and is never sent to app addresses.                                |
-| Leaked secrets                      | Env vars, the GitHub token, and the tunnel token are encrypted in the database. Responses are filtered so internal fields cannot leak. Env vars reach builds as secrets and never end up in images. The GitHub token is only ever sent to github.com. |
-| A malicious repository              | Commands run without a shell. Branch names, URLs, and folders are checked. Symlinks pointing outside the repository stop the build. Builds and apps never see Hangar's own environment.                                                               |
-| A deployed app attacking Hangar     | Apps run on their own Docker network, without access to the database.                                                                                                                                                                                 |
-| Scripts injected into the dashboard | Build logs are shown as text, never as HTML, and the dashboard's security headers only allow its own scripts.                                                                                                                                         |
-| Exposure on your network            | On your laptop, Hangar listens only on the Tailscale address. Public access happens only if you set up a Cloudflare tunnel, and even then the dashboard stays private unless you choose otherwise.                                                    |
+| Risk                                | What Hangar does                                                                                                                                                                                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Someone else claiming your server   | The first account needs the **boarding pass**, a one-time 140-bit code. Only its hash is stored.                                                                                                                                                                                                       |
+| Password guessing                   | Passwords are hashed with argon2. Sign-in is limited per address and per account, and an account locks for 15 minutes after 10 failures.                                                                                                                                                               |
+| Other websites acting as you        | The API only answers on Control Tower addresses, changes must come from the dashboard's own page, and each session has a CSRF token. The session cookie is not readable by scripts and is never sent to app addresses.                                                                                 |
+| Leaked secrets                      | Env vars, the GitHub token, and the tunnel token are encrypted in the database. Responses are filtered so internal fields cannot leak. Env vars reach builds as secrets and never end up in images. The GitHub token is only ever sent to github.com.                                                  |
+| A malicious repository              | Commands run without a shell. Branch names, URLs, and folders are checked. Symlinks pointing outside the repository stop the build. Builds and apps never see Hangar's own environment.                                                                                                                |
+| A deployed app attacking Hangar     | Apps run on their own Docker network, without access to the database. Hangar's API ignores requests that did not come through the proxy, so an app gets no more access than any device on your network. Each app is limited to 4096 processes and gets less CPU priority than Hangar and the database. |
+| Scripts injected into the dashboard | Build logs are shown as text, never as HTML, and the dashboard's security headers only allow its own scripts.                                                                                                                                                                                          |
+| Exposure on your network            | On your laptop, Hangar listens only on the Tailscale address. Public access happens only if you set up a Cloudflare tunnel, and even then the dashboard stays private unless you choose otherwise.                                                                                                     |
 
 **One thing to keep in mind:** Hangar runs code from the repositories you connect, and it controls Docker, which means it effectively controls the server. Only connect repositories you trust.
 
@@ -358,13 +358,14 @@ This builds Hangar's image on this PC, copies it to the laptop over your SSH con
 
 ### On the laptop itself
 
-| Command                                   | Does                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| `sudo hangar-admin issue-setup-code`      | Prints a new boarding pass (only before the first account exists).        |
-| `sudo hangar-admin reset-password <user>` | Sets a new password (typed on the next line) and signs out every session. |
-| `sudo hangar-update`                      | Backs up the database, then updates and restarts Hangar.                  |
-| `sudo hangar-uninstall`                   | Removes Hangar, asking before deleting data.                              |
-| `sudo docker logs hangar-core`            | Hangar's own log, for troubleshooting.                                    |
+| Command                                   | Does                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `sudo hangar-admin issue-setup-code`      | Prints a new boarding pass (only before the first account exists).                                                    |
+| `sudo hangar-admin reset-password <user>` | Sets a new password (typed on the next line) and signs out every session.                                             |
+| `sudo hangar-admin set-lan-ip <address>`  | Changes the address Hangar answers on, if the server's IP changed.                                                    |
+| `sudo hangar-update`                      | Backs up the database, then updates and restarts Hangar. If the new version fails to start, it prints how to go back. |
+| `sudo hangar-uninstall`                   | Removes Hangar, asking before deleting data.                                                                          |
+| `sudo docker logs hangar-core`            | Hangar's own log, for troubleshooting.                                                                                |
 
 ---
 
@@ -372,8 +373,8 @@ This builds Hangar's image on this PC, copies it to the laptop over your SSH con
 
 | Command                       | What it checks                                                                                                                                                                                                                                       | Needs                                                                                                       |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                   | **Unit tests** (121): small pieces in isolation, such as encryption, validation, the routing file, wording completeness, log parsing, formatting.                                                                                                    | Nothing.                                                                                                    |
-| `pnpm test:integration`       | **Integration tests** (46): real deploys of every sample app, failed deploys keeping the old version, rollback, cancel, killing Hangar mid-build, the safety checks, the API's sign-in and validation, and the whole flow over HTTP through Traefik. | `pnpm dev` running.                                                                                         |
+| `pnpm test`                   | **Unit tests** (134): small pieces in isolation, such as encryption, validation, the routing file, wording completeness, log parsing, formatting.                                                                                                    | Nothing.                                                                                                    |
+| `pnpm test:integration`       | **Integration tests** (50): real deploys of every sample app, failed deploys keeping the old version, rollback, cancel, killing Hangar mid-build, the safety checks, the API's sign-in and validation, and the whole flow over HTTP through Traefik. | `pnpm dev` running.                                                                                         |
 | `pnpm test:e2e`               | **Browser tests**: a real browser completes the Preflight Checklist with a test flight, then creates, deploys, configures, rolls back, and deletes a project, on a desktop and a phone screen.                                                       | `pnpm dev` running, and the browser container (see `e2e/`). This resets the development instance's account. |
 | `pnpm lint`, `pnpm typecheck` | Code style and type mistakes.                                                                                                                                                                                                                        | Nothing.                                                                                                    |
 
@@ -395,11 +396,13 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 
 ## 13. When something goes wrong
 
-| Symptom                               | Where to look                                                                                                                |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| A deploy failed                       | Open the deployment. The "What went wrong" box explains it in plain words, and the Flight Recorder shows the full build log. |
-| An app shows "This app isn't running" | The project is stopped, has no live deployment, or the name is wrong. Check its page in the Control Tower.                   |
-| The app deployed but behaves oddly    | The project's **Radio** tab shows what the app prints while running.                                                         |
-| The dashboard does not load           | On the laptop: `sudo docker ps` (are `hangar-core`, `hangar-db`, and `hangar-proxy` up?) and `sudo docker logs hangar-core`. |
-| Lost the boarding pass                | `sudo hangar-admin issue-setup-code` on the laptop.                                                                          |
-| Forgot the password                   | `sudo hangar-admin reset-password <username>` on the laptop.                                                                 |
+| Symptom                                                         | Where to look                                                                                                                  |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| A deploy failed                                                 | Open the deployment. The "What went wrong" box explains it in plain words, and the Flight Recorder shows the full build log.   |
+| An app shows "This app isn't running"                           | The project is stopped, has no live deployment, or the name is wrong. Check its page in the Control Tower.                     |
+| New commits stop deploying                                      | A stopped app does not deploy new commits until you start it (or press Deploy). Check the project's "New commits" setting too. |
+| The Control Tower stopped opening after the server's IP changed | On the server: `sudo hangar-admin set-lan-ip <new address>`.                                                                   |
+| The app deployed but behaves oddly                              | The project's **Radio** tab shows what the app prints while running.                                                           |
+| The dashboard does not load                                     | On the laptop: `sudo docker ps` (are `hangar-core`, `hangar-db`, and `hangar-proxy` up?) and `sudo docker logs hangar-core`.   |
+| Lost the boarding pass                                          | `sudo hangar-admin issue-setup-code` on the laptop.                                                                            |
+| Forgot the password                                             | `sudo hangar-admin reset-password <username>` on the laptop.                                                                   |

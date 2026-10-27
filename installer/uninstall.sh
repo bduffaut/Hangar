@@ -17,10 +17,12 @@ managed=$(docker ps -aq --filter label=hangar.managed=true)
 [ -f "$HANGAR_DIR/docker-compose.yml" ] && compose down --remove-orphans
 ok "Stopped"
 
+kept_database=0
 if confirm "Delete the database (projects, deployments, settings, encrypted environment variables)?"; then
   docker volume rm hangar_hangar-db-data hangar_traefik-dynamic hangar_hangar-builds >/dev/null 2>&1 || true
   ok "Database deleted"
 else
+  kept_database=1
   ok "Kept the database volume (hangar_hangar-db-data)"
 fi
 
@@ -30,7 +32,10 @@ if confirm "Delete the app images Hangar built (hangar/*)?"; then
   ok "App images deleted"
 fi
 
-if confirm "Delete $HANGAR_DIR, including the secrets file and database backups?"; then
+if [ "$kept_database" = 1 ]; then
+  # The kept database is useless without its password and encryption key, which live in .env.
+  ok "Kept $HANGAR_DIR: its .env holds the password and key the kept database needs"
+elif confirm "Delete $HANGAR_DIR, including the secrets file and database backups?"; then
   rm -rf "$HANGAR_DIR"
   ok "Deleted $HANGAR_DIR"
 fi

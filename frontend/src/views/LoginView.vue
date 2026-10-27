@@ -49,6 +49,9 @@ async function signIn() {
       <BaseField :label="authCopy.password" for="login-password">
         <BasePassword id="login-password" v-model="password" autocomplete="current-password" />
       </BaseField>
+      <BaseMessage v-if="route.query.expired && !error" tone="info">{{
+        authCopy.sessionExpired
+      }}</BaseMessage>
       <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
       <BaseButton type="submit" variant="primary" :loading="busy" :label="authCopy.signIn" fluid />
     </form>

@@ -13,7 +13,7 @@ defineProps<{ tabs: { value: T; label: string; hint?: string }[] }>()
 <template>
   <Tabs v-model:value="model" lazy>
     <TabList>
-      <Tab v-for="tab in tabs" :key="tab.value" :value="tab.value" :title="tab.hint">
+      <Tab v-for="tab in tabs" :key="tab.value" v-hint.top="tab.hint" :value="tab.value">
         {{ tab.label }}
       </Tab>
     </TabList>

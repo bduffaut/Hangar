@@ -53,17 +53,19 @@ export interface NewDeployment {
  */
 export async function insertQueuedDeployment(db: Db, values: NewDeployment) {
   return db.transaction(async (tx) => {
-    const superseded = await tx
-      .update(deployments)
-      .set({ status: 'cancelled', failureCode: 'superseded', finishedAt: new Date() })
-      .where(and(eq(deployments.projectId, values.projectId), eq(deployments.status, 'queued')))
-      .returning({ id: deployments.id })
+    // Updating the project row first locks it, so two enqueues at once take turns and the second
+    // supersedes the first's deployment instead of missing it.
     const [project] = await tx
       .update(projects)
       .set({ nextDeploymentNumber: sql`${projects.nextDeploymentNumber} + 1` })
       .where(eq(projects.id, values.projectId))
       .returning({ number: sql<number>`${projects.nextDeploymentNumber} - 1` })
     if (!project) throw new Error(`Project ${values.projectId} not found`)
+    const superseded = await tx
+      .update(deployments)
+      .set({ status: 'cancelled', failureCode: 'superseded', finishedAt: new Date() })
+      .where(and(eq(deployments.projectId, values.projectId), eq(deployments.status, 'queued')))
+      .returning({ id: deployments.id })
     const [deployment] = await tx
       .insert(deployments)
       .values({ ...values, number: project.number, status: 'queued' })
@@ -120,7 +122,14 @@ export async function markDeploymentLive(
     if (!row) return 'moved'
     await tx
       .update(projects)
-      .set({ currentDeploymentId: deployment.id, desiredState: 'running' })
+      // Deploying or rolling back by hand means "run this"; an automatic deploy (only made while
+      // the project is running) leaves a Stop pressed since then in place.
+      .set({
+        currentDeploymentId: deployment.id,
+        ...(deployment.trigger === 'manual' || deployment.trigger === 'rollback'
+          ? { desiredState: 'running' as const }
+          : {}),
+      })
       .where(eq(projects.id, deployment.projectId))
     return 'live'
   })
@@ -188,10 +197,15 @@ export async function listDeploymentsById(db: Db, ids: string[]): Promise<Deploy
 }
 
 /** The env var fingerprint of the project's most recent build before `beforeNumber`. */
+/**
+ * The env var hash of the newest earlier build, or with `readyOnly` of the newest earlier build
+ * that succeeded. Null when there is none.
+ */
 export async function previousSecretsHash(
   db: Db,
   projectId: string,
   beforeNumber: number,
+  { readyOnly = false } = {},
 ): Promise<string | null> {
   const [row] = await db
     .select({ secretsHash: deployments.secretsHash })
@@ -201,6 +215,7 @@ export async function previousSecretsHash(
         eq(deployments.projectId, projectId),
         lt(deployments.number, beforeNumber),
         isNotNull(deployments.secretsHash),
+        readyOnly ? eq(deployments.status, 'ready') : undefined,
       ),
     )
     .orderBy(desc(deployments.number))
