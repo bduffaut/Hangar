@@ -29,6 +29,13 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Use Docker's containerd image store (Railpack needs it)
+        run: |
+          config=/etc/docker/daemon.json
+          current=$(sudo cat $config 2>/dev/null || echo '{}')
+          echo "$current" | jq '.features["containerd-snapshotter"] = true' | sudo tee $config
+          sudo systemctl restart docker
+          docker info --format '{{json .DriverStatus}}'
       - name: Start the dev stack
         run: |
           docker network create hangar

@@ -2,7 +2,7 @@ import { ENV_KEY_PATTERN } from '@hangar/shared'
 import { createHash } from 'node:crypto'
 import { access, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { CommandError, type LineHandler, run } from './process.ts'
+import { CommandError, type LineHandler, run, runChecked } from './process.ts'
 
 export interface BuildRequest {
   /** Directory holding the source to build (the clone plus the project's root directory). */
@@ -25,6 +25,21 @@ export type BuildMethod = 'dockerfile' | 'railpack'
 // `railpack prepare` exits with 75 for transient problems (e.g. a download failed) worth one retry.
 const RAILPACK_RETRYABLE_EXIT = 75
 
+export const CONTAINERD_STORE_REQUIRED =
+  "This repository has no Dockerfile, so Hangar builds it with Railpack. Railpack needs Docker's " +
+  'containerd image store, which is turned off on this server. Turn it on by adding ' +
+  '"features": { "containerd-snapshotter": true } to /etc/docker/daemon.json and restarting ' +
+  'Docker, or add a Dockerfile to the repository.'
+
+/**
+ * Railpack's frontend uses BuildKit merge operations, which Docker's built-in BuildKit only
+ * supports with the containerd image store (the default for new installs since Docker 29).
+ */
+async function usesContainerdStore(): Promise<boolean> {
+  const { stdout } = await runChecked('docker', ['info', '--format', '{{json .DriverStatus}}'])
+  return stdout.includes('io.containerd.snapshotter')
+}
+
 async function exists(file: string): Promise<boolean> {
   return access(file).then(
     () => true,
@@ -33,6 +48,8 @@ async function exists(file: string): Promise<boolean> {
 }
 
 export function createBuilder(options: { railpackFrontend: string | null }) {
+  let containerdStore: Promise<boolean> | null = null
+
   /** Writes each secret to its own file so values never pass through argv or the CLI's env. */
   async function secretArgs(request: BuildRequest): Promise<string[]> {
     const dir = path.join(request.workDir, 'secrets')
@@ -76,6 +93,11 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
         if (!options.railpackFrontend) {
           throw new Error('HANGAR_RAILPACK_FRONTEND is not set, so Railpack builds are unavailable')
         }
+        containerdStore ??= usesContainerdStore().catch((error: unknown) => {
+          containerdStore = null
+          throw error
+        })
+        if (!(await containerdStore)) throw new Error(CONTAINERD_STORE_REQUIRED)
         const planFile = await railpackPlan(request)
         const secretsHash = createHash('sha256')
           .update(
