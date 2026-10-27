@@ -7,3 +7,9 @@ export const POLL_INTERVAL_MS = 60_000
 
 export const IMAGES_KEPT_PER_PROJECT = 5
 export const LOGS_KEPT_PER_PROJECT = 20
+
+export const HEALTH_CHECK_INTERVAL_MS = 1_000
+export const CONTAINER_STOP_GRACE_SECONDS = 10
+
+/** Env var names: what a POSIX shell accepts, so they work as build secret ids and file names. */
+export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/

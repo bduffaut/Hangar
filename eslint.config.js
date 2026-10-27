@@ -5,7 +5,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'apps/server/drizzle/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', 'apps/server/drizzle/**', '.cache/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],
@@ -17,7 +17,7 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
   {
-    files: ['apps/web/src/**'],
+    files: ['apps/web/src/**', 'fixtures/vite-app/src/**'],
     languageOptions: { globals: globals.browser },
   },
   {

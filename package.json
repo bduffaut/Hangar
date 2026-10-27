@@ -9,11 +9,13 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:down": "docker compose -f docker/compose.dev.yml down",
+    "hangar": "docker exec hangar-core pnpm --silent --filter @hangar/server hangar",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "pnpm -r typecheck",
-    "test": "vitest run",
+    "test": "vitest run --project shared --project server",
+    "test:integration": "vitest run --project integration",
     "db:generate": "pnpm --filter @hangar/server db:generate"
   },
   "devDependencies": {

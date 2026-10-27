@@ -17,6 +17,8 @@ const envSchema = z.object({
   HANGAR_TRAEFIK_API_URL: z.url().default('http://hangar-proxy:8082'),
   HANGAR_CORE_URL: z.url().default('http://hangar-core:3000'),
   HANGAR_MIGRATIONS_DIR: z.string().min(1).optional(),
+  HANGAR_RAILPACK_FRONTEND: z.string().min(1).optional(), // set by the core image
+  HANGAR_BUILD_DIR: z.string().min(1).default('/tmp/hangar-builds'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.string().default('development'),
 })
@@ -46,6 +48,8 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     traefikApiUrl: e.HANGAR_TRAEFIK_API_URL,
     coreUrl: e.HANGAR_CORE_URL,
     migrationsDir: e.HANGAR_MIGRATIONS_DIR ?? path.resolve('drizzle'),
+    railpackFrontend: e.HANGAR_RAILPACK_FRONTEND ?? null,
+    buildDir: e.HANGAR_BUILD_DIR,
     logLevel: e.LOG_LEVEL,
     isProduction: e.NODE_ENV === 'production',
   }

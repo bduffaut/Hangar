@@ -9,3 +9,9 @@ export async function seedSettings(ctx: Ctx): Promise<void> {
   await setSettings(ctx.db, { lanIp: ctx.config.lanIp, lanDomain: sslipDomain(ctx.config.lanIp) })
   ctx.log.info({ lanIp: ctx.config.lanIp }, 'Seeded LAN address from installer')
 }
+
+/** The GitHub token for private repositories, or null when none is connected. */
+export async function getGithubToken(ctx: Ctx): Promise<string | null> {
+  const { githubToken } = await getSettings(ctx.db)
+  return githubToken ? ctx.crypto.open(githubToken, 'setting:githubToken') : null
+}

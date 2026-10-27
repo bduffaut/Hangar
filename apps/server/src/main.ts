@@ -1,41 +1,33 @@
 import { buildApp } from './app.ts'
 import { ConfigError, loadConfig } from './config.ts'
-import type { Ctx } from './context.ts'
-import { createDb } from './db/client.ts'
+import { createContext } from './context.ts'
 import { runMigrations } from './db/migrate.ts'
 import { createLogger } from './logger.ts'
 import { seedSettings } from './modules/settings/service.ts'
-import { createProxy } from './platform/proxy.ts'
-import { syncRouting } from './worker/reconciler.ts'
+import { startWorker } from './worker/jobs.ts'
 
 async function main() {
   const config = loadConfig(process.env)
   const log = createLogger(config)
-  const { db, pool } = createDb(config.databaseUrl)
+  const { ctx, pool, close } = createContext(config, log)
 
   await runMigrations(pool, config.migrationsDir)
   log.info('Database is up to date')
-
-  const ctx: Ctx = {
-    config,
-    db,
-    log,
-    proxy: createProxy({ dynamicDir: config.traefikDynamicDir, apiUrl: config.traefikApiUrl }),
-  }
   await seedSettings(ctx)
+  await ctx.queue.start()
 
   const runsApi = config.role !== 'worker'
   const runsWorker = config.role !== 'api'
 
-  if (runsWorker) await syncRouting(ctx)
-
+  const worker = runsWorker ? await startWorker(ctx) : null
   const app = runsApi ? buildApp(ctx) : null
   await app?.listen({ host: '0.0.0.0', port: config.port })
 
   const shutdown = async (signal: string) => {
     log.info({ signal }, 'Shutting down')
     await app?.close()
-    await pool.end()
+    await worker?.stop()
+    await close()
     process.exit(0)
   }
   process.once('SIGTERM', shutdown)

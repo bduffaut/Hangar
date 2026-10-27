@@ -18,3 +18,24 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start the dev stack
+        run: |
+          docker network create hangar
+          docker compose -f docker/compose.dev.yml up -d --build --wait
+          for i in $(seq 1 60); do curl -sf localhost:3000/api/health && exit 0; sleep 2; done
+          exit 1
+      - run: pnpm test:integration
+      - name: Core logs
+        if: failure()
+        run: docker logs hangar-core

@@ -32,6 +32,8 @@ Things we deliberately do **not** use: a dependency-injection framework, a repos
 | D9  | The Control Tower also answers on the bare `http://<lan-ip>`.                                                                                                                                                          | Some routers apply DNS-rebinding protection that blocks sslip.io answers pointing at private IPs. The bare IP always works, and the UI explains the issue when it is detected.                                                                                                                  |
 | D10 | Public hostnames are limited to one level below the domain (`blog.example.com`).                                                                                                                                       | Cloudflare's free Universal SSL certificate covers only `*.example.com`.                                                                                                                                                                                                                        |
 | D11 | Project env vars are passed to **every build as BuildKit secrets** and to the container at runtime.                                                                                                                    | Secrets are available during the build but are never stored in image layers or history. Railpack consumes them automatically; a Dockerfile can opt in with `RUN --mount=type=secret,id=KEY`. Build args are not used because they leak into image history.                                      |
+| D15 | A deployment is marked `ready` **in the same transaction** that makes it current, after Traefik confirms the new route and **before** the previous container is stopped.                                               | A crash between switching and marking would otherwise leave a live deployment recorded as interrupted. Stopping the old container last means a crash at any point leaves something serving; recovery removes the extra container.                                                               |
+| D16 | Child processes (git, railpack, buildx) get a **minimal environment** (`PATH`, `HOME`, `DOCKER_HOST`, …) plus what the step needs. Base variables win over project env vars.                                           | Hangar's own secrets (`DATABASE_URL`, instance key) never reach a build, and a project env var named `PATH` cannot break the build tooling.                                                                                                                                                     |
 | D12 | Encrypted values use one envelope format everywhere (see [Encryption](#encryption)), so `env_vars` has no separate IV column.                                                                                          | One helper, one format, versioned for future key rotation.                                                                                                                                                                                                                                      |
 | D13 | In development the server runs **inside a container** (`core-dev`) on the `hangar` network, using the same base image as production.                                                                                   | Container DNS names, the Docker socket, `git`, `buildx`, and `railpack` behave identically in dev and prod, on any host OS.                                                                                                                                                                     |
 | D14 | Repository and images live under the GitHub account **`bduffaut`**: `github.com/bduffaut/hangar`, `ghcr.io/bduffaut/hangar-core`. The test flight is a separate public repo, `github.com/bduffaut/hangar-test-flight`. | A personal account is enough for the MVP. GitHub redirects transferred repos, so moving to an org later is cheap. A tiny separate repo keeps the onboarding clone fast.                                                                                                                         |
@@ -94,6 +96,7 @@ apps/
         client.ts
       platform/            Adapters to the outside world. No business logic.
         docker.ts          dockerode wrapper: containers, images, stats, logs, networks
+        process.ts         execFile-style runner: argument arrays, line streaming, abort, minimal env
         builder.ts         buildx + railpack invocation, streaming output
         git.ts             ls-remote, shallow clone at SHA, commit metadata
         proxy.ts           Render + atomically write dynamic.yml; query Traefik API
@@ -105,11 +108,15 @@ apps/
         auth/  settings/  projects/  deployments/  env-vars/  github/  metrics/  system/
       worker/
         pipeline.ts        clone → build → run → health check → switch (each step a function)
-        jobs.ts            pg-boss handlers
+        app-container.ts   Start a deployment's container (shared by pipeline and reconciler)
+        deployment-log.ts  Batched build-log writer + NOTIFY
+        jobs.ts            pg-boss handlers, cancel listener, crash recovery
         reconciler.ts      Database → containers, dynamic.yml, cloudflared
         poller.ts          ls-remote polling with backoff
         gc.ts              Image retention, log pruning, temp-dir sweep
       context.ts           Builds the `ctx` object passed to services
+    scripts/
+      hangar.ts            Dev CLI (`pnpm hangar …`) for driving the pipeline before the API exists
     test/
       integration/         Unit tests sit next to their source as *.test.ts
   web/
@@ -252,21 +259,24 @@ In one transaction:
 
 Each step receives an `AbortSignal` that fires on timeout or cancel.
 
-1. **Clone.** `git init`, `git -c http.extraHeader="Authorization: Basic …" fetch --depth 1 origin <sha>`, `git checkout FETCH_HEAD`, into `/tmp/hangar-builds/<deploymentId>`. The token is never written into a URL, `.git/config`, or logs. Commit message and author come from `git log -1`.
+1. **Clone.** `git init`, `git fetch --depth 1 origin <sha>`, `git checkout FETCH_HEAD`, into `/tmp/hangar-builds/<deploymentId>/src`. A token is sent as an `http.extraHeader` set through `GIT_CONFIG_*` environment variables, so it never appears in a URL, on a command line, in `.git/config`, or in logs. Commit message and author come from `git log -1`.
 2. **Build.** Build context is `<clone>/<root_dir>`.
-   - If a `Dockerfile` exists: `docker buildx build --load -t <tag> [--secret id=K,env=K …] <ctx>`.
-   - Otherwise: `railpack prepare <ctx> --plan-out <tmp>/plan.json`, then `docker buildx build --load -t <tag> --build-arg BUILDKIT_SYNTAX=<pinned railpack frontend> -f <tmp>/plan.json [--secret …] <ctx>`.
-   - Env vars are passed to the child process through its environment, never on the command line.
+   - If a `Dockerfile` exists: `docker buildx build --load -t <tag> [--secret id=K,src=<file> …] <ctx>`.
+   - Otherwise: `railpack prepare <ctx> --plan-out <work>/railpack-plan.json [--env K …]` (bare names; Railpack reads values from its environment and lists them as secrets in the plan, and exit code 75 is retried once), then `docker buildx build --load -t <tag> --build-arg BUILDKIT_SYNTAX=<railpack frontend> --build-arg secrets-hash=<sha256 of values> --build-arg cache-key=<projectId> -f <plan> [--secret …] <ctx>`.
+   - Secret values are written to `0600` files in the work directory (outside the build context) and passed with `src=`, never on a command line. The work directory is deleted afterwards.
+   - Railpack is pinned in `docker/core.Dockerfile` (`RAILPACK_VERSION`, checksums per architecture) and its frontend by digest in `HANGAR_RAILPACK_FRONTEND`. Upgrade both together.
    - stdout and stderr are split into lines, batched (every 100 ms or 200 lines), inserted into `deployment_logs`, and announced with a NOTIFY carrying the highest `seq`.
 3. **Resolve port.** `projects.port` if set → the image's single `ExposedPorts` entry → `3000`. Stored on the deployment. `PORT=<port>` is always injected.
 4. **Run.** Create and start `hangar-app-<project>-<n>` on the `hangar` network with decrypted env vars, `RestartPolicy: unless-stopped`, the memory limit, and the managed labels. It is not routed yet.
-5. **Health check.** `GET http://hangar-app-<project>-<n>:<port>/` every second for up to 60 s. Any HTTP response counts as healthy; only connection errors and timeouts count as failure.
-6. **Switch.** Under a per-project Postgres advisory lock:
-   1. Set `current_deployment_id`, then re-render `dynamic.yml`.
-   2. Poll the Traefik API until the project's service points at the new container (timeout 10 s).
-   3. Stop the previous container with SIGTERM and a 10 s grace period, then remove it.
-   4. Transition the deployment to `ready`.
-7. **Always** (in `finally`): delete the clone directory. On failure, remove the new container and leave the previous one serving.
+5. **Health check.** `GET http://hangar-app-<project>-<n>:<port>/` every second for up to 60 s. Any HTTP response counts as healthy; only connection errors and timeouts count as failure. If the container exits or restarts first, the check fails at once and the container's last 20 output lines go into the build log.
+6. **Switch** (D15). Under a per-project Postgres advisory lock:
+   1. Re-render `dynamic.yml` with this project pointed at the new container.
+   2. Poll the Traefik API until the project's service points at the new container (timeout 10 s). On timeout, re-render from the database and fail.
+   3. In one transaction, set `current_deployment_id` and transition the deployment to `ready`.
+   4. After the lock: stop every other managed container of the project with SIGTERM and a 10 s grace period, then remove it.
+7. **Always** (in `finally`): delete the work directory. On failure, remove the new container and leave the previous one serving.
+
+A cancel only takes effect while `building`; the 15-minute timeout covers clone and build. When the worker shuts down mid-build it kills the build and records `interrupted`.
 
 ### Rollback
 
@@ -280,12 +290,13 @@ Creates a new deployment (`trigger = rollback`, `source_deployment_id`, same `im
 
 These update `projects.desired_state` and then act on the current container. The reconciler respects `desired_state` on boot.
 
-### Crash recovery (on worker start)
+### Crash recovery (on worker start, `worker/jobs.ts`)
 
 1. Mark every `building` or `deploying` deployment `failed` with `interrupted`.
 2. Remove managed containers whose deployment is not the project's current one.
-3. Run the reconciler.
-4. Sweep `/tmp/hangar-builds`.
+3. Sweep `/tmp/hangar-builds`.
+4. Run the reconciler.
+5. Re-send a job for every `queued` deployment. Jobs use the deployment ID as the pg-boss job ID, so this never queues a duplicate.
 
 ### Reconciler
 
@@ -293,7 +304,9 @@ Idempotent and safe to run at any time:
 
 - For each project with `desired_state = running` and a current deployment, ensure its container exists and is running (recreate from the image if missing).
 - Render `dynamic.yml` from projects, settings, and current deployments, and write it atomically (write a temporary file in the same directory, then rename).
-- Ensure `hangar-tunnel` runs if and only if a Cloudflare token is set, recreating it when the token changes.
+- Ensure `hangar-tunnel` runs if and only if a Cloudflare token is set, recreating it when the token changes. _(Lands in stage 3 with the settings API.)_
+
+A recreated container gets the project's env vars as they are now, which may differ from when the deployment was built.
 
 ---
 
@@ -301,14 +314,14 @@ Idempotent and safe to run at any time:
 
 The routing file (`hangar.yml` in Traefik's dynamic directory) is rendered by a pure function in `platform/proxy.ts`, so it is unit-testable. Traefik applies file changes after a short debounce (about 2 s), which is why the switch step confirms a route through the Traefik API before stopping the old container.
 
-| Router              | Entrypoint      | Rule                                                        | Target                    |
-| ------------------- | --------------- | ----------------------------------------------------------- | ------------------------- |
-| `tower`             | `web`           | `Host(tower.<lanDomain>) \|\| Host(<lanIp>)`                | `hangar-core:3000`        |
-| `tower-public`      | `public`        | `Host(tower.<publicDomain>)`, only if `exposeTowerPublicly` | `hangar-core:3000`        |
-| `hooks`             | `public`        | `Host(hooks.<publicDomain>) && PathPrefix(/api/webhooks/)`  | `hangar-core:3000`        |
-| `app-<name>`        | `web`           | `Host(<name>.<lanDomain>)`                                  | current container         |
-| `app-<name>-public` | `public`        | `Host(<name>.<publicDomain>)`                               | current container         |
-| `fallback`          | `web`           | lowest priority catch-all                                   | core's "no such app" page |
+| Router              | Entrypoint | Rule                                                        | Target                    |
+| ------------------- | ---------- | ----------------------------------------------------------- | ------------------------- |
+| `tower`             | `web`      | `Host(tower.<lanDomain>) \|\| Host(<lanIp>)`                | `hangar-core:3000`        |
+| `tower-public`      | `public`   | `Host(tower.<publicDomain>)`, only if `exposeTowerPublicly` | `hangar-core:3000`        |
+| `hooks`             | `public`   | `Host(hooks.<publicDomain>) && PathPrefix(/api/webhooks/)`  | `hangar-core:3000`        |
+| `app-<name>`        | `web`      | `Host(<name>.<lanDomain>)`                                  | current container         |
+| `app-<name>-public` | `public`   | `Host(<name>.<publicDomain>)`                               | current container         |
+| `fallback`          | `web`      | lowest priority catch-all                                   | core's "no such app" page |
 
 On the LAN, a stopped, never-deployed, or unknown app falls through to core, which shows a plain page saying the app is not running. On the public entrypoint there is deliberately no fallback: unknown hosts get Traefik's plain 404, so public traffic can only reach core through `hooks` or an explicitly exposed tower.
 
@@ -449,7 +462,9 @@ The host OS is Windows 11 with WSL2 (Ubuntu) and Docker Desktop using WSL integr
   - `docker compose -f docker/compose.dev.yml up`: `postgres`, `traefik`, and `core-dev` (built from the core Dockerfile's dev stage, source bind-mounted, `tsx watch`, Docker socket mounted, on the `hangar` network, port 3000 published).
   - the Vite dev server on the host at `http://localhost:5173`, proxying `/api` to `localhost:3000`.
 - Apps deployed in dev are reachable from the Windows browser at `http://<name>.127-0-0-1.sslip.io`.
-- `pnpm test` runs unit tests. `pnpm test:integration` needs Docker. `pnpm test:e2e` runs Playwright against the dev stack.
+- `pnpm test` runs unit tests. `pnpm test:integration` needs the dev stack running. `pnpm test:e2e` runs Playwright against the dev stack.
+- `pnpm hangar <command>` runs the dev CLI inside `hangar-core` (add a project, set env vars, deploy, roll back, cancel, history, logs).
+- The dev image trusts every directory for git (`safe.directory '*'`), because bind-mounted files belong to the host user.
 
 ---
 
@@ -458,11 +473,13 @@ The host OS is Windows 11 with WSL2 (Ubuntu) and Docker Desktop using WSL integr
 | Layer       | Tool                                                  | Covers                                                                                                                                                                                                                           |
 | ----------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Unit        | Vitest                                                | Shared schemas, state machine transitions, `seal`/`open`, webhook HMAC, hostname rules and reserved names, `dynamic.yml` rendering, every status and failure code present in `copy.ts`.                                          |
-| Integration | Vitest + real Docker                                  | Each fixture deploys and responds at its hostname; `broken-healthcheck` fails while the previous version keeps serving; rollback restores the previous image; cancel kills a build; restart mid-build recovers to `interrupted`. |
+| Integration | Vitest + the dev stack                                | Each fixture deploys and responds at its hostname; `broken-healthcheck` fails while the previous version keeps serving; rollback restores the previous image; cancel kills a build; restart mid-build recovers to `interrupted`. |
 | End to end  | Playwright                                            | Preflight Checklist, create project, watch a deploy reach ready, roll back.                                                                                                                                                      |
 | Installer   | Manual checklist on a clean Ubuntu 24.04 Multipass VM | Install, re-run install, update, uninstall.                                                                                                                                                                                      |
 
 CI (GitHub Actions): lint, typecheck, unit tests, and integration tests on every push. Multi-arch image build and publish on `v*` tags.
+
+Integration tests run on the host against the dev stack. They write to the dev database (projects named `it-<run>-…`, removed afterwards), commit the fixtures to a throwaway repository under `.cache/` that `hangar-core` clones over `file://`, and check apps through Traefik on port 80. The crash test kills and restarts `hangar-core`.
 
 ---
 
@@ -473,7 +490,7 @@ Each stage is finished only when its exit criteria pass.
 1. **Foundation.** Monorepo, tooling, `config.ts`, Drizzle schema and first migration, dev compose, `proxy.ts`.
    _Exit:_ a hand-started container is reachable at `x.127-0-0-1.sslip.io` via a generated `dynamic.yml`.
 2. **Pipeline.** `git.ts`, `builder.ts`, `docker.ts`, `pipeline.ts`, reconciler, gc, triggered from a script.
-   _Exit:_ every fixture deploys; the broken fixture leaves the previous version serving; rollback works; killing the process mid-build recovers cleanly.
+   _Exit:_ every fixture deploys; the broken fixture leaves the previous version serving; rollback works; killing the process mid-build recovers cleanly. **Done** (`pnpm test:integration`).
 3. **API.** Contract, auth and sessions, setup and `hangar-admin`, projects, deployments, env vars, SSE, poller, webhooks, cancel.
    _Exit:_ the full flow works over HTTP; unit tests pass.
 4. **Control Tower.** `copy.ts` first, then all views.

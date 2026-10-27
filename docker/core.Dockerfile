@@ -11,10 +11,32 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
  && rm -rf /var/lib/apt/lists/*
+
+# Railpack builds repos without a Dockerfile. The CLI writes a build plan; the matching BuildKit
+# frontend (HANGAR_RAILPACK_FRONTEND, pinned by digest) turns the plan into an image.
+ARG RAILPACK_VERSION=0.40.1
+ARG RAILPACK_SHA256_AMD64=2842de93e68713af9037e0bc0a398d7da78f3b96aa4804303a638db2bc69bd30
+ARG RAILPACK_SHA256_ARM64=c24a064b586b8f4f8c2fab44dd5ef19253e4c6cc4e1df793b3ae19cd87f7a5d4
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) arch=x86_64; sum=$RAILPACK_SHA256_AMD64 ;; \
+      arm64) arch=arm64; sum=$RAILPACK_SHA256_ARM64 ;; \
+      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /tmp/railpack.tar.gz \
+    "https://github.com/railwayapp/railpack/releases/download/v${RAILPACK_VERSION}/railpack-v${RAILPACK_VERSION}-${arch}-unknown-linux-musl.tar.gz" \
+ && echo "$sum  /tmp/railpack.tar.gz" | sha256sum -c - \
+ && tar -xzf /tmp/railpack.tar.gz -C /usr/local/bin railpack \
+ && rm /tmp/railpack.tar.gz \
+ && railpack --version
+ENV HANGAR_RAILPACK_FRONTEND=ghcr.io/railwayapp/railpack-frontend:v0.40.1@sha256:f1973377693af30c9b37a92c97c661c07b277ccdc6be909213c74c771f8d2d6d
+
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
 
 # Development: the repo is bind-mounted at /repo with node_modules installed on the host.
 FROM base AS dev
+# Bind-mounted files belong to the host user; let git read them (tests clone from file:// repos).
+RUN git config --system --add safe.directory '*'
 WORKDIR /repo
 CMD ["pnpm", "--filter", "@hangar/server", "dev"]
