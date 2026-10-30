@@ -87,8 +87,8 @@ export const projects = pgTable('projects', {
     onDelete: 'set null',
   }),
   desiredState: desiredState().notNull().default('running'),
-  /** Exact public hostnames the app also answers on, like example.com. Public entrypoint only. */
-  domains: text()
+  /** Public addresses, like blog.example.com or example.com. Public entrypoint only. */
+  hostnames: text()
     .array()
     .notNull()
     .default(sql`'{}'::text[]`),

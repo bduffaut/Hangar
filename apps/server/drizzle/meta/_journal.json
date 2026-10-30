@@ -29,6 +29,20 @@
       "when": 1793344572366,
       "tag": "0003_project_domains",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793346554857,
+      "tag": "0004_project_hostnames",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793346567345,
+      "tag": "0005_drop_project_domains",
+      "breakpoints": true
     }
   ]
 }

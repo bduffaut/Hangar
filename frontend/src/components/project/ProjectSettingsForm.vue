@@ -5,7 +5,6 @@ import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   parseWholeNumber,
-  MAX_PROJECT_DOMAINS,
   type ProjectView,
   type SettingsView,
   toastCopy,
@@ -24,11 +23,11 @@ import {
   BaseInput,
   BaseMessage,
   BaseSelect,
-  BaseTextarea,
   type SelectOption,
   useNotify,
 } from '../../ui/index.ts'
 import CopyField from '../CopyField.vue'
+import AddressEditor from './AddressEditor.vue'
 import HgPanel from '../HgPanel.vue'
 
 const props = defineProps<{ project: ProjectView }>()
@@ -86,38 +85,31 @@ async function save() {
   }
 }
 
-// Custom domains: exact addresses on the public side, applied as soon as they are saved.
-const domains = ref(props.project.domains.join('\n'))
-const domainsBusy = ref(false)
-const domainsError = ref<string | null>(null)
+// Public addresses: applied as soon as they are saved, no deploy needed.
+const hostnames = ref([...props.project.hostnames])
+const addressesBusy = ref(false)
+const addressesError = ref<string | null>(null)
+const addressEditor = ref<InstanceType<typeof AddressEditor> | null>(null)
+const addressesChanged = computed(() => hostnames.value.join() !== props.project.hostnames.join())
 const settings = ref<SettingsView | null>(null)
 onMounted(async () => {
   settings.value = await api('getSettings').catch(() => null)
 })
-async function saveDomains() {
-  domainsBusy.value = true
-  domainsError.value = null
+async function saveAddresses() {
+  addressesBusy.value = true
+  addressesError.value = null
   try {
-    const list = domains.value
-      .split(/[\s,]+/)
-      .map((d) =>
-        d
-          .trim()
-          .replace(/^https?:\/\//, '')
-          .replace(/\/.*$/, ''),
-      )
-      .filter(Boolean)
     const updated = await api('updateProject', {
       params: { id: props.project.id },
-      body: { domains: list },
+      body: { hostnames: hostnames.value },
     })
     projects.upsert(updated)
-    domains.value = updated.domains.join('\n')
-    notify.success(toastCopy.saved, 'Domains apply right away.')
+    hostnames.value = [...updated.hostnames]
+    notify.success(toastCopy.saved, 'Addresses apply right away.')
   } catch (e) {
-    domainsError.value = messageOf(e)
+    addressesError.value = messageOf(e)
   } finally {
-    domainsBusy.value = false
+    addressesBusy.value = false
   }
 }
 
@@ -207,51 +199,58 @@ async function remove() {
     </HgPanel>
 
     <HgPanel
-      title="Custom domains"
-      description="Serve this app on your own addresses, like example.com and www.example.com, through your Cloudflare Tunnel."
+      id="addresses"
+      title="Public addresses"
+      description="Where the app answers on the internet. Changes apply right away, without a deploy."
     >
-      <form class="hg-domains" @submit.prevent="saveDomains">
-        <BaseMessage v-if="settings && !settings.tunnelConfigured" tone="info">
-          Domains answer once public access is set up in Settings.
-        </BaseMessage>
-        <BaseField
-          label="Domains"
-          for="ps-domains"
-          :error="domainsError"
-          :help="`One per line, up to ${MAX_PROJECT_DOMAINS}.`"
-        >
-          <BaseTextarea
-            id="ps-domains"
-            v-model="domains"
-            mono
-            :rows="2"
-            placeholder="example.com"
-          />
-        </BaseField>
-        <ol class="hg-domains-steps">
-          <li>
-            In Cloudflare, open the tunnel Hangar uses and add a public hostname for each domain,
-            with this service:
-            <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
-          </li>
-          <li>
-            If the domain already points somewhere else, Cloudflare asks to replace that record.
-            Replacing it moves the domain's traffic to this app.
-          </li>
-        </ol>
-        <p v-if="project.domains.length" class="hg-domains-live">
-          <a
-            v-for="domain in project.domains"
-            :key="domain"
-            :href="`https://${domain}`"
-            target="_blank"
-            rel="noopener"
-            >https://{{ domain }}</a
-          >
+      <form class="hg-addresses-form" @submit.prevent="saveAddresses">
+        <p v-if="project.url" class="hg-addresses-lan">
+          On your network:
+          <a :href="project.url" target="_blank" rel="noopener">{{ project.url }}</a>
         </p>
-        <div>
-          <BaseButton type="submit" label="Save domains" :loading="domainsBusy" />
-        </div>
+        <template v-if="settings && settings.publicDomains.length">
+          <AddressEditor
+            ref="addressEditor"
+            v-model="hostnames"
+            :domains="settings.publicDomains"
+            :suggested-name="project.name"
+            :saved="project.hostnames"
+            id-prefix="ps-address"
+          />
+          <BaseMessage v-if="!settings.tunnelConfigured" tone="info">
+            Addresses answer once a tunnel token is saved in Settings, under Public access.
+          </BaseMessage>
+          <details class="hg-addresses-help">
+            <summary>A new address does not load?</summary>
+            <p>
+              Names under a domain work once the domain's <code>*</code> hostname is in Hangar's
+              tunnel (Settings, Public access). The domain itself, like <code>example.com</code>,
+              needs its own public hostname in the tunnel, with this service:
+            </p>
+            <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
+            <p>
+              If Cloudflare says the address already exists, it points somewhere else (another
+              tunnel or server). Replacing it moves the address to this app. Use Check to confirm.
+            </p>
+          </details>
+          <BaseMessage v-if="addressesError" tone="error">{{ addressesError }}</BaseMessage>
+          <div>
+            <BaseButton
+              type="submit"
+              variant="primary"
+              label="Save addresses"
+              :loading="addressesBusy"
+              :disabled="!addressesChanged || addressEditor?.valid === false"
+            />
+          </div>
+        </template>
+        <p v-else-if="settings" class="hg-muted">
+          This app is on your network only.
+          <RouterLink :to="{ name: 'settings', hash: '#public-access' }"
+            >Set up public access</RouterLink
+          >
+          to give it addresses on your own domains.
+        </p>
       </form>
     </HgPanel>
 
@@ -313,25 +312,28 @@ async function remove() {
 </template>
 
 <style scoped>
-.hg-domains {
+.hg-addresses-form {
   display: grid;
   gap: var(--hg-space-4);
 }
-.hg-domains-steps {
-  margin: 0;
-  padding-left: 1.25rem;
+.hg-addresses-lan {
+  font-size: var(--hg-size-sm);
+  overflow-wrap: anywhere;
+}
+.hg-addresses-help {
+  font-size: var(--hg-size-sm);
+  color: var(--hg-ink-muted);
+}
+.hg-addresses-help summary {
+  cursor: pointer;
+  color: var(--hg-ink);
+}
+.hg-addresses-help[open] {
   display: grid;
   gap: var(--hg-space-2);
-  font-size: var(--hg-size-sm);
 }
-.hg-domains-steps li > :deep(*) {
+.hg-addresses-help p {
   margin-top: var(--hg-space-2);
-}
-.hg-domains-live {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--hg-space-4);
-  font-size: var(--hg-size-sm);
 }
 .hg-settings {
   display: grid;

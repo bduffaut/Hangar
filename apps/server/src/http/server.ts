@@ -17,6 +17,8 @@ import {
   isValidCsrfToken,
   resolveSession,
 } from '../modules/auth/service.ts'
+import { isPendingCheck } from '../modules/settings/reachability.ts'
+import { ADDRESS_CHECK_PATH } from '../platform/proxy.ts'
 import { type AccessPolicyCache, classifyRequest, createAccessPolicy } from './access.ts'
 import { type EventStream, openEventStream } from './sse.ts'
 
@@ -107,6 +109,14 @@ export function createHttpServer(ctx: Ctx): Http {
       path: request.url,
       headers: request.headers,
     })
+    if (area === 'address-check') {
+      const token = request.url.split('?')[0]!.slice(ADDRESS_CHECK_PATH.length)
+      const known = request.method === 'GET' && isPendingCheck(token)
+      return reply
+        .code(known ? 200 : 404)
+        .type('text/plain')
+        .send(known ? 'ok' : 'Not found')
+    }
     if (area === 'not-found') {
       return reply.code(404).type('text/plain').send('Not found')
     }

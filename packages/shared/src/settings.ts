@@ -4,7 +4,8 @@ import { z } from 'zod'
 export const settingsSchema = {
   lanIp: z.ipv4().nullable(),
   lanDomain: z.string().nullable(),
-  publicDomain: z.string().nullable(),
+  /** The owner's domains for public access. The first is the default (see `defaultDomain`). */
+  publicDomains: z.array(z.string()),
   exposeTowerPublicly: z.boolean(),
   githubToken: z.string().nullable(), // encrypted
   cloudflareTunnelToken: z.string().nullable(), // encrypted
@@ -17,7 +18,7 @@ export type Settings = { [K in SettingKey]: z.infer<(typeof settingsSchema)[K]> 
 export const SETTING_DEFAULTS: Settings = {
   lanIp: null,
   lanDomain: null,
-  publicDomain: null,
+  publicDomains: [],
   exposeTowerPublicly: false,
   githubToken: null,
   cloudflareTunnelToken: null,
@@ -25,3 +26,10 @@ export const SETTING_DEFAULTS: Settings = {
 }
 
 export const SETTING_KEYS = Object.keys(settingsSchema) as SettingKey[]
+
+/**
+ * The default public domain: suggested for new projects, and home of the webhook address
+ * (hooks.<domain>) and, when exposed, the public Control Tower (tower.<domain>).
+ */
+export const defaultDomain = (settings: Pick<Settings, 'publicDomains'>): string | null =>
+  settings.publicDomains[0] ?? null

@@ -7,7 +7,7 @@ import { createProxy, renderRouting, type RoutingInput } from './proxy.ts'
 const lanOnly: RoutingInput = {
   lanIp: '192.168.1.50',
   lanDomain: '192-168-1-50.sslip.io',
-  publicDomain: null,
+  defaultDomain: null,
   exposeTowerPublicly: false,
   coreUrl: 'http://hangar-core:3000',
   apps: [
@@ -47,12 +47,28 @@ describe('renderRouting', () => {
     expect(routers.fallback).toMatchObject({ entryPoints: ['web'], priority: 1, service: 'core' })
   })
 
-  it('in public mode adds public app routes and a webhook-only hooks route', () => {
-    const { routers } = renderRouting({ ...lanOnly, publicDomain: 'example.com' }).http
-    expect(routers['app-blog-public']).toMatchObject({
+  it('serves each app on its own public addresses, on the public entrypoint only', () => {
+    const apps = [
+      {
+        name: 'site',
+        hostnames: ['example.com', 'site.example.com', 'site.other.dev'],
+        target: lanOnly.apps[0]!.target,
+      },
+      { name: 'private', hostnames: [], target: lanOnly.apps[0]!.target },
+      { name: 'off', hostnames: ['off.example.com'], target: null },
+    ]
+    const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com', apps }).http
+    expect(routers['app-site-public']).toEqual({
       entryPoints: ['public'],
-      rule: 'Host(`blog.example.com`)',
+      rule: 'Host(`example.com`) || Host(`site.example.com`) || Host(`site.other.dev`)',
+      service: 'app-site',
     })
+    expect(routers['app-private-public']).toBeUndefined()
+    expect(routers['app-off-public']).toBeUndefined()
+  })
+
+  it('adds a webhook-only hooks route on the default domain', () => {
+    const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com' }).http
     expect(routers.hooks).toMatchObject({
       entryPoints: ['public'],
       rule: 'Host(`hooks.example.com`) && PathPrefix(`/api/webhooks/`)',
@@ -60,43 +76,28 @@ describe('renderRouting', () => {
     expect(routers['tower-public']).toBeUndefined()
   })
 
-  it('serves custom domains on the public entrypoint only', () => {
-    const apps = [
-      {
-        name: 'site',
-        domains: ['example.com', 'www.example.com'],
-        target: lanOnly.apps[0]!.target,
-      },
-      { name: 'off', domains: ['off.dev'], target: null },
-    ]
-    const { routers } = renderRouting({ ...lanOnly, apps }).http
-    expect(routers['app-site-domains']).toEqual({
-      entryPoints: ['public'],
-      rule: 'Host(`example.com`) || Host(`www.example.com`)',
-      service: 'app-site',
-    })
-    expect(routers['app-off-domains']).toBeUndefined()
-  })
-
   it('exposes the tower publicly only when asked', () => {
     const { routers } = renderRouting({
       ...lanOnly,
-      publicDomain: 'example.com',
+      defaultDomain: 'example.com',
       exposeTowerPublicly: true,
     }).http
     expect(routers['tower-public']).toMatchObject({ rule: 'Host(`tower.example.com`)' })
   })
 
-  it('never sends public traffic to core except through hooks or an exposed tower', () => {
-    const { routers } = renderRouting({ ...lanOnly, publicDomain: 'example.com' }).http
+  it('never sends public traffic to core except through hooks, address checks, or an exposed tower', () => {
+    const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com' }).http
     const publicToCore = Object.entries(routers)
       .filter(([, r]) => r.entryPoints.includes('public') && r.service === 'core')
       .map(([name]) => name)
-    expect(publicToCore).toEqual(['hooks'])
+    expect(publicToCore).toEqual(['address-check', 'hooks'])
+    expect(routers['address-check']).toMatchObject({
+      rule: 'PathPrefix(`/.well-known/hangar-check/`)',
+    })
   })
 
   it('tags every route to core with the entrypoint it came from', () => {
-    const { routers } = renderRouting({ ...lanOnly, publicDomain: 'example.com' }).http
+    const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com' }).http
     for (const router of Object.values(routers).filter((r) => r.service === 'core')) {
       expect(router.middlewares).toEqual([
         router.entryPoints.includes('public') ? 'from-public' : 'from-web',

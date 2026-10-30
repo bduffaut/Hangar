@@ -1,3 +1,4 @@
+import { defaultDomain } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
 import { queueDeployment } from '../modules/deployments/service.ts'
 import { listProjects, updateProject } from '../modules/projects/repo.ts'
@@ -17,13 +18,13 @@ const backoff = new Map<string, { failures: number; until: number }>()
  */
 export async function pollProjects(ctx: Ctx): Promise<void> {
   const token = await getGithubToken(ctx)
-  const { publicDomain } = await getSettings(ctx.db)
+  const domain = defaultDomain(await getSettings(ctx.db))
   // A stopped app stays stopped: new commits wait until it is started or deployed by hand.
   // Webhook projects are polled too while there is no public domain for GitHub to reach.
   const projects = (await listProjects(ctx.db)).filter(
     (p) =>
       p.desiredState === 'running' &&
-      (p.triggerMode === 'poll' || (p.triggerMode === 'webhook' && !publicDomain)),
+      (p.triggerMode === 'poll' || (p.triggerMode === 'webhook' && !domain)),
   )
   for (const project of projects) {
     const state = backoff.get(project.id)

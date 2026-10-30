@@ -27,5 +27,8 @@ export const TEST_FLIGHT = {
   rootDir: 'fixtures/static-site',
 } as const
 
-/** Custom domains one project may answer on. */
-export const MAX_PROJECT_DOMAINS = 5
+/** Domains the owner can add for public access. */
+export const MAX_PUBLIC_DOMAINS = 10
+
+/** Public addresses one project may answer on. */
+export const MAX_PROJECT_HOSTNAMES = 10

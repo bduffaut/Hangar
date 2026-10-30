@@ -1,4 +1,5 @@
 import {
+  defaultDomain,
   isValidDomain,
   type Settings,
   type SettingsView,
@@ -9,6 +10,7 @@ import type { Ctx } from '../../context.ts'
 import { UserError } from '../../errors.ts'
 import { GithubError } from '../../platform/github.ts'
 import { ensureTunnel, syncRouting } from '../../worker/reconciler.ts'
+import { listProjects } from '../projects/repo.ts'
 import { getSettings, setSettings } from './repo.ts'
 import { GITHUB_TOKEN_AAD, TUNNEL_TOKEN_AAD } from './secrets.ts'
 
@@ -25,7 +27,8 @@ export async function settingsView(ctx: Ctx): Promise<SettingsView> {
   return {
     lanIp: s.lanIp,
     lanDomain: s.lanDomain,
-    publicDomain: s.publicDomain,
+    publicDomains: s.publicDomains,
+    defaultDomain: defaultDomain(s),
     exposeTowerPublicly: s.exposeTowerPublicly,
     githubConnected: s.githubToken !== null,
     tunnelConfigured: s.cloudflareTunnelToken !== null,
@@ -36,38 +39,73 @@ export async function settingsView(ctx: Ctx): Promise<SettingsView> {
 /** Changing an address re-renders every route. */
 export async function updateSettings(
   ctx: Ctx,
-  patch: { lanIp?: string; publicDomain?: string | null; exposeTowerPublicly?: boolean },
+  patch: { lanIp?: string; publicDomains?: string[]; exposeTowerPublicly?: boolean },
 ): Promise<void> {
   const next: Partial<Settings> = {}
   if (patch.lanIp !== undefined) {
     next.lanIp = patch.lanIp
     next.lanDomain = sslipDomain(patch.lanIp)
   }
-  if (patch.publicDomain !== undefined) {
-    if (patch.publicDomain !== null && !isValidDomain(patch.publicDomain)) {
-      throw new UserError(
-        400,
-        'invalid_domain',
-        'Enter a domain like example.com, without https://.',
-      )
-    }
-    next.publicDomain = patch.publicDomain
-    if (patch.publicDomain === null) next.exposeTowerPublicly = false
+  if (patch.publicDomains !== undefined) {
+    next.publicDomains = await cleanPublicDomains(ctx, patch.publicDomains)
+    if (next.publicDomains.length === 0) next.exposeTowerPublicly = false
   }
   if (patch.exposeTowerPublicly !== undefined) {
-    const publicDomain =
-      next.publicDomain !== undefined ? next.publicDomain : (await getSettings(ctx.db)).publicDomain
-    if (patch.exposeTowerPublicly && !publicDomain) {
+    const domains = next.publicDomains ?? (await getSettings(ctx.db)).publicDomains
+    if (patch.exposeTowerPublicly && domains.length === 0) {
       throw new UserError(
         400,
         'no_public_domain',
-        'Set a public domain before exposing the Control Tower.',
+        'Add a domain before making the Control Tower public.',
       )
     }
     next.exposeTowerPublicly = patch.exposeTowerPublicly
   }
   await setSettings(ctx.db, next)
   await syncRouting(ctx)
+}
+
+/**
+ * Validates the owner's domain list: real domains, no repeats, none inside another (an address
+ * must belong to exactly one), and none removed while a project still uses it.
+ */
+async function cleanPublicDomains(ctx: Ctx, input: string[]): Promise<string[]> {
+  const domains = [
+    ...new Set(input.map((d) => d.replace(/^https?:\/\//, '').replace(/[/.]+$/, ''))),
+  ]
+  const invalid = domains.find((d) => !isValidDomain(d))
+  if (invalid !== undefined) {
+    throw new UserError(
+      400,
+      'invalid_domain',
+      `"${invalid}" is not a domain. Enter one like example.com, without https://.`,
+    )
+  }
+  const nested = domains.find((d) =>
+    domains.some((other) => d !== other && d.endsWith(`.${other}`)),
+  )
+  if (nested) {
+    throw new UserError(
+      400,
+      'nested_domain',
+      `${nested} is already covered by another domain in the list.`,
+      'Add only the domains you own, like example.com. Choose names under them per project.',
+    )
+  }
+  for (const project of await listProjects(ctx.db)) {
+    const orphan = project.hostnames.find(
+      (h) => !domains.some((d) => h === d || h.endsWith(`.${d}`)),
+    )
+    if (orphan) {
+      throw new UserError(
+        409,
+        'domain_in_use',
+        `${project.name} still uses ${orphan}.`,
+        `Remove that address from ${project.name} first, under its Settings tab.`,
+      )
+    }
+  }
+  return domains
 }
 
 /** Verifies a GitHub token by asking GitHub who it belongs to, then stores it encrypted. */

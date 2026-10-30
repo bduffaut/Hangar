@@ -80,6 +80,13 @@ export const contract = {
     body: s.githubToken,
     response: s.githubAccount,
   }),
+  checkAddress: endpoint({
+    method: 'POST',
+    path: '/api/settings/check-address',
+    access: 'session',
+    body: s.addressCheck,
+    response: s.addressCheckResult,
+  }),
   setTunnelToken: endpoint({
     method: 'POST',
     path: '/api/settings/tunnel',

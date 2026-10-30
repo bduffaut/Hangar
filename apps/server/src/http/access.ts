@@ -1,7 +1,7 @@
-import { hooksHostname, towerHostname } from '@hangar/shared'
+import { defaultDomain, hooksHostname, towerHostname } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
 import { getSettings } from '../modules/settings/repo.ts'
-import { ENTRYPOINT_HEADER } from '../platform/proxy.ts'
+import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 
 /**
  * Which hostnames and browser origins may use the API. The API answers only on the Control
@@ -11,9 +11,9 @@ import { ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 export interface AccessPolicy {
   /** Hostnames (with port, if any) that serve the Control Tower on the LAN. */
   towerHosts: Set<string>
-  /** `tower.<publicDomain>` when the Control Tower is exposed publicly. */
+  /** `tower.<default domain>` when the Control Tower is exposed publicly. */
   publicTowerHost: string | null
-  /** `hooks.<publicDomain>`, which only serves webhooks. */
+  /** `hooks.<default domain>`, which only serves webhooks. */
   hooksHost: string | null
   /** Origins allowed to send state-changing requests. */
   origins: Set<string>
@@ -40,12 +40,10 @@ export function createAccessPolicy(ctx: Ctx) {
       origins.add(origin)
       towerHosts.add(new URL(origin).host)
     }
-    const publicTowerHost =
-      settings.publicDomain && settings.exposeTowerPublicly
-        ? towerHostname(settings.publicDomain)
-        : null
+    const domain = defaultDomain(settings)
+    const publicTowerHost = domain && settings.exposeTowerPublicly ? towerHostname(domain) : null
     if (publicTowerHost) origins.add(`https://${publicTowerHost}`)
-    const hooksHost = settings.publicDomain ? hooksHostname(settings.publicDomain) : null
+    const hooksHost = domain ? hooksHostname(domain) : null
     return { towerHosts, publicTowerHost, hooksHost, origins }
   }
 
@@ -64,7 +62,8 @@ export function createAccessPolicy(ctx: Ctx) {
 
 export type AccessPolicyCache = ReturnType<typeof createAccessPolicy>
 
-export type RequestArea = 'api' | 'webhook' | 'health' | 'not-found' | 'app-not-running'
+export type RequestArea =
+  'api' | 'webhook' | 'health' | 'address-check' | 'not-found' | 'app-not-running'
 
 /** Strips the default port so `tower.x:80` and `tower.x` compare equal. */
 export function normalizeHost(host: string | undefined): string {
@@ -86,6 +85,7 @@ export function classifyRequest(
 
   if (path === '/api/health') return 'health'
   if (path.startsWith('/api/webhooks/')) return 'webhook'
+  if (isPublic && path.startsWith(ADDRESS_CHECK_PATH)) return 'address-check'
   if (isPublic) {
     // The public entrypoint reaches core only for webhooks and an explicitly exposed tower.
     return policy.publicTowerHost && host === policy.publicTowerHost ? 'api' : 'not-found'

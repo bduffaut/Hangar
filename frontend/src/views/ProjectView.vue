@@ -131,6 +131,19 @@ const running = computed(
             <BaseIcon name="external" :size="14" />
           </a>
           <span v-else-if="project.desiredState === 'stopped'" class="hg-muted">Stopped</span>
+          <template v-if="running">
+            <a
+              v-for="publicUrl in project.publicUrls"
+              :key="publicUrl"
+              :href="publicUrl"
+              target="_blank"
+              rel="noopener"
+              class="hg-project-link"
+            >
+              {{ publicUrl.replace(/^https:\/\//, '') }}
+              <BaseIcon name="globe" :size="14" />
+            </a>
+          </template>
           <span class="hg-muted hg-project-repo">
             <BaseIcon name="branch" :size="14" />
             {{ project.repoUrl.replace(/^https:\/\/(www\.)?/, '') }}, {{ project.branch }}

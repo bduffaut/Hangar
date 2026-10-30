@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  type AddressCheckResult,
   brand,
   navCopy,
   type SettingsView,
@@ -34,7 +35,7 @@ const theme = useTheme()
 const settings = ref<SettingsView | null>(null)
 const info = ref<SystemInfo | null>(null)
 const lanIp = ref('')
-const publicDomain = ref('')
+const newDomain = ref('')
 const exposeTower = ref(false)
 const githubToken = ref('')
 const githubLogin = ref<string | null>(null)
@@ -45,7 +46,6 @@ const errors = ref<Record<string, string | null>>({})
 function apply(next: SettingsView) {
   settings.value = next
   lanIp.value = next.lanIp ?? ''
-  publicDomain.value = next.publicDomain ?? ''
   exposeTower.value = next.exposeTowerPublicly
 }
 
@@ -80,17 +80,56 @@ const saveAddress = () =>
     apply(await api('updateSettings', { body: { lanIp: lanIp.value.trim() } })),
   )
 
-const savePublic = () =>
-  act('public', async () =>
-    apply(
-      await api('updateSettings', {
-        body: {
-          publicDomain: publicDomain.value.trim() || null,
-          exposeTowerPublicly: exposeTower.value,
-        },
-      }),
-    ),
+// Domains save as a whole list; the first is the default.
+const saveDomains = (publicDomains: string[], key = 'domains') =>
+  act(key, async () => {
+    apply(await api('updateSettings', { body: { publicDomains } }))
+  })
+async function addDomain() {
+  const domain = newDomain.value
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^\*\./, '')
+    .replace(/[/.]+$/, '')
+  if (!domain || !settings.value) return
+  await saveDomains([...settings.value.publicDomains, domain], 'add-domain')
+  if (!errors.value['add-domain']) newDomain.value = ''
+}
+const removeDomain = (domain: string) =>
+  saveDomains(
+    settings.value!.publicDomains.filter((d) => d !== domain),
+    `domain:${domain}`,
   )
+const makeDefault = (domain: string) =>
+  saveDomains(
+    [domain, ...settings.value!.publicDomains.filter((d) => d !== domain)],
+    `domain:${domain}`,
+  )
+
+const defaultDomain = computed(() => settings.value?.defaultDomain ?? null)
+const saveExposeTower = () =>
+  act('expose', async () =>
+    apply(await api('updateSettings', { body: { exposeTowerPublicly: exposeTower.value } })),
+  )
+
+// Check that names under a domain reach this Hangar through the tunnel.
+const checks = ref<Record<string, AddressCheckResult | 'checking'>>({})
+async function checkDomain(domain: string) {
+  checks.value = { ...checks.value, [domain]: 'checking' }
+  try {
+    checks.value = {
+      ...checks.value,
+      [domain]: await api('checkAddress', { body: { hostname: domain, wildcard: true } }),
+    }
+  } catch (e) {
+    checks.value = { ...checks.value, [domain]: { status: 'unreachable', message: messageOf(e) } }
+  }
+}
+const checkOf = (domain: string) => {
+  const check = checks.value[domain]
+  return check && check !== 'checking' ? check : null
+}
 
 const saveTunnel = (token: string | null) =>
   act('tunnel', async () => {
@@ -200,80 +239,165 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
     </HgPanel>
 
     <HgPanel
+      id="public-access"
       title="Public access"
-      description="Optional. Serve apps on your own domain through a Cloudflare Tunnel, with no router changes."
+      description="Optional. Put apps on your own domains through a Cloudflare Tunnel: no open ports, and your home address stays hidden."
     >
-      <div class="hg-form">
-        <ol class="hg-steps">
-          <li>
-            In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a
-            tunnel.
-          </li>
-          <li>
-            Add a public hostname <code>*.your-domain.com</code> with this service:
-            <CopyField :value="TUNNEL_SERVICE_URL" label="Tunnel service" />
-          </li>
-          <li>Enter your domain below and save it.</li>
-          <li>Copy the tunnel token from Cloudflare, paste it below, and save it.</li>
-        </ol>
-        <BaseField
-          label="Public domain"
-          for="set-domain"
-          help="Like example.com. Apps appear at name.example.com."
-        >
-          <BaseInput id="set-domain" v-model="publicDomain" mono placeholder="example.com" />
-        </BaseField>
-        <div class="hg-switch-row">
-          <BaseSwitch id="set-expose" v-model="exposeTower" :disabled="!publicDomain.trim()" />
-          <label for="set-expose">
-            Also make the {{ brand.dashboardName }} public
-            <span class="hg-muted hg-switch-help"
-              >Off is safer: the {{ brand.dashboardName }} controls the whole server. Keep it on
-              your network unless you need it elsewhere.</span
-            >
-          </label>
-        </div>
-        <BaseMessage v-if="errors.public" tone="error">{{ errors.public }}</BaseMessage>
-        <div>
-          <BaseButton
-            variant="primary"
-            label="Save domain"
-            :loading="busy === 'public'"
-            :disabled="busy !== null"
-            @click="savePublic"
-          />
-        </div>
+      <div class="hg-public">
+        <section class="hg-public-step" aria-labelledby="pa-tunnel">
+          <h3 id="pa-tunnel">
+            1. Connect a tunnel
+            <span class="hg-pill" :class="settings.tunnelConfigured ? 'is-on' : 'is-off'">{{
+              settings.tunnelConfigured ? 'Connected' : 'Not set up'
+            }}</span>
+          </h3>
+          <ol v-if="!settings.tunnelConfigured" class="hg-steps">
+            <li>
+              In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create
+              a tunnel of type Cloudflared. Name it something like <code>hangar</code>.
+            </li>
+            <li>
+              Copy the token from the install command Cloudflare shows (the long text after
+              <code>--token</code>). You do not need to install anything: Hangar runs the tunnel.
+            </li>
+          </ol>
+          <p v-else class="hg-muted hg-note">
+            Hangar runs the tunnel for you. It is separate from any other tunnel on this machine.
+          </p>
+          <BaseField
+            :label="settings.tunnelConfigured ? 'Replace tunnel token' : 'Tunnel token'"
+            for="set-tunnel"
+          >
+            <BasePassword id="set-tunnel" v-model="tunnelToken" autocomplete="off" />
+          </BaseField>
+          <BaseMessage v-if="errors.tunnel" tone="error">{{ errors.tunnel }}</BaseMessage>
+          <div class="hg-actions">
+            <BaseButton
+              :variant="settings.tunnelConfigured ? 'secondary' : 'primary'"
+              label="Save token"
+              :disabled="!tunnelToken.trim() || busy !== null"
+              :loading="busy === 'tunnel'"
+              @click="saveTunnel(tunnelToken.trim())"
+            />
+            <BaseButton
+              v-if="settings.tunnelConfigured"
+              variant="ghost"
+              label="Remove tunnel"
+              :disabled="busy !== null"
+              @click="saveTunnel(null)"
+            />
+          </div>
+        </section>
 
-        <BaseField
-          :label="settings.tunnelConfigured ? 'Replace tunnel token' : 'Tunnel token'"
-          for="set-tunnel"
-        >
-          <BasePassword id="set-tunnel" v-model="tunnelToken" autocomplete="off" />
-        </BaseField>
-        <p class="hg-muted hg-note">
-          {{
-            settings.tunnelConfigured
-              ? 'The tunnel is configured and running.'
-              : 'No tunnel yet. Apps are reachable on your network only.'
-          }}
-        </p>
-        <BaseMessage v-if="errors.tunnel" tone="error">{{ errors.tunnel }}</BaseMessage>
-        <div class="hg-actions">
-          <BaseButton
-            variant="primary"
-            label="Save token"
-            :disabled="!tunnelToken.trim() || busy !== null"
-            :loading="busy === 'tunnel'"
-            @click="saveTunnel(tunnelToken.trim())"
-          />
-          <BaseButton
-            v-if="settings.tunnelConfigured"
-            variant="ghost"
-            label="Remove tunnel"
-            :disabled="busy !== null"
-            @click="saveTunnel(null)"
-          />
-        </div>
+        <section class="hg-public-step" aria-labelledby="pa-domains">
+          <h3 id="pa-domains">2. Add your domains</h3>
+          <p class="hg-muted hg-note">
+            Any domain on your Cloudflare account. The default is suggested for new projects; each
+            project chooses its own addresses on any of them.
+          </p>
+          <ul v-if="settings.publicDomains.length" class="hg-domain-list">
+            <li v-for="domain in settings.publicDomains" :key="domain" class="hg-domain">
+              <div class="hg-domain-head">
+                <code class="hg-domain-name">{{ domain }}</code>
+                <span v-if="domain === settings.defaultDomain" class="hg-pill is-on">Default</span>
+                <span class="hg-domain-actions">
+                  <BaseButton
+                    v-hint.top="'Check that names under this domain reach Hangar'"
+                    size="sm"
+                    variant="ghost"
+                    icon="globe"
+                    label="Check"
+                    :loading="checks[domain] === 'checking'"
+                    :disabled="busy !== null"
+                    @click="checkDomain(domain)"
+                  />
+                  <BaseButton
+                    v-if="domain !== settings.defaultDomain"
+                    size="sm"
+                    variant="ghost"
+                    label="Make default"
+                    :disabled="busy !== null"
+                    @click="makeDefault(domain)"
+                  />
+                  <BaseButton
+                    size="sm"
+                    variant="ghost"
+                    icon="x"
+                    :aria-label="`Remove ${domain}`"
+                    :disabled="busy !== null"
+                    @click="removeDomain(domain)"
+                  />
+                </span>
+              </div>
+              <div class="hg-domain-how">
+                <p>
+                  In Hangar's tunnel, add a public hostname with subdomain <code>*</code>, domain
+                  <code>{{ domain }}</code
+                  >, and this service:
+                </p>
+                <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
+              </div>
+              <p
+                v-if="checkOf(domain)"
+                class="hg-domain-check"
+                :class="`is-${checkOf(domain)!.status}`"
+                role="status"
+              >
+                {{ checkOf(domain)!.message }}
+              </p>
+              <BaseMessage v-if="errors[`domain:${domain}`]" tone="error">{{
+                errors[`domain:${domain}`]
+              }}</BaseMessage>
+            </li>
+          </ul>
+          <form class="hg-domain-add" @submit.prevent="addDomain">
+            <BaseField
+              label="Add a domain"
+              for="set-domain"
+              help="Like example.com, without https:// or a name in front."
+            >
+              <BaseInput id="set-domain" v-model="newDomain" mono placeholder="example.com" />
+            </BaseField>
+            <div>
+              <BaseButton
+                type="submit"
+                icon="plus"
+                label="Add domain"
+                :disabled="!newDomain.trim() || busy !== null"
+                :loading="busy === 'add-domain'"
+              />
+            </div>
+          </form>
+          <BaseMessage v-if="errors['add-domain']" tone="error">{{
+            errors['add-domain']
+          }}</BaseMessage>
+        </section>
+
+        <section class="hg-public-step" aria-labelledby="pa-options">
+          <h3 id="pa-options">3. Options</h3>
+          <p v-if="defaultDomain" class="hg-muted hg-note">
+            GitHub webhooks arrive at <code>hooks.{{ defaultDomain }}</code
+            >, so pushes deploy instantly instead of within a minute.
+          </p>
+          <div class="hg-switch-row">
+            <BaseSwitch
+              id="set-expose"
+              v-model="exposeTower"
+              :disabled="!defaultDomain || busy !== null"
+              @update:model-value="saveExposeTower"
+            />
+            <label for="set-expose">
+              Make the {{ brand.dashboardName }} public{{
+                defaultDomain ? ` at tower.${defaultDomain}` : ''
+              }}
+              <span class="hg-muted hg-switch-help"
+                >Off is safer: the {{ brand.dashboardName }} controls the whole server. Keep it on
+                your network unless you need it elsewhere.</span
+              >
+            </label>
+          </div>
+          <BaseMessage v-if="errors.expose" tone="error">{{ errors.expose }}</BaseMessage>
+        </section>
       </div>
     </HgPanel>
 
@@ -337,6 +461,82 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
 }
 .hg-switch-help {
   font-size: var(--hg-size-sm);
+}
+.hg-public {
+  display: grid;
+  gap: var(--hg-space-6);
+}
+.hg-public-step {
+  display: grid;
+  gap: var(--hg-space-3);
+}
+.hg-public-step h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--hg-space-3);
+  font-size: var(--hg-size-md);
+}
+.hg-pill {
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--hg-radius-sm);
+  font-size: var(--hg-size-xs);
+  font-weight: var(--hg-weight-regular);
+  letter-spacing: 0;
+}
+.hg-pill.is-on {
+  background: color-mix(in srgb, var(--hg-status-ready) 16%, transparent);
+  color: var(--hg-ink);
+}
+.hg-pill.is-off {
+  background: var(--hg-raised);
+  color: var(--hg-ink-muted);
+}
+.hg-domain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--hg-space-2);
+}
+.hg-domain {
+  display: grid;
+  gap: var(--hg-space-2);
+  padding: var(--hg-space-3);
+  border: 1px solid var(--hg-line);
+  border-left: 3px solid var(--hg-accent);
+  border-radius: var(--hg-radius-md);
+}
+.hg-domain-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hg-space-2);
+}
+.hg-domain-name {
+  font-size: var(--hg-size-md);
+}
+.hg-domain-actions {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hg-space-1);
+}
+.hg-domain-how {
+  display: grid;
+  gap: var(--hg-space-2);
+  font-size: var(--hg-size-sm);
+  color: var(--hg-ink-muted);
+}
+.hg-domain-check {
+  font-size: var(--hg-size-sm);
+  color: var(--hg-caution);
+}
+.hg-domain-check.is-ok {
+  color: var(--hg-status-ready);
+}
+.hg-domain-add {
+  display: grid;
+  gap: var(--hg-space-3);
 }
 .hg-system {
   margin: 0;

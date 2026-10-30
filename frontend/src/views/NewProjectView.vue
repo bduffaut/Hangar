@@ -5,7 +5,9 @@ import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   navCopy,
+  parseDotenv,
   parseWholeNumber,
+  type SettingsView,
   type TriggerMode,
   triggerModeCopy,
 } from '@hangar/shared'
@@ -13,6 +15,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import HgPanel from '../components/HgPanel.vue'
+import AddressEditor from '../components/project/AddressEditor.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { useProjectsStore } from '../stores/projects.ts'
@@ -22,6 +25,8 @@ import {
   BaseInput,
   BaseMessage,
   BaseSelect,
+  BaseSwitch,
+  BaseTextarea,
   type SelectOption,
 } from '../ui/index.ts'
 
@@ -36,11 +41,7 @@ interface Repo {
   defaultBranch: string
 }
 
-const settings = ref<{
-  lanDomain: string | null
-  githubConnected: boolean
-  publicDomain: string | null
-} | null>(null)
+const settings = ref<SettingsView | null>(null)
 const repos = ref<Repo[]>([])
 const branches = ref<string[]>([])
 const loadingRepos = ref(false)
@@ -65,12 +66,21 @@ const memoryValue = computed(() =>
 const memoryError = computed(() => (memoryValue.value === null ? errorCopy.memory : null))
 const triggerMode = ref<TriggerMode>('poll')
 const advanced = ref(false)
+const deployNow = ref(true)
+const envText = ref('')
+const env = computed(() => parseDotenv(envText.value))
+const envCount = computed(() => Object.keys(env.value.vars).length)
+const envError = computed(() =>
+  env.value.badLines.length
+    ? `Line ${env.value.badLines.join(', ')} is not KEY=value. Names use letters, digits, and underscores.`
+    : null,
+)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
 onMounted(async () => {
   settings.value = await api('getSettings')
-  triggerMode.value = settings.value.publicDomain ? 'webhook' : 'poll'
+  triggerMode.value = settings.value.defaultDomain ? 'webhook' : 'poll'
   if (settings.value.githubConnected) {
     loadingRepos.value = true
     repos.value = await api('githubRepos').catch(() => [])
@@ -116,6 +126,23 @@ const address = computed(() =>
     ? `http://${appHostname(name.value, settings.value.lanDomain)}`
     : null,
 )
+
+// Public addresses start as <name>.<default domain> and follow the name until edited.
+const domains = computed(() => settings.value?.publicDomains ?? [])
+const suggested = computed(() =>
+  settings.value?.defaultDomain && name.value
+    ? [appHostname(name.value, settings.value.defaultDomain)]
+    : [],
+)
+const hostnames = ref<string[]>([])
+const addressesEdited = ref(false)
+watch(suggested, (next) => {
+  if (!addressesEdited.value) hostnames.value = next
+})
+watch(hostnames, (next) => {
+  addressesEdited.value = next.join() !== suggested.value.join()
+})
+const addressEditor = ref<InstanceType<typeof AddressEditor> | null>(null)
 const branchOptions = computed<SelectOption<string>[]>(() =>
   branches.value.map((b) => ({ label: b, value: b })),
 )
@@ -127,11 +154,22 @@ const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
   })),
 )
 
+const blocked = computed(
+  () =>
+    !repoUrl.value.trim() ||
+    !name.value ||
+    !!portError.value ||
+    !!memoryError.value ||
+    !!envError.value ||
+    addressEditor.value?.valid === false,
+)
+
 async function create() {
-  if (portError.value || memoryError.value) return
+  if (blocked.value) return
   busy.value = true
   error.value = null
   try {
+    // Variables are saved before the first build, so the first deployment already has them.
     const project = await api('createProject', {
       body: {
         name: name.value,
@@ -141,10 +179,19 @@ async function create() {
         port: portValue.value,
         memoryLimitMb: memoryValue.value!,
         triggerMode: triggerMode.value,
+        hostnames: domains.value.length ? hostnames.value : undefined,
+        deploy: deployNow.value && envCount.value === 0,
       },
     })
     projects.upsert(project)
-    if (project.latest) await router.push({ name: 'deployment', params: { id: project.latest.id } })
+    let deploymentId = project.latest?.id ?? null
+    if (envCount.value > 0) {
+      await api('replaceEnv', { params: { id: project.id }, body: { vars: env.value.vars } })
+      if (deployNow.value) {
+        deploymentId = (await api('deployProject', { params: { id: project.id } })).id
+      }
+    }
+    if (deploymentId) await router.push({ name: 'deployment', params: { id: deploymentId } })
     else await router.push({ name: 'project', params: { name: project.name } })
   } catch (e) {
     error.value = messageOf(e)
@@ -208,22 +255,57 @@ async function create() {
       </div>
     </HgPanel>
 
-    <HgPanel title="Name and address">
+    <HgPanel
+      title="Name and addresses"
+      description="Where people will find the app. Every project gets a network address; public addresses go through your Cloudflare Tunnel."
+    >
       <div class="hg-new-fields">
         <BaseField
           label="Project name"
           for="new-name"
-          help="Lowercase letters, digits, and dashes. It becomes the app's address."
+          help="Lowercase letters, digits, and dashes. It names the app's addresses."
         >
           <BaseInput id="new-name" v-model="name" mono @input="nameTouched = true" />
         </BaseField>
-        <p v-if="address" class="hg-new-address">
-          Your app will be at <code>{{ address }}</code>
-        </p>
+        <div class="hg-new-where">
+          <h3 class="hg-new-where-title">On your network</h3>
+          <p v-if="address" class="hg-new-address">
+            <code>{{ address }}</code>
+            <span class="hg-muted">Always on, for devices on your network.</span>
+          </p>
+          <p v-else class="hg-muted hg-new-address">Enter a name to see the address.</p>
+        </div>
+        <div class="hg-new-where">
+          <h3 class="hg-new-where-title">On the internet</h3>
+          <template v-if="domains.length">
+            <AddressEditor
+              ref="addressEditor"
+              v-model="hostnames"
+              :domains="domains"
+              :suggested-name="name"
+              id-prefix="new-address"
+            />
+            <p class="hg-muted hg-new-hint">
+              Suggested: the project name on your default domain. Leave the name empty to use the
+              domain itself, choose another of your domains, add more, or remove them all to keep
+              the app on your network.
+            </p>
+          </template>
+          <p v-else class="hg-muted hg-new-address">
+            Not set up yet, so the app stays on your network.
+            <RouterLink :to="{ name: 'settings', hash: '#public-access' }"
+              >Set up public access</RouterLink
+            >
+            to put apps on your own domain.
+          </p>
+        </div>
       </div>
     </HgPanel>
 
-    <HgPanel title="Build and run" description="Most apps work with the defaults.">
+    <HgPanel
+      title="Build and run"
+      description="These defaults suit most apps. Show options to change them."
+    >
       <template #actions>
         <BaseButton
           size="sm"
@@ -272,21 +354,66 @@ async function create() {
           <BaseSelect id="new-trigger" v-model="triggerMode" :options="triggerOptions" />
         </BaseField>
       </div>
-      <p v-else class="hg-muted">
-        Root directory: repository root. Port: detected. Memory: {{ memory }} MB. New commits:
-        {{ triggerModeCopy[triggerMode].label.toLowerCase() }}.
-      </p>
+      <dl v-else class="hg-new-defaults">
+        <div>
+          <dt>Root directory</dt>
+          <dd>{{ rootDir.trim() || 'Repository root' }}</dd>
+        </div>
+        <div>
+          <dt>Port</dt>
+          <dd>{{ portValue ?? 'Detected (3000 if unsure)' }}</dd>
+        </div>
+        <div>
+          <dt>Memory limit</dt>
+          <dd>{{ memory }} MB</dd>
+        </div>
+        <div>
+          <dt>New commits</dt>
+          <dd>{{ triggerModeCopy[triggerMode].label }}</dd>
+        </div>
+      </dl>
+    </HgPanel>
+
+    <HgPanel
+      title="Environment variables"
+      description="Optional. Settings your app reads, like API keys. Encrypted, and available from the first build."
+    >
+      <BaseField
+        label="Variables"
+        for="new-env"
+        :error="envError"
+        :help="
+          envCount
+            ? `${envCount} ${envCount === 1 ? 'variable' : 'variables'} ready.`
+            : 'One KEY=value per line. You can paste a .env file.'
+        "
+      >
+        <BaseTextarea
+          id="new-env"
+          v-model="envText"
+          :rows="3"
+          mono
+          placeholder="DATABASE_URL=postgres://…"
+        />
+      </BaseField>
     </HgPanel>
 
     <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
+    <div class="hg-new-switch">
+      <BaseSwitch id="new-deploy" v-model="deployNow" />
+      <label for="new-deploy">
+        Deploy right away
+        <span class="hg-muted">Off: create the project now and deploy it later from its page.</span>
+      </label>
+    </div>
     <div class="hg-new-actions">
       <BaseButton
         type="submit"
         variant="primary"
-        icon="rocket"
-        label="Create and deploy"
+        :icon="deployNow ? 'rocket' : 'plus'"
+        :label="deployNow ? 'Create and deploy' : 'Create project'"
         :loading="busy"
-        :disabled="!repoUrl.trim() || !name || !!portError || !!memoryError"
+        :disabled="blocked"
       />
       <RouterLink v-slot="{ navigate }" :to="{ name: 'home' }" custom>
         <BaseButton variant="ghost" label="Cancel" @click="navigate" />
@@ -309,8 +436,47 @@ async function create() {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .hg-new-address {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hg-space-1) var(--hg-space-3);
   font-size: var(--hg-size-sm);
   overflow-wrap: anywhere;
+}
+.hg-new-where {
+  display: grid;
+  gap: var(--hg-space-2);
+}
+.hg-new-where-title {
+  font-size: var(--hg-size-sm);
+}
+.hg-new-hint {
+  font-size: var(--hg-size-xs);
+}
+.hg-new-defaults {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--hg-space-3);
+  font-size: var(--hg-size-sm);
+}
+.hg-new-defaults dt {
+  font-size: var(--hg-size-xs);
+  color: var(--hg-ink-muted);
+}
+.hg-new-defaults dd {
+  margin: 0;
+}
+.hg-new-switch {
+  display: flex;
+  gap: var(--hg-space-3);
+  align-items: flex-start;
+}
+.hg-new-switch label {
+  display: grid;
+  gap: 0.15rem;
+}
+.hg-new-switch .hg-muted {
+  font-size: var(--hg-size-sm);
 }
 .hg-new-actions {
   display: flex;

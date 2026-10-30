@@ -14,6 +14,8 @@ defineProps<{
   placeholder?: string
   filter?: boolean
   loading?: boolean
+  /** Monospace, for values typed exactly, like domains. */
+  mono?: boolean
 }>()
 </script>
 
@@ -28,6 +30,8 @@ defineProps<{
     :filter="filter"
     :loading="loading"
     fluid
+    class="hg-select"
+    :class="{ 'is-mono': mono }"
   >
     <template #option="{ option }">
       <div class="hg-option">
@@ -39,6 +43,14 @@ defineProps<{
 </template>
 
 <style scoped>
+/* The same text size as text inputs, so a select and an input side by side line up. */
+.hg-select :deep(.p-select-label) {
+  font-size: var(--hg-size-base);
+}
+.hg-select.is-mono :deep(.p-select-label) {
+  font-family: var(--hg-mono);
+  font-size: var(--hg-size-sm);
+}
 .hg-option {
   display: grid;
 }

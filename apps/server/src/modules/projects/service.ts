@@ -2,17 +2,16 @@ import { randomBytes } from 'node:crypto'
 import {
   appHostname,
   checkProjectName,
+  checkPublicHostname,
   CONTAINER_STOP_GRACE_SECONDS,
+  defaultDomain,
   githubRepoSlug,
   hooksHostname,
   isValidBranchName,
-  isValidDomain,
   isValidRepoUrl,
-  HOOKS_SUBDOMAIN,
   normalizeRootDir,
+  type PublicHostnameProblem,
   type ProjectView,
-  RESERVED_NAMES,
-  TOWER_SUBDOMAIN,
   type TriggerMode,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
@@ -59,7 +58,7 @@ export interface ProjectSettings {
   port?: number | null
   memoryLimitMb?: number
   triggerMode?: TriggerMode
-  domains?: string[]
+  hostnames?: string[]
 }
 
 /** Validates and normalizes settings shared by create and update. */
@@ -89,46 +88,46 @@ function cleanSettings(settings: ProjectSettings): ProjectSettings {
   ) {
     throw new ProjectError('The memory limit must be at least 64 MB.')
   }
-  if (clean.domains !== undefined) {
-    clean.domains = [...new Set(clean.domains.map((d) => d.replace(/\.$/, '')))].filter(Boolean)
-    const invalid = clean.domains.find((d) => !isValidDomain(d))
-    if (invalid) {
-      throw new ProjectError(
-        `"${invalid}" is not a domain. Enter one like example.com, without https://.`,
-      )
-    }
+  if (clean.hostnames !== undefined) {
+    clean.hostnames = [
+      ...new Set(
+        clean.hostnames.map((h) =>
+          h
+            .replace(/^https?:\/\//, '')
+            .replace(/\/.*$/, '')
+            .replace(/\.$/, ''),
+        ),
+      ),
+    ].filter(Boolean)
   }
   return clean
 }
 
-/**
- * A custom domain may not be one Hangar already names: name.<public domain> belongs to the
- * project called name, tower. and hooks. to Hangar, and the LAN address to the network. Labels no
- * project can take (www, api, …) are free. Each domain belongs to one project.
- */
-async function checkDomains(ctx: Ctx, projectId: string | null, domains: string[]) {
-  if (domains.length === 0) return
-  const { publicDomain, lanDomain } = await getSettings(ctx.db)
-  for (const domain of domains) {
-    const label = domain.slice(0, domain.indexOf('.'))
-    const parent = domain.slice(domain.indexOf('.') + 1)
-    const hangarOwned = label === TOWER_SUBDOMAIN || label === HOOKS_SUBDOMAIN
-    if (parent === publicDomain && (hangarOwned || !RESERVED_NAMES.has(label))) {
-      throw new ProjectError(
-        `${domain} is already one of Hangar's own addresses.`,
-        `Apps get name.${publicDomain} from their project name. Custom domains are for other addresses, like ${publicDomain} itself or www.${publicDomain}.`,
-      )
-    }
-    if (lanDomain && (domain === lanDomain || domain.endsWith(`.${lanDomain}`))) {
-      throw new ProjectError(`${domain} is Hangar's network address and cannot be a custom domain.`)
-    }
+const HOSTNAME_PROBLEMS: Record<PublicHostnameProblem, (h: string, domains: string[]) => string> = {
+  invalid: (h) => `"${h}" is not an address. Enter one like blog.example.com, without https://.`,
+  not_your_domain: (h, domains) =>
+    domains.length
+      ? `${h} is not under one of your domains (${domains.join(', ')}). Add its domain in Settings first.`
+      : `${h} cannot be used yet: add your domain under Public access in Settings first.`,
+  too_deep: (h) =>
+    `${h} is more than one level under your domain. Cloudflare's free certificate covers one level, like blog.example.com.`,
+  reserved: (h) => `${h} is reserved for Hangar itself. Pick another name.`,
+}
+
+/** Each address must sit on one of the owner's domains and belong to one project only. */
+async function checkHostnames(ctx: Ctx, projectId: string | null, hostnames: string[]) {
+  if (hostnames.length === 0) return
+  const { publicDomains } = await getSettings(ctx.db)
+  for (const hostname of hostnames) {
+    const problem = checkPublicHostname(hostname, publicDomains)
+    if (problem) throw new ProjectError(HOSTNAME_PROBLEMS[problem](hostname, publicDomains))
   }
   const owner = (await listProjects(ctx.db)).find(
-    (p) => p.id !== projectId && p.domains.some((d) => domains.includes(d)),
+    (p) => p.id !== projectId && p.hostnames.some((h) => hostnames.includes(h)),
   )
   if (owner) {
-    const taken = owner.domains.find((d) => domains.includes(d))
-    throw new UserError(409, 'domain_taken', `${taken} is already used by ${owner.name}.`)
+    const taken = owner.hostnames.find((h) => hostnames.includes(h))
+    throw new UserError(409, 'address_taken', `${taken} is already used by ${owner.name}.`)
   }
 }
 
@@ -159,7 +158,11 @@ export async function createProject(
     )
   }
   const settings = cleanSettings(input)
-  await checkDomains(ctx, null, settings.domains ?? [])
+  const current = await getSettings(ctx.db)
+  const domain = defaultDomain(current)
+  // By default an app goes public as <name>.<default domain>, as soon as there is a domain.
+  settings.hostnames ??= domain ? [appHostname(input.name, domain)] : []
+  await checkHostnames(ctx, null, settings.hostnames)
   const token = await getGithubToken(ctx)
   const branch =
     settings.branch ??
@@ -176,7 +179,6 @@ export async function createProject(
     throw new ProjectError(`The branch "${branch}" was not found in that repository.`)
   }
 
-  const { publicDomain } = await getSettings(ctx.db)
   let project: Project
   try {
     project = await insertProject(ctx.db, {
@@ -184,7 +186,7 @@ export async function createProject(
       name: input.name,
       repoUrl,
       branch,
-      triggerMode: settings.triggerMode ?? (publicDomain ? 'webhook' : 'poll'),
+      triggerMode: settings.triggerMode ?? (domain ? 'webhook' : 'poll'),
     })
   } catch (error) {
     if ((error as { cause?: { code?: string } }).cause?.code === '23505') {
@@ -207,10 +209,10 @@ export async function updateProjectSettings(
   settings: ProjectSettings,
 ): Promise<Project> {
   const clean = cleanSettings(settings)
-  if (clean.domains) await checkDomains(ctx, project.id, clean.domains)
+  if (clean.hostnames) await checkHostnames(ctx, project.id, clean.hostnames)
   await updateProject(ctx.db, project.id, clean)
-  // Domains are routes, so they apply right away rather than on the next deploy.
-  if (clean.domains) await syncRouting(ctx)
+  // Addresses are routes, so they apply right away rather than on the next deploy.
+  if (clean.hostnames) await syncRouting(ctx)
   return (await getProject(ctx.db, project.id))!
 }
 
@@ -265,16 +267,14 @@ export function webhookSecret(ctx: Ctx, project: Project): string {
   return ctx.crypto.open(project.webhookSecret, webhookAad(project.id))
 }
 
-export function webhookUrl(publicDomain: string | null, projectId: string): string | null {
-  return publicDomain
-    ? `https://${hooksHostname(publicDomain)}/api/webhooks/github/${projectId}`
-    : null
+export function webhookUrl(domain: string | null, projectId: string): string | null {
+  return domain ? `https://${hooksHostname(domain)}/api/webhooks/github/${projectId}` : null
 }
 
 export async function webhookInfo(ctx: Ctx, project: Project) {
-  const { publicDomain } = await getSettings(ctx.db)
+  const domain = defaultDomain(await getSettings(ctx.db))
   return {
-    url: webhookUrl(publicDomain, project.id),
+    url: webhookUrl(domain, project.id),
     secret: webhookSecret(ctx, project),
     contentType: 'application/json' as const,
     active: project.triggerMode === 'webhook',
@@ -283,10 +283,10 @@ export async function webhookInfo(ctx: Ctx, project: Project) {
 
 /** Best effort: if the token may administer the repository's hooks, set the webhook up for the user. */
 async function tryCreateGithubWebhook(ctx: Ctx, project: Project, secret: string) {
-  const { publicDomain } = await getSettings(ctx.db)
+  const domain = defaultDomain(await getSettings(ctx.db))
   const slug = githubRepoSlug(project.repoUrl)
   const token = await getGithubToken(ctx)
-  const url = webhookUrl(publicDomain, project.id)
+  const url = webhookUrl(domain, project.id)
   if (!slug || !token || !url) return
   await ctx.github.createPushWebhook(token, slug, url, secret).catch((error: unknown) => {
     ctx.log.info(
@@ -324,10 +324,8 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       triggerMode: p.triggerMode,
       desiredState: p.desiredState,
       url: settings.lanDomain ? `http://${appHostname(p.name, settings.lanDomain)}` : null,
-      publicUrl: settings.publicDomain
-        ? `https://${appHostname(p.name, settings.publicDomain)}`
-        : null,
-      domains: p.domains,
+      hostnames: p.hostnames,
+      publicUrls: p.hostnames.map((h) => `https://${h}`),
       current: currentRow ? deploymentView(currentRow, p.currentDeploymentId) : null,
       latest: latestRow ? deploymentView(latestRow, p.currentDeploymentId) : null,
       recent: recent

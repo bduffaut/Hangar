@@ -1,5 +1,6 @@
 // Input rules shared by the API and the dashboard. Anything that reaches git, Docker, or a
 // hostname is checked here first.
+import { ENV_KEY_PATTERN } from './constants.ts'
 
 /** Branch names per `git check-ref-format --branch`, minus rarely used corner cases. */
 export function isValidBranchName(name: string): boolean {
@@ -62,4 +63,30 @@ export function parseWholeNumber(text: string, min: number, max: number): number
   if (!/^\d+$/.test(text.trim())) return null
   const value = Number(text.trim())
   return value >= min && value <= max ? value : null
+}
+
+/**
+ * Reads `.env` text: one `KEY=value` per line; blank lines and `#` comments are skipped, a leading
+ * `export ` is allowed, and matching quotes around a value are removed. Returns the variables and
+ * the numbers of lines that could not be read.
+ */
+export function parseDotenv(text: string): { vars: Record<string, string>; badLines: number[] } {
+  const vars: Record<string, string> = {}
+  const badLines: number[] = []
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim()
+    if (!line || line.startsWith('#')) return
+    const match = /^(?:export\s+)?([^=\s]+)\s*=\s*(.*)$/.exec(line)
+    if (!match || !ENV_KEY_PATTERN.test(match[1]!)) {
+      badLines.push(i + 1)
+      return
+    }
+    let value = match[2]!
+    const quote = value[0]
+    if ((quote === '"' || quote === "'") && value.length >= 2 && value.endsWith(quote)) {
+      value = value.slice(1, -1)
+    }
+    vars[match[1]!] = value
+  })
+  return { vars, badLines }
 }

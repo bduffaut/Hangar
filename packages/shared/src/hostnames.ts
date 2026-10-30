@@ -47,3 +47,51 @@ export function hooksHostname(domain: string): string {
 export function appHostname(projectName: string, domain: string): string {
   return `${projectName}.${domain}`
 }
+
+/** A public address split against the owner's domains: `blog` on `example.com`, or the root (''). */
+export interface PublicAddress {
+  subdomain: string
+  domain: string
+}
+
+/** Splits `blog.example.com` by the longest of `domains` it falls under; null if under none. */
+export function splitPublicHostname(
+  hostname: string,
+  domains: readonly string[],
+): PublicAddress | null {
+  const domain = [...domains]
+    .sort((a, b) => b.length - a.length)
+    .find((d) => hostname === d || hostname.endsWith(`.${d}`))
+  if (!domain) return null
+  return { subdomain: hostname === domain ? '' : hostname.slice(0, -domain.length - 1), domain }
+}
+
+export function joinPublicHostname({ subdomain, domain }: PublicAddress): string {
+  return subdomain ? `${subdomain}.${domain}` : domain
+}
+
+export type PublicHostnameProblem = 'invalid' | 'not_your_domain' | 'too_deep' | 'reserved'
+
+/**
+ * Whether `hostname` can be a project's public address: the root of one of the owner's domains or
+ * one name directly under it. Deeper names are refused because Cloudflare's free certificate only
+ * covers one level, and tower. and hooks. belong to Hangar.
+ */
+export function checkPublicHostname(
+  hostname: string,
+  domains: readonly string[],
+): PublicHostnameProblem | null {
+  const labels = hostname.split('.')
+  if (labels.length < 2 || hostname.length > 253 || !labels.every((l) => DNS_LABEL.test(l))) {
+    return 'invalid'
+  }
+  const address = splitPublicHostname(hostname, domains)
+  if (!address) return 'not_your_domain'
+  if (address.subdomain.includes('.')) return 'too_deep'
+  if (address.subdomain === TOWER_SUBDOMAIN || address.subdomain === HOOKS_SUBDOMAIN) {
+    return 'reserved'
+  }
+  return null
+}
+
+const DNS_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/

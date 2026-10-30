@@ -1,4 +1,4 @@
-import { CONTAINER_STOP_GRACE_SECONDS, DEFAULT_APP_PORT } from '@hangar/shared'
+import { CONTAINER_STOP_GRACE_SECONDS, DEFAULT_APP_PORT, defaultDomain } from '@hangar/shared'
 import { createHash } from 'node:crypto'
 import type { Ctx } from '../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
@@ -61,7 +61,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
     const running = override !== undefined || row.desiredState === 'running'
     return {
       name: row.name,
-      domains: row.domains,
+      hostnames: row.hostnames,
       target:
         running && number !== null && port !== null
           ? { host: appContainerName(row.name, number), port }
@@ -73,7 +73,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
     renderRouting({
       lanIp: settings.lanIp,
       lanDomain: settings.lanDomain,
-      publicDomain: settings.publicDomain,
+      defaultDomain: defaultDomain(settings),
       exposeTowerPublicly: settings.exposeTowerPublicly,
       coreUrl: ctx.config.coreUrl,
       apps,

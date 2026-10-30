@@ -5,7 +5,7 @@ import { PROJECT_NAME_MAX_LENGTH } from './hostnames.ts'
 import { DEPLOYMENT_TRIGGERS, DESIRED_STATES, LOG_STREAMS, TRIGGER_MODES } from './enums.ts'
 import { FAILURE_CODES } from './failures.ts'
 import { DEPLOYMENT_STATUSES } from './statuses.ts'
-import { ENV_KEY_PATTERN, MAX_PROJECT_DOMAINS } from './constants.ts'
+import { ENV_KEY_PATTERN, MAX_PROJECT_HOSTNAMES, MAX_PUBLIC_DOMAINS } from './constants.ts'
 import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
@@ -100,7 +100,9 @@ export type DashboardLayoutView = z.infer<typeof dashboardLayoutView>
 export const settingsView = z.object({
   lanIp: z.string().nullable(),
   lanDomain: z.string().nullable(),
-  publicDomain: z.string().nullable(),
+  /** The owner's domains for public access; the first is the default. */
+  publicDomains: z.array(z.string()),
+  defaultDomain: z.string().nullable(),
   exposeTowerPublicly: z.boolean(),
   githubConnected: z.boolean(),
   tunnelConfigured: z.boolean(),
@@ -111,7 +113,10 @@ export type SettingsView = z.infer<typeof settingsView>
 export const settingsPatch = z
   .object({
     lanIp: z.ipv4({ error: 'Enter an IPv4 address, like 192.168.1.50.' }),
-    publicDomain: z.string().trim().toLowerCase().nullable(),
+    /** The whole list, default first. */
+    publicDomains: z
+      .array(z.string().trim().toLowerCase().max(253, { error: 'That domain is too long.' }))
+      .max(MAX_PUBLIC_DOMAINS, { error: `Hangar can use at most ${MAX_PUBLIC_DOMAINS} domains.` }),
     exposeTowerPublicly: z.boolean(),
   })
   .partial()
@@ -122,6 +127,19 @@ export const githubAccount = z.object({ connected: z.boolean(), login: z.string(
 export const tunnelToken = z.object({
   token: z.string().trim().max(4000, { error: 'That tunnel token is too long.' }).nullable(),
 })
+
+/** Whether a public address reaches this Hangar. `wildcard` probes a random name under a domain. */
+export const addressCheck = z.object({
+  hostname: z.string().trim().toLowerCase().max(253),
+  wildcard: z.boolean().optional(),
+})
+export const ADDRESS_CHECK_STATUSES = ['ok', 'elsewhere', 'unreachable', 'no_tunnel'] as const
+export const addressCheckResult = z.object({
+  status: z.enum(ADDRESS_CHECK_STATUSES),
+  /** What was found, and what to do about it, in plain words. */
+  message: z.string(),
+})
+export type AddressCheckResult = z.infer<typeof addressCheckResult>
 
 // GitHub
 
@@ -158,11 +176,14 @@ export const projectInput = z.object({
     .max(MEMORY_LIMIT_MAX_MB)
     .optional(),
   triggerMode: z.enum(TRIGGER_MODES).optional(),
-  /** Exact public hostnames, like example.com, served through the Cloudflare Tunnel. */
-  domains: z
-    .array(z.string().trim().toLowerCase().max(253, { error: 'That domain is too long.' }))
-    .max(MAX_PROJECT_DOMAINS, {
-      error: `A project can have at most ${MAX_PROJECT_DOMAINS} custom domains.`,
+  /**
+   * Public addresses, each the root of one of the owner's domains or one name under it. Omit for
+   * the default, `<name>.<default domain>`; an empty list keeps the app on the network only.
+   */
+  hostnames: z
+    .array(z.string().trim().toLowerCase().max(253, { error: 'That address is too long.' }))
+    .max(MAX_PROJECT_HOSTNAMES, {
+      error: `A project can have at most ${MAX_PROJECT_HOSTNAMES} public addresses.`,
     })
     .optional(),
   /** Deploy the branch head right away (default true). */
@@ -175,7 +196,7 @@ export const projectPatch = projectInput
     port: true,
     memoryLimitMb: true,
     triggerMode: true,
-    domains: true,
+    hostnames: true,
   })
   .partial()
 
@@ -211,9 +232,9 @@ export const projectView = z.object({
   triggerMode: z.enum(TRIGGER_MODES),
   desiredState: z.enum(DESIRED_STATES),
   url: z.string().nullable(),
-  publicUrl: z.string().nullable(),
-  /** Custom domains; they answer only once public access is set up. */
-  domains: z.array(z.string()),
+  /** Public addresses (hostnames) and the same as https:// URLs. */
+  hostnames: z.array(z.string()),
+  publicUrls: z.array(z.string()),
   current: deploymentView.nullable(),
   latest: deploymentView.nullable(),
   /** The most recent deployments, oldest first: the runway lights on a project card. */

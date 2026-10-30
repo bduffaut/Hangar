@@ -29,7 +29,7 @@ await proxy.apply(
   renderRouting({
     lanIp: settings.lanIp,
     lanDomain: settings.lanDomain,
-    publicDomain: null,
+    defaultDomain: null,
     exposeTowerPublicly: false,
     coreUrl: config.coreUrl,
     apps: [{ name, target }],

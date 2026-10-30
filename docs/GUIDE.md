@@ -401,16 +401,15 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 
 ### Putting apps on your own domain
 
-Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine.
+Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine. Everything below is in Settings, under **Public access**.
 
-1. In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a tunnel (type "Cloudflared"). Copy its token. You do not need to install anything; Hangar runs the connector.
-2. In the tunnel, add a public hostname `*` on your domain (for example `*.example.com`) with service `http://hangar-proxy:8081`. Every app then gets `name.example.com`. Exact records you already have, like `example.com` and `www`, keep working; the wildcard only covers names that have no record of their own.
-3. In Hangar, under Settings, then Public access, enter the domain and save it, then paste the token and save it.
+1. **Connect a tunnel.** In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a tunnel of type Cloudflared. Copy the token from the install command it shows (you do not install anything; Hangar runs the tunnel) and save it in Hangar.
+2. **Add your domains**, for example `benduffaut.com` and `joshduffaut.com`. Any domain on your Cloudflare account works. For each one, add a public hostname to the tunnel with subdomain `*`, that domain, and service `http://hangar-proxy:8081`. Exact records you already have, like the root domain and `www`, keep working; the `*` only covers names that have no record of their own. Press **Check** to confirm names under the domain reach Hangar.
+3. **Pick a default domain.** New projects are suggested `name.<default domain>`, and GitHub webhooks use `hooks.<default domain>`.
 
-To serve one app on an exact address, like `example.com` itself or `www.example.com`:
+**Choosing where a project lives.** When you create a project, and later on its Settings tab, **Public addresses** lists where it answers on the internet. Each address is a name plus one of your domains, so a project can be `test.benduffaut.com` and `test.joshduffaut.com` at once, or the domain itself (leave the name empty), or nothing at all (remove every address to keep it on your network). Changes apply right away.
 
-1. On the project's Settings tab, under Custom domains, enter the addresses, one per line, and save. They take effect right away.
-2. In the same Cloudflare tunnel, add a public hostname for each address with the same service, `http://hangar-proxy:8081`. If the address already points somewhere else (another tunnel, or a server), Cloudflare asks to replace that record; replacing it moves the address's traffic to the app. To move back, point the hostname at the old tunnel again.
+A project on a root domain, like `benduffaut.com` itself, also needs that exact hostname added to the tunnel with the same service. If it already points somewhere else (another tunnel, or a server), Cloudflare asks to replace that record; replacing it moves the address to the app. To move back, point the hostname at the old place again. Use **Check** on the address to confirm what answers it.
 
 ---
 

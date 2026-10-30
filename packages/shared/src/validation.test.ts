@@ -5,6 +5,7 @@ import {
   isValidDomain,
   isValidRepoUrl,
   normalizeRootDir,
+  parseDotenv,
   parseWholeNumber,
 } from './validation.ts'
 
@@ -99,5 +100,26 @@ describe('parseWholeNumber', () => {
   })
   it.each(['', '0', '65536', '3.5', '1e3', '-1', 'abc', '80x'])('rejects %s', (text) => {
     expect(parseWholeNumber(text, 1, 65535)).toBeNull()
+  })
+})
+
+describe('parseDotenv', () => {
+  it('reads keys and values, skipping comments and blank lines', () => {
+    const text =
+      '# app\nAPI_KEY=abc\n\nexport NODE_ENV=production\nGREETING="hello world"\nEMPTY=\nURL=https://x.dev/?a=b'
+    expect(parseDotenv(text)).toEqual({
+      vars: {
+        API_KEY: 'abc',
+        NODE_ENV: 'production',
+        GREETING: 'hello world',
+        EMPTY: '',
+        URL: 'https://x.dev/?a=b',
+      },
+      badLines: [],
+    })
+  })
+
+  it('reports lines it cannot read', () => {
+    expect(parseDotenv('OK=1\njust words\n1BAD=2').badLines).toEqual([2, 3])
   })
 })

@@ -311,7 +311,8 @@ describe('settings', () => {
     expect(res.json()).toEqual({
       lanIp: '127.0.0.1',
       lanDomain: '127-0-0-1.sslip.io',
-      publicDomain: null,
+      publicDomains: [],
+      defaultDomain: null,
       exposeTowerPublicly: false,
       githubConnected: false,
       tunnelConfigured: false,
@@ -319,15 +320,20 @@ describe('settings', () => {
     })
   })
 
-  it('validates the public domain', async () => {
-    const res = await call({
-      method: 'PATCH',
-      url: '/api/settings',
-      body: { publicDomain: 'https://x' },
-      cookie,
-      csrf,
+  it('validates the public domains', async () => {
+    const settings = (body: unknown) =>
+      call({ method: 'PATCH', url: '/api/settings', body, cookie, csrf })
+    expect((await settings({ publicDomains: ['x'] })).status).toBe(400)
+    const nested = await settings({ publicDomains: ['example.com', 'apps.example.com'] })
+    expect(nested.json().error.code).toBe('nested_domain')
+    const saved = await settings({
+      publicDomains: ['https://Example.com/', 'other.dev', 'example.com'],
     })
-    expect(res.status).toBe(400)
+    expect(saved.json()).toMatchObject({
+      publicDomains: ['example.com', 'other.dev'],
+      defaultDomain: 'example.com',
+    })
+    expect((await settings({ publicDomains: [] })).json().publicDomains).toEqual([])
     const expose = await call({
       method: 'PATCH',
       url: '/api/settings',
@@ -417,49 +423,66 @@ describe('projects and env vars', () => {
     expect(again.status).toBe(409)
   })
 
-  it('validates custom domains and applies them to routing', async () => {
+  it('chooses public addresses on the owner domains, with name.<default> as the default', async () => {
+    const settings = (body: unknown) =>
+      call({ method: 'PATCH', url: '/api/settings', body, cookie, csrf })
     const patch = (body: unknown) =>
       call({ method: 'PATCH', url: `/api/projects/${projectId}`, body, cookie, csrf })
-    await call({
-      method: 'PATCH',
-      url: '/api/settings',
-      body: { publicDomain: 'example.com' },
-      cookie,
-      csrf,
+    const create = (name: string, extra: object = {}) =>
+      call({
+        method: 'POST',
+        url: '/api/projects',
+        body: { name, repoUrl, branch: 'main', deploy: false, ...extra },
+        cookie,
+        csrf,
+      })
+    await settings({ publicDomains: ['example.com', 'other.dev'] })
+
+    // No addresses given: public at <name>.<default domain>. An empty list keeps it private.
+    const auto = await create('auto')
+    expect(auto.json()).toMatchObject({
+      hostnames: ['auto.example.com'],
+      publicUrls: ['https://auto.example.com'],
+      triggerMode: 'webhook',
     })
+    expect((await create('quiet', { hostnames: [] })).json().hostnames).toEqual([])
 
-    const invalid = await patch({ domains: ['https://example.com'] })
-    expect(invalid.status).toBe(400)
-    expect(invalid.json().error.message).toContain('is not a domain')
-    const own = await patch({ domains: ['blog.example.com'] })
-    expect(own.status).toBe(400)
-    expect(own.json().error.message).toContain("Hangar's own addresses")
-    expect((await patch({ domains: ['tower.example.com'] })).status).toBe(400)
-    const lan = await patch({ domains: ['x.127-0-0-1.sslip.io'] })
-    expect(lan.status).toBe(400)
+    expect((await patch({ hostnames: ['https://blog.example.com/'] })).json().hostnames).toEqual([
+      'blog.example.com',
+    ])
+    const both = await patch({ hostnames: ['blog.example.com', 'blog.other.dev', 'other.dev'] })
+    expect(both.json().hostnames).toEqual(['blog.example.com', 'blog.other.dev', 'other.dev'])
 
-    const saved = await patch({ domains: ['Example.com', 'www.example.com.', 'example.com'] })
-    expect(saved.status).toBe(200)
-    expect(saved.json().domains).toEqual(['example.com', 'www.example.com'])
+    const notMine = await patch({ hostnames: ['blog.unknown.org'] })
+    expect(notMine.status).toBe(400)
+    expect(notMine.json().error.message).toContain('not under one of your domains')
+    expect((await patch({ hostnames: ['a.b.example.com'] })).json().error.message).toContain(
+      'one level',
+    )
+    expect((await patch({ hostnames: ['tower.example.com'] })).status).toBe(400)
+    const taken = await patch({ hostnames: ['auto.example.com'] })
+    expect(taken.status).toBe(409)
+    expect(taken.json().error.message).toContain('already used by auto')
 
-    const other = await call({
-      method: 'POST',
-      url: '/api/projects',
-      body: { name: 'other', repoUrl, branch: 'main', deploy: false, domains: ['www.example.com'] },
-      cookie,
-      csrf,
-    })
-    expect(other.status).toBe(409)
-    expect(other.json().error.message).toContain('already used by')
+    // A domain in use cannot be removed.
+    const removing = await settings({ publicDomains: ['example.com'] })
+    expect(removing.status).toBe(409)
+    expect(removing.json().error.message).toContain('blog still uses blog.other.dev')
 
-    expect((await patch({ domains: [] })).json().domains).toEqual([])
-    await call({
-      method: 'PATCH',
-      url: '/api/settings',
-      body: { publicDomain: null },
-      cookie,
-      csrf,
-    })
+    // Checks only ever go to the owner's own addresses, and need a tunnel.
+    const check = (body: unknown) =>
+      call({ method: 'POST', url: '/api/settings/check-address', body, cookie, csrf })
+    expect((await check({ hostname: 'evil.internal' })).status).toBe(400)
+    expect((await check({ hostname: 'blog.other.dev' })).json().status).toBe('no_tunnel')
+
+    expect((await patch({ hostnames: [] })).json().hostnames).toEqual([])
+    for (const name of ['auto', 'quiet']) {
+      const project = (await call({ url: '/api/projects', cookie }))
+        .json()
+        .find((p: { name: string }) => p.name === name)
+      await call({ method: 'DELETE', url: `/api/projects/${project.id}`, cookie, csrf })
+    }
+    await settings({ publicDomains: [] })
   })
 
   it('stores env vars encrypted and lists only keys', async () => {

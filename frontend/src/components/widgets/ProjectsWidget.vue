@@ -61,9 +61,27 @@ const edge = (project: ProjectView) =>
           >{{ project.name }}</RouterLink
         >
         <span class="hg-strip-address">
-          <a v-if="isLive(project)" :href="project.url!" target="_blank" rel="noopener"
-            >{{ address(project.url!) }}<BaseIcon name="external" :size="12"
-          /></a>
+          <template v-if="isLive(project)">
+            <a
+              v-if="project.publicUrls[0]"
+              v-hint.top="
+                project.publicUrls.length > 1
+                  ? `Also at ${project.publicUrls.slice(1).map(address).join(', ')}`
+                  : undefined
+              "
+              :href="project.publicUrls[0]"
+              target="_blank"
+              rel="noopener"
+              >{{ address(project.publicUrls[0]) }}<BaseIcon name="globe" :size="12" /><span
+                v-if="project.publicUrls.length > 1"
+                class="hg-strip-more"
+                >+{{ project.publicUrls.length - 1 }}</span
+              ></a
+            >
+            <a :href="project.url!" target="_blank" rel="noopener" class="hg-strip-lan"
+              >{{ address(project.url!) }}<BaseIcon name="external" :size="12"
+            /></a>
+          </template>
           <span v-else class="hg-muted">{{
             project.desiredState === 'stopped' ? 'Stopped' : 'Not live yet'
           }}</span>
@@ -206,6 +224,14 @@ const edge = (project: ProjectView) =>
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.hg-strip-address a.hg-strip-lan {
+  font-size: var(--hg-size-xs);
+  color: var(--hg-ink-muted);
+}
+.hg-strip-more {
+  font-size: var(--hg-size-xs);
+  color: var(--hg-ink-muted);
 }
 .hg-strip-commit {
   font-size: var(--hg-size-sm);

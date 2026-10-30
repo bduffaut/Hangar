@@ -3,12 +3,15 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { appHostname, hooksHostname, towerHostname } from '@hangar/shared'
+
+/** Public path that answers a reachability check; core decides whether the token is real. */
+export const ADDRESS_CHECK_PATH = '/.well-known/hangar-check/'
 import { stringify } from 'yaml'
 
 export interface AppRoute {
   name: string
-  /** Custom domains, served on the public entrypoint only (they arrive through the tunnel). */
-  domains?: string[]
+  /** Public addresses, served on the public entrypoint only (they arrive through the tunnel). */
+  hostnames?: string[]
   /** null when the app has no running container; the fallback router then sends LAN visitors to core. */
   target: { host: string; port: number } | null
 }
@@ -16,7 +19,8 @@ export interface AppRoute {
 export interface RoutingInput {
   lanIp: string
   lanDomain: string
-  publicDomain: string | null
+  /** Home of hooks.<domain> and, when exposed, tower.<domain>. */
+  defaultDomain: string | null
   exposeTowerPublicly: boolean
   coreUrl: string
   apps: AppRoute[]
@@ -66,7 +70,7 @@ export const appUpstreamUrl = (target: { host: string; port: number }) =>
   `http://${target.host}:${target.port}`
 
 export function renderRouting(input: RoutingInput): DynamicConfig {
-  const { lanIp, lanDomain, publicDomain } = input
+  const { lanIp, lanDomain, defaultDomain } = input
   const routers: Record<string, Router> = {}
   const services: Record<string, Service> = { [CORE]: loadBalancer(input.coreUrl) }
   const middlewares = {
@@ -89,17 +93,26 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
     middlewares: [FROM_WEB],
   }
 
-  if (publicDomain) {
+  // Any public address can answer Hangar's reachability check; core only confirms tokens it issued.
+  routers['address-check'] = {
+    entryPoints: ['public'],
+    rule: `PathPrefix(\`${ADDRESS_CHECK_PATH}\`)`,
+    priority: 10_000,
+    service: CORE,
+    middlewares: [FROM_PUBLIC],
+  }
+
+  if (defaultDomain) {
     routers.hooks = {
       entryPoints: ['public'],
-      rule: `${host(hooksHostname(publicDomain))} && PathPrefix(\`/api/webhooks/\`)`,
+      rule: `${host(hooksHostname(defaultDomain))} && PathPrefix(\`/api/webhooks/\`)`,
       service: CORE,
       middlewares: [FROM_PUBLIC],
     }
     if (input.exposeTowerPublicly) {
       routers['tower-public'] = {
         entryPoints: ['public'],
-        rule: host(towerHostname(publicDomain)),
+        rule: host(towerHostname(defaultDomain)),
         service: CORE,
         middlewares: [FROM_PUBLIC],
       }
@@ -116,17 +129,10 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
       rule: host(appHostname(app.name, lanDomain)),
       service,
     }
-    if (publicDomain) {
+    if (app.hostnames?.length) {
       routers[`app-${app.name}-public`] = {
         entryPoints: ['public'],
-        rule: host(appHostname(app.name, publicDomain)),
-        service,
-      }
-    }
-    if (app.domains?.length) {
-      routers[`app-${app.name}-domains`] = {
-        entryPoints: ['public'],
-        rule: app.domains.map(host).join(' || '),
+        rule: app.hostnames.map(host).join(' || '),
         service,
       }
     }

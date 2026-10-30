@@ -40,6 +40,13 @@ describe('classifyRequest', () => {
     expect(classify('hooks.example.com', '/api/projects', 'public')).toBe('not-found')
   })
 
+  it('lets the public entrypoint reach only the address check, on any hostname', () => {
+    expect(classify('blog.example.com', '/.well-known/hangar-check/abc', 'public')).toBe(
+      'address-check',
+    )
+    expect(classify('tower.192-168-1-50.sslip.io', '/.well-known/hangar-check/abc')).toBe('api')
+  })
+
   it('serves the API publicly only on an exposed tower hostname', () => {
     const exposed = { ...policy, publicTowerHost: 'tower.example.com' }
     expect(classify('tower.example.com', '/api/projects', 'public', exposed)).toBe('api')

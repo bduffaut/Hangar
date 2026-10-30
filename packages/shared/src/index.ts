@@ -8,6 +8,7 @@ export * from './contract.ts'
 export * as schemas from './schemas.ts'
 export * from './validation.ts'
 export type {
+  AddressCheckResult,
   DeploymentView,
   ErrorBody,
   LogLineView,
