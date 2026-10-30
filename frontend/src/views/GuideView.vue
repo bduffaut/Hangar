@@ -113,7 +113,7 @@ async function restartTour() {
   font-size: var(--hg-size-sm);
 }
 .hg-topics dt {
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 @media (max-width: 52rem) {
   .hg-guide {

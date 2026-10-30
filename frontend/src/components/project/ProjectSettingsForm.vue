@@ -5,8 +5,11 @@ import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   parseWholeNumber,
+  MAX_PROJECT_DOMAINS,
   type ProjectView,
+  type SettingsView,
   toastCopy,
+  TUNNEL_SERVICE_URL,
   type TriggerMode,
   triggerModeCopy,
 } from '@hangar/shared'
@@ -21,6 +24,7 @@ import {
   BaseInput,
   BaseMessage,
   BaseSelect,
+  BaseTextarea,
   type SelectOption,
   useNotify,
 } from '../../ui/index.ts'
@@ -79,6 +83,41 @@ async function save() {
     error.value = messageOf(e)
   } finally {
     busy.value = false
+  }
+}
+
+// Custom domains: exact addresses on the public side, applied as soon as they are saved.
+const domains = ref(props.project.domains.join('\n'))
+const domainsBusy = ref(false)
+const domainsError = ref<string | null>(null)
+const settings = ref<SettingsView | null>(null)
+onMounted(async () => {
+  settings.value = await api('getSettings').catch(() => null)
+})
+async function saveDomains() {
+  domainsBusy.value = true
+  domainsError.value = null
+  try {
+    const list = domains.value
+      .split(/[\s,]+/)
+      .map((d) =>
+        d
+          .trim()
+          .replace(/^https?:\/\//, '')
+          .replace(/\/.*$/, ''),
+      )
+      .filter(Boolean)
+    const updated = await api('updateProject', {
+      params: { id: props.project.id },
+      body: { domains: list },
+    })
+    projects.upsert(updated)
+    domains.value = updated.domains.join('\n')
+    notify.success(toastCopy.saved, 'Domains apply right away.')
+  } catch (e) {
+    domainsError.value = messageOf(e)
+  } finally {
+    domainsBusy.value = false
   }
 }
 
@@ -168,6 +207,55 @@ async function remove() {
     </HgPanel>
 
     <HgPanel
+      title="Custom domains"
+      description="Serve this app on your own addresses, like example.com and www.example.com, through your Cloudflare Tunnel."
+    >
+      <form class="hg-domains" @submit.prevent="saveDomains">
+        <BaseMessage v-if="settings && !settings.tunnelConfigured" tone="info">
+          Domains answer once public access is set up in Settings.
+        </BaseMessage>
+        <BaseField
+          label="Domains"
+          for="ps-domains"
+          :error="domainsError"
+          :help="`One per line, up to ${MAX_PROJECT_DOMAINS}.`"
+        >
+          <BaseTextarea
+            id="ps-domains"
+            v-model="domains"
+            mono
+            :rows="2"
+            placeholder="example.com"
+          />
+        </BaseField>
+        <ol class="hg-domains-steps">
+          <li>
+            In Cloudflare, open the tunnel Hangar uses and add a public hostname for each domain,
+            with this service:
+            <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
+          </li>
+          <li>
+            If the domain already points somewhere else, Cloudflare asks to replace that record.
+            Replacing it moves the domain's traffic to this app.
+          </li>
+        </ol>
+        <p v-if="project.domains.length" class="hg-domains-live">
+          <a
+            v-for="domain in project.domains"
+            :key="domain"
+            :href="`https://${domain}`"
+            target="_blank"
+            rel="noopener"
+            >https://{{ domain }}</a
+          >
+        </p>
+        <div>
+          <BaseButton type="submit" label="Save domains" :loading="domainsBusy" />
+        </div>
+      </form>
+    </HgPanel>
+
+    <HgPanel
       v-if="webhook"
       title="GitHub webhook"
       description="Add this in the repository's Settings, under Webhooks, with content type application/json and the push event."
@@ -225,6 +313,26 @@ async function remove() {
 </template>
 
 <style scoped>
+.hg-domains {
+  display: grid;
+  gap: var(--hg-space-4);
+}
+.hg-domains-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--hg-space-2);
+  font-size: var(--hg-size-sm);
+}
+.hg-domains-steps li > :deep(*) {
+  margin-top: var(--hg-space-2);
+}
+.hg-domains-live {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hg-space-4);
+  font-size: var(--hg-size-sm);
+}
 .hg-settings {
   display: grid;
   gap: var(--hg-space-5);
@@ -247,7 +355,7 @@ async function remove() {
   gap: var(--hg-space-2);
 }
 .hg-webhook-label {
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
   font-size: var(--hg-size-sm);
 }
 .hg-danger {

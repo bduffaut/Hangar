@@ -46,6 +46,19 @@ export const contract = {
   }),
   logout: endpoint({ method: 'POST', path: '/api/auth/logout', access: 'session', response: s.ok }),
   me: endpoint({ method: 'GET', path: '/api/auth/me', access: 'session', response: s.session }),
+  getDashboardLayout: endpoint({
+    method: 'GET',
+    path: '/api/me/dashboard',
+    access: 'session',
+    response: s.dashboardLayoutView,
+  }),
+  saveDashboardLayout: endpoint({
+    method: 'PUT',
+    path: '/api/me/dashboard',
+    access: 'session',
+    body: s.dashboardLayout,
+    response: s.ok,
+  }),
 
   getSettings: endpoint({
     method: 'GET',

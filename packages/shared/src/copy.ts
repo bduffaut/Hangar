@@ -133,6 +133,43 @@ export const instrumentsCopy = {
   } as Record<string, string>,
 } as const
 
+/** The home screen's widgets and its Customize mode. */
+export const dashboardCopy = {
+  customize: 'Customize',
+  done: 'Done',
+  undo: 'Undo',
+  redo: 'Redo',
+  reset: 'Reset layout',
+  resetConfirm: {
+    title: 'Reset the home screen?',
+    body: 'Every widget goes back to where a new install puts it. Your apps are not affected.',
+    action: 'Reset layout',
+  },
+  categories: { traffic: 'Traffic', instruments: 'Instruments', machine: 'Machine' },
+  widgets: {
+    departures: {
+      title: 'Departures',
+      description: 'Deployments under way, stage by stage.',
+    },
+    projects: {
+      title: 'Projects',
+      description: 'Every app with its address, last commit, and status.',
+    },
+    activity: { title: 'Latest activity', description: 'The newest deployment of each project.' },
+    outcomes: {
+      title: 'Deployment results',
+      description: 'How recent deployments ended, per project.',
+    },
+    cpu: { title: 'CPU', description: 'Processor use and load, with its trend.' },
+    memory: { title: 'Memory', description: 'Memory in use, with its trend.' },
+    disk: { title: 'Disk', description: 'Disk space in use.' },
+    temperature: { title: 'CPU temperature', description: 'How hot the processor runs.' },
+    battery: { title: 'Battery', description: 'Charge left, for laptops.' },
+    uptime: { title: 'Up for', description: 'Time since the server last started.' },
+    machine: { title: 'Machine', description: 'Processor, kernel, and Hangar version.' },
+  },
+} as const
+
 export const projectTabsCopy = {
   deployments: 'Deployments',
   radio: 'Radio',
@@ -315,14 +352,19 @@ export const guideCopy = {
   ],
   tour: [
     {
-      target: 'instruments',
-      title: 'Instruments',
-      body: 'Live readings from this server: CPU, memory, disk, temperature, and battery.',
+      target: 'departures',
+      title: 'Departures',
+      body: 'Deployments under way appear here as a route from holding to airborne, so you can see each one move through its stages.',
     },
     {
       target: 'projects',
       title: 'Your projects',
-      body: 'One row per app: its address, the last commit deployed, and its status. The lights are its recent deployments, newest on the right.',
+      body: 'One strip per app: its address, the last commit deployed, and its status. The lights are its recent deployments, newest on the right.',
+    },
+    {
+      target: 'customize',
+      title: 'Make it yours',
+      body: 'Drag, resize, and remove widgets, or add server readings like temperature and battery. Your layout is saved to your account.',
     },
     {
       target: 'new-project',

@@ -2,7 +2,7 @@
 import { type DeploymentStatus, statusCopy } from '@hangar/shared'
 import { computed } from 'vue'
 
-// A deployment status: a colored dot and its themed label, with the plain meaning on hover and
+// A deployment status: a colored waypoint mark and its themed label, with the plain meaning on hover and
 // for screen readers.
 const props = defineProps<{ status: DeploymentStatus; size?: 'sm' | 'md' }>()
 const copy = computed(() => statusCopy[props.status])
@@ -28,11 +28,10 @@ const inProgress = computed(() => ['queued', 'building', 'deploying'].includes(p
   --tone: var(--hg-status-queued);
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.2rem 0.55rem 0.2rem 0.5rem;
+  gap: 0.5rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.55rem;
   border-radius: var(--hg-radius-sm);
-  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
-  background: color-mix(in srgb, var(--tone) 12%, var(--hg-panel));
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
   color: var(--hg-ink);
   font-family: var(--hg-data);
   font-size: var(--hg-size-xs);
@@ -57,10 +56,11 @@ const inProgress = computed(() => ['queued', 'building', 'deploying'].includes(p
 .is-cancelled {
   --tone: var(--hg-status-cancelled);
 }
+/* A waypoint diamond in the status color. */
 .hg-status-dot {
-  width: 0.45rem;
-  height: 0.45rem;
-  border-radius: 1px;
+  width: 0.42rem;
+  height: 0.42rem;
+  transform: rotate(45deg);
   background: var(--tone);
 }
 .is-live {

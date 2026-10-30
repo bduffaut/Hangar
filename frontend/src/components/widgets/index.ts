@@ -1,48 +1,71 @@
+import { dashboardCopy } from '@hangar/shared'
+import { rowsFor } from '../../dashboard/layout.ts'
 import { defineDashboardPlugin } from '../../dashboard/types.ts'
 import ActivityWidget from './ActivityWidget.vue'
-import InstrumentsWidget from './InstrumentsWidget.vue'
+import DeparturesWidget from './DeparturesWidget.vue'
+import GaugeWidget, { type Reading } from './GaugeWidget.vue'
+import MachineWidget from './MachineWidget.vue'
 import OutcomesWidget from './OutcomesWidget.vue'
 import ProjectsWidget from './ProjectsWidget.vue'
+
+const { widgets: copy, categories } = dashboardCopy
+const GAUGES: Reading[] = ['cpu', 'memory', 'disk', 'temperature', 'battery', 'uptime']
 
 /** The Control Tower's own widgets, registered the same way an external library would. */
 export const builtInWidgets = defineDashboardPlugin({
   name: 'hangar',
   install({ registerWidget }) {
     registerWidget({
-      id: 'hangar.instruments',
-      title: 'Instruments',
-      description: 'Live CPU, memory, and disk use of this server.',
-      component: InstrumentsWidget,
-      size: 'full',
-      enabledByDefault: true,
-      order: 10,
+      id: 'hangar.departures',
+      ...copy.departures,
+      category: categories.traffic,
+      component: DeparturesWidget,
+      size: { w: 12, h: rowsFor(80), minW: 4 },
+      sizeToContent: true,
     })
     registerWidget({
       id: 'hangar.projects',
-      title: 'Projects',
-      description: 'Every app with its address, status, and recent deployments.',
+      ...copy.projects,
+      category: categories.traffic,
       component: ProjectsWidget,
-      size: 'full',
-      enabledByDefault: true,
-      order: 20,
+      size: { w: 12, h: rowsFor(260), minW: 4 },
+      sizeToContent: true,
     })
     registerWidget({
       id: 'hangar.activity',
-      title: 'Latest activity',
-      description: 'The newest deployment of each project.',
+      ...copy.activity,
+      category: categories.traffic,
       component: ActivityWidget,
-      size: 'half',
-      enabledByDefault: true,
-      order: 30,
+      size: { w: 6, h: rowsFor(200), minW: 3 },
+      sizeToContent: true,
     })
     registerWidget({
       id: 'hangar.outcomes',
-      title: 'Deployment results',
-      description: 'How recent deployments ended, per project.',
+      ...copy.outcomes,
+      category: categories.traffic,
       component: OutcomesWidget,
-      size: 'half',
-      enabledByDefault: true,
-      order: 40,
+      size: { w: 6, h: rowsFor(240), minW: 3, minH: rowsFor(200) },
+    })
+    for (const reading of GAUGES) {
+      registerWidget({
+        id: `hangar.${reading}`,
+        ...copy[reading],
+        category: categories.instruments,
+        component: GaugeWidget,
+        props: { reading },
+        size: {
+          w: 2,
+          h: rowsFor(200),
+          minH: rowsFor(reading === 'uptime' ? 100 : 140),
+        },
+      })
+    }
+    registerWidget({
+      id: 'hangar.machine',
+      ...copy.machine,
+      category: categories.machine,
+      component: MachineWidget,
+      size: { w: 12, h: rowsFor(96), minW: 4, minH: rowsFor(96) },
     })
   },
 })

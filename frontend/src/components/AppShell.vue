@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { navCopy } from '@hangar/shared'
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import BrandMark from '../brand/BrandMark.vue'
 import { useLiveStore } from '../stores/live.ts'
 import { useSessionStore } from '../stores/session.ts'
@@ -12,6 +12,11 @@ import TourOverlay from './TourOverlay.vue'
 const session = useSessionStore()
 const live = useLiveStore()
 const router = useRouter()
+const route = useRoute()
+/** Project and deployment pages belong under Projects in the navigation. */
+const inProjects = computed(() =>
+  ['project', 'deployment', 'new-project'].includes(String(route.name)),
+)
 const theme = useTheme()
 
 const themes: { value: ThemePreference; icon: IconName; label: string }[] = [
@@ -42,7 +47,9 @@ async function signOut() {
         <BrandMark />
       </RouterLink>
       <nav class="hg-shell-nav" aria-label="Main">
-        <RouterLink :to="{ name: 'home' }">{{ navCopy.projects }}</RouterLink>
+        <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
+          navCopy.projects
+        }}</RouterLink>
         <RouterLink :to="{ name: 'settings' }">{{ navCopy.settings }}</RouterLink>
         <RouterLink :to="{ name: 'guide' }" data-tour="guide">{{ navCopy.guide }}</RouterLink>
       </nav>
@@ -87,7 +94,7 @@ async function signOut() {
   top: -3rem;
   z-index: 10;
   padding: var(--hg-space-2) var(--hg-space-3);
-  background: var(--hg-accent);
+  background: var(--hg-accent-fill);
   color: var(--hg-on-accent);
   border-radius: var(--hg-radius-md);
 }
@@ -98,14 +105,15 @@ async function signOut() {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: color-mix(in srgb, var(--hg-canvas) 88%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--hg-canvas) 90%, transparent);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--hg-line);
 }
 .hg-shell-bar {
   max-width: var(--hg-width-wide);
   margin: 0 auto;
-  padding: var(--hg-space-3) var(--hg-space-5);
+  padding: 0 var(--hg-space-5);
+  height: 3.5rem;
   display: flex;
   align-items: center;
   gap: var(--hg-space-6);
@@ -115,24 +123,44 @@ async function signOut() {
 }
 .hg-shell-nav {
   display: flex;
-  gap: var(--hg-space-1);
+  align-self: stretch;
+  gap: var(--hg-space-5);
   flex: 1;
 }
+/* The current page sits on the magenta line; hovering draws it in. */
 .hg-shell-nav a {
-  padding: var(--hg-space-2) var(--hg-space-3);
-  border-radius: var(--hg-radius-md);
+  position: relative;
+  display: flex;
+  align-items: center;
   color: var(--hg-ink-muted);
   text-decoration: none;
-  font-weight: var(--hg-weight-medium);
+  transition: color var(--hg-motion-fast) var(--hg-motion-easing);
+}
+.hg-shell-nav a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--hg-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--hg-motion-base) var(--hg-motion-easing);
 }
 .hg-shell-nav a:hover {
   color: var(--hg-ink);
-  background: var(--hg-raised);
+}
+.hg-shell-nav a:hover::after {
+  transform: scaleX(0.35);
 }
 .hg-shell-nav a.router-link-exact-active,
 .hg-shell-nav a.is-section {
   color: var(--hg-ink);
-  background: var(--hg-raised);
+}
+.hg-shell-nav a.router-link-exact-active::after,
+.hg-shell-nav a.is-section::after {
+  transform: scaleX(1);
 }
 .hg-shell-tools {
   display: flex;
@@ -140,14 +168,15 @@ async function signOut() {
   gap: var(--hg-space-1);
 }
 .hg-shell-link {
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.45rem;
+  height: 0.45rem;
   margin: 0 var(--hg-space-2);
   border-radius: 50%;
   background: var(--hg-status-building);
 }
 .hg-shell-link.is-up {
   background: var(--hg-status-ready);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hg-status-ready) 18%, transparent);
 }
 .hg-shell-user {
   font-size: var(--hg-size-sm);
@@ -162,8 +191,9 @@ async function signOut() {
 @media (max-width: 44rem) {
   .hg-shell-bar {
     flex-wrap: wrap;
-    gap: var(--hg-space-2);
-    padding: var(--hg-space-2) var(--hg-space-4);
+    height: auto;
+    gap: 0 var(--hg-space-2);
+    padding: var(--hg-space-2) var(--hg-space-4) 0;
   }
   .hg-shell-tools {
     margin-left: auto;
@@ -174,6 +204,7 @@ async function signOut() {
   .hg-shell-nav {
     order: 3;
     flex-basis: 100%;
+    height: 2.5rem;
     overflow-x: auto;
   }
   .hg-shell-main {

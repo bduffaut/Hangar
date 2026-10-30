@@ -7,7 +7,14 @@ import {
   sessionView,
   setSessionCookie,
 } from '../../http/server.ts'
-import { completeSetup, endSession, login, needsSetup } from './service.ts'
+import {
+  completeSetup,
+  dashboardLayout,
+  endSession,
+  login,
+  needsSetup,
+  saveDashboardLayout,
+} from './service.ts'
 
 // Per client address, per minute. Failed logins are also limited per username (see service.ts).
 const AUTH_RATE_LIMIT = 10
@@ -46,4 +53,10 @@ export function authRoutes(http: Http) {
   })
 
   route(http, contract.me, async ({ auth }) => sessionView(ctx, auth))
+
+  route(http, contract.getDashboardLayout, async ({ auth }) => dashboardLayout(ctx, auth.user.id))
+  route(http, contract.saveDashboardLayout, async ({ auth, body }) => {
+    await saveDashboardLayout(ctx, auth.user.id, body.layout)
+    return OK
+  })
 }

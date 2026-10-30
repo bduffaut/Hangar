@@ -60,6 +60,24 @@ describe('renderRouting', () => {
     expect(routers['tower-public']).toBeUndefined()
   })
 
+  it('serves custom domains on the public entrypoint only', () => {
+    const apps = [
+      {
+        name: 'site',
+        domains: ['example.com', 'www.example.com'],
+        target: lanOnly.apps[0]!.target,
+      },
+      { name: 'off', domains: ['off.dev'], target: null },
+    ]
+    const { routers } = renderRouting({ ...lanOnly, apps }).http
+    expect(routers['app-site-domains']).toEqual({
+      entryPoints: ['public'],
+      rule: 'Host(`example.com`) || Host(`www.example.com`)',
+      service: 'app-site',
+    })
+    expect(routers['app-off-domains']).toBeUndefined()
+  })
+
   it('exposes the tower publicly only when asked', () => {
     const { routers } = renderRouting({
       ...lanOnly,

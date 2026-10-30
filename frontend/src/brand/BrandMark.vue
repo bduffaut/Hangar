@@ -1,25 +1,23 @@
 <script setup lang="ts">
 import { brand } from '@hangar/shared'
 
-// The logo: a barrel-roofed hangar on a taxiway sign, its door open on a parked plane. Sign
-// colors are fixed: yellow and black read the same on any theme.
-withDefaults(defineProps<{ size?: number; withName?: boolean }>(), { size: 28, withName: true })
+// The logo: a hangar's arch drawn in chart linework, with the magenta aircraft symbol of a
+// navigation display rolling out of its door. The arch follows the text color; the symbol is
+// always magenta.
+withDefaults(defineProps<{ size?: number; withName?: boolean }>(), { size: 26, withName: true })
 </script>
 
 <template>
   <span class="hg-brand">
-    <svg :width="size" :height="size" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="6" fill="#F5C42C" />
-      <path d="M2.5 25V17C2.5 11.4 8.5 7 16 7s13.5 4.4 13.5 10v8Z" fill="#14181C" />
-      <path d="M7 25V14h18v11Z" fill="#F5C42C" />
+    <svg :width="size" :height="size" viewBox="0 0 32 32" fill="none" aria-hidden="true">
       <path
-        d="M15.55 15.2h.9v3.3h-.9Zm-2.4 2h5.7v.75h-5.7ZM8.3 20.3l6-.55h3.4l6 .55v.9l-6-.15h-3.4l-6 .15Z"
-        fill="#14181C"
+        d="M4 27V17C4 10.9 9.4 6 16 6s12 4.9 12 11v10"
+        stroke="currentColor"
+        stroke-width="2.4"
+        stroke-linejoin="round"
       />
-      <circle cx="16" cy="20.6" r="1.9" fill="#14181C" />
-      <circle cx="11.6" cy="21.9" r="0.95" fill="#14181C" />
-      <circle cx="20.4" cy="21.9" r="0.95" fill="#14181C" />
-      <rect x="2.5" y="26.6" width="27" height="1.4" rx="0.4" fill="#14181C" />
+      <path d="M1.5 27h29" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+      <path d="M16 13.5 20.5 23h-9Z" fill="var(--hg-accent)" />
     </svg>
     <span v-if="withName" class="hg-brand-name">{{ brand.name }}</span>
   </span>
@@ -29,16 +27,15 @@ withDefaults(defineProps<{ size?: number; withName?: boolean }>(), { size: 28, w
 .hg-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   color: var(--hg-ink);
 }
 .hg-brand svg {
   flex: none;
 }
 .hg-brand-name {
-  font-stretch: 125%;
-  font-weight: 760;
+  font-weight: var(--hg-weight-bold);
   font-size: var(--hg-size-md);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
 }
 </style>

@@ -16,9 +16,11 @@ defineProps<{ label: string; for: string; help?: string; error?: string | null }
 .hg-field {
   display: grid;
   gap: var(--hg-space-2);
+  /* In a form grid, a field next to a taller one keeps its own height. */
+  align-content: start;
 }
 .hg-field-label {
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
   font-size: var(--hg-size-sm);
 }
 .hg-field-help,

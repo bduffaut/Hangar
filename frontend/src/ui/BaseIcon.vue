@@ -37,6 +37,8 @@ const paths = {
   globe:
     'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z',
   layout: 'M3 3h18v18H3zM3 9h18M9 21V9',
+  undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
+  redo: 'm15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
 } as const
 
 withDefaults(defineProps<{ name: IconName; size?: number; label?: string }>(), { size: 18 })

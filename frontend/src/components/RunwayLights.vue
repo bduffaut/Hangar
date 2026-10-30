@@ -58,15 +58,14 @@ const summary = computed(() => {
   grid-template-columns: repeat(v-bind('props.slots'), 1fr);
   gap: 0.3rem;
   align-items: center;
-  padding: 0.45rem 0.55rem;
-  border-radius: var(--hg-radius-sm);
-  background: color-mix(in srgb, var(--hg-canvas) 70%, transparent);
-  border: 1px solid var(--hg-line);
+  padding: 0.4rem 0;
 }
 .hg-light {
   --tone: var(--hg-status-queued);
-  height: 0.5rem;
-  border-radius: 1px;
+  height: 0.45rem;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  justify-self: center;
   background: var(--tone);
 }
 .is-empty {

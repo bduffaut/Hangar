@@ -54,6 +54,18 @@ export async function updatePassword(db: Db, userId: string, passwordHash: strin
   })
 }
 
+export async function getDashboardLayout(db: Db, userId: string): Promise<unknown[] | null> {
+  const [row] = await db
+    .select({ layout: users.dashboardLayout })
+    .from(users)
+    .where(eq(users.id, userId))
+  return Array.isArray(row?.layout) ? row.layout : null
+}
+
+export async function setDashboardLayout(db: Db, userId: string, layout: unknown[]) {
+  await db.update(users).set({ dashboardLayout: layout }).where(eq(users.id, userId))
+}
+
 export async function insertSession(
   db: Db,
   values: { id: string; userId: string; expiresAt: Date },

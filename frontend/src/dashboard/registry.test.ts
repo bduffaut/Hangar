@@ -1,26 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import { defineComponent } from 'vue'
-import { allWidgets, registerWidget } from './registry.ts'
+import { allWidgets, registerWidget, widgetById } from './registry.ts'
 
-const widget = (id: string, order: number) => ({
+const widget = (id: string) => ({
   id,
   title: id,
   description: '',
+  category: 'Test',
   component: defineComponent({}),
-  size: 'full' as const,
-  enabledByDefault: true,
-  order,
+  size: { w: 2, h: 2 },
 })
 
-registerWidget(widget('b', 2))
-registerWidget(widget('a', 1))
+registerWidget(widget('b'))
+registerWidget(widget('a'))
 
 describe('dashboard registry', () => {
-  it('lists widgets in their default order', () => {
-    expect(allWidgets.value.map((w) => w.id)).toEqual(['a', 'b'])
+  it('lists widgets in the order they were registered', () => {
+    expect(allWidgets.value.map((w) => w.id)).toEqual(['b', 'a'])
+  })
+
+  it('finds a widget by id', () => {
+    expect(widgetById('a')?.title).toBe('a')
+    expect(widgetById('missing')).toBeUndefined()
   })
 
   it('refuses duplicate widget ids', () => {
-    expect(() => registerWidget(widget('a', 9))).toThrow('already registered')
+    expect(() => registerWidget(widget('a'))).toThrow('already registered')
   })
 })

@@ -61,6 +61,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
     const running = override !== undefined || row.desiredState === 'running'
     return {
       name: row.name,
+      domains: row.domains,
       target:
         running && number !== null && port !== null
           ? { host: appContainerName(row.name, number), port }

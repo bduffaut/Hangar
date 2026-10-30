@@ -26,3 +26,6 @@ export const TEST_FLIGHT = {
   branch: 'main',
   rootDir: 'fixtures/static-site',
 } as const
+
+/** Custom domains one project may answer on. */
+export const MAX_PROJECT_DOMAINS = 5

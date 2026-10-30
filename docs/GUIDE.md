@@ -275,15 +275,15 @@ Each feature in `src/modules/` is split the same way:
 
 ### The database tables
 
-| Table             | Holds                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------- |
-| `users`           | Your account (the password is stored only as an **argon2** hash).                                          |
-| `sessions`        | Signed-in browsers (only a hash of each session token).                                                    |
-| `settings`        | Server address, public domain, encrypted GitHub and tunnel tokens, the setup code's hash.                  |
-| `projects`        | One row per app: repository, branch, folder, port, memory limit, how it deploys, which deployment is live. |
-| `deployments`     | One row per attempt: number, commit, status, failure reason, image, timings.                               |
-| `deployment_logs` | Every build log line, numbered, so a live viewer can resume where it left off.                             |
-| `env_vars`        | Each project's variables, encrypted.                                                                       |
+| Table             | Holds                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `users`           | Your account (the password is stored only as an **argon2** hash) and your home screen layout.                              |
+| `sessions`        | Signed-in browsers (only a hash of each session token).                                                                    |
+| `settings`        | Server address, public domain, encrypted GitHub and tunnel tokens, the setup code's hash.                                  |
+| `projects`        | One row per app: repository, branch, folder, port, memory limit, how it deploys, custom domains, which deployment is live. |
+| `deployments`     | One row per attempt: number, commit, status, failure reason, image, timings.                                               |
+| `deployment_logs` | Every build log line, numbered, so a live viewer can resume where it left off.                                             |
+| `env_vars`        | Each project's variables, encrypted.                                                                                       |
 
 ---
 
@@ -293,13 +293,13 @@ The dashboard lives in `frontend/src/`. It is organized so that colors, wording,
 
 | Folder        | Role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `theme/`      | **All colors, fonts, and sizes.** `tokens.ts` is the single source: the dark "night panel" and light "day panel" palettes, the five status colors, chart colors, terminal colors, the type scale. Every color was checked for readability (WCAG AA contrast). `css.ts` turns the tokens into CSS variables (`--hg-…`) that every style uses. `preset.ts` points PrimeVue's theme at the same variables. `useTheme.ts` switches dark, light, or match-system, and remembers the choice. |
+| `theme/`      | **All colors, fonts, and sizes.** `tokens.ts` is the single source: the dark "night chart" and light "day chart" palettes, the five status colors, chart colors, terminal colors, the type scale. Every color was checked for readability (WCAG AA contrast). `css.ts` turns the tokens into CSS variables (`--hg-…`) that every style uses. `preset.ts` points PrimeVue's theme at the same variables. `useTheme.ts` switches dark, light, or match-system, and remembers the choice. |
 | `ui/`         | **The component wrappers.** `BaseButton`, `BaseInput`, `BaseSelect`, `BaseDialog`, `BaseTabs`, and the rest wrap PrimeVue. The rest of the dashboard only uses these, and a lint rule (an automatic code check) rejects any PrimeVue import outside this folder. To switch to another component library, you rewrite these files and nothing else.                                                                                                                                     |
 | `charts/`     | `BaseChart`, the only place Chart.js is used. Charts take their colors from the theme and redraw when you switch theme.                                                                                                                                                                                                                                                                                                                                                                |
 | `api/`        | `client.ts` calls endpoints by name (`api('getProject', { params: { id } })`) with types taken from the shared contract, and adds the CSRF token. `streams.ts` opens live streams that reconnect by themselves.                                                                                                                                                                                                                                                                        |
 | `stores/`     | Shared state (Pinia): `session` (who is signed in), `projects`, `live` (one status stream while signed in), `metrics` (CPU and memory samples, streamed only while something on screen needs them).                                                                                                                                                                                                                                                                                    |
-| `dashboard/`  | **The widget system.** The home screen is a set of widgets. `types.ts` defines what a widget and a widget plugin are, `registry.ts` keeps the list of widgets, and `plugins.ts` is where external widget packages are added.                                                                                                                                                                                                                                                           |
-| `components/` | The dashboard's own pieces, built from `ui/` and `charts/`: status badges, the **runway lights** (a project's recent deployments as a row of lights, newest on the right, the one in progress pulsing), trend lines, the Flight Recorder log viewer, the app frame, the tour, the four built-in widgets (`widgets/`), and the project page's tabs (`project/`).                                                                                                                        |
+| `dashboard/`  | **The widget system.** The home screen is a grid of widgets you can rearrange, built on your `custom-dashboard-grid` library. `types.ts` defines what a widget and a widget plugin are, `registry.ts` keeps the list of widgets, `plugins.ts` is where external widget packages are added, `layout.ts` holds the grid settings and the starting layout, and `useDashboardLayout.ts` loads and saves your layout on the server.                                                         |
+| `components/` | The dashboard's own pieces, built from `ui/` and `charts/`: status badges, the **runway lights** (a project's recent deployments as a row of lights, newest on the right, the one in progress pulsing), trend lines, the Flight Recorder log viewer, the app frame, the tour, the grid and the frame around each widget (`dashboard/`), the built-in widgets (`widgets/`), and the project page's tabs (`project/`).                                                                   |
 | `views/`      | One file per page: Setup (Preflight Checklist), Login, Home, New project, Project, Deployment, Settings, Guide, Not found.                                                                                                                                                                                                                                                                                                                                                             |
 | `lib/`        | Small helpers: formatting sizes and times, and turning colored build-log text into safe plain text.                                                                                                                                                                                                                                                                                                                                                                                    |
 | `brand/`      | The logo and the browser-tab icon.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -311,17 +311,23 @@ The dashboard lives in `frontend/src/`. It is organized so that colors, wording,
 - **Logo:** edit `frontend/src/brand/BrandMark.vue` and `favicon.svg`.
 - **Component library:** rewrite the files in `frontend/src/ui/` to use the new library, keeping the same `Base*` names and options.
 - **Your own dashboard widgets:**
-  1. Your package exports `defineDashboardPlugin({ name, install({ registerWidget }) { … } })`. Each widget has an id, a title, a Vue component, and a size. It receives everything it shows through one prop, `data`: the projects (and whether they have loaded), the deployments in progress, and recent resource readings. A widget never touches Hangar's internals, so it can live in its own package.
+  1. Your package exports `defineDashboardPlugin({ name, install({ registerWidget }) { … } })`. Each widget has an id, a title, a one-line description, a category, a Vue component, and a starting size in grid cells (12 columns across; rows are 8 px, and `rowsFor(px)` converts a height). It receives everything it shows through one prop, `data`: the projects (and whether they have loaded), the deployments in progress, and recent resource readings. A widget never touches Hangar's internals, so it can live in its own package.
   2. Install it with `pnpm --filter @hangar/frontend add <your-package>`.
   3. Add it to the list in `frontend/src/dashboard/plugins.ts`.
 
-  It then appears on the home screen, in the order its `order` number gives it.
+  It then shows in the list under **Customize** on the home screen, ready to drag onto the board.
 
 ### Design choices
 
-- **Type:** Archivo, using its wide setting for headings (like the placards in a cockpit) and its normal width for text. Readings and statuses use B612, the typeface Airbus made for cockpit screens. JetBrains Mono is for things you copy exactly: addresses you type, commit IDs, and logs.
-- **Color:** the blue-gray of a flight deck rather than black, and the yellow of airport taxiway signs as the accent (black on yellow in the dark theme, yellow on black in the light one). Statuses use the colors of cockpit flight displays: gray Holding, cyan Preflight, magenta Taking off, green Airborne, red Grounded.
-- **Home screen:** the Instruments strip (CPU, memory, disk, temperature, battery, uptime) above a departures board with one row per app.
+- **The idea:** an air traffic controller's desk drawn like an aeronautical chart, rather than a cockpit.
+- **Type:** B612, the typeface Airbus made for cockpit screens, for all text. JetBrains Mono is for things you copy exactly: addresses you type, commit IDs, and logs.
+- **Color:** deep chart navy at night and white chart paper by day. Links are the blue charts use for airports. The one accent is magenta, the course line a pilot follows on a navigation display: it marks primary buttons, the current page, focus, and anything on its way to going live. Statuses use the colors of cockpit flight displays: gray Holding, cyan Preflight, magenta Taking off, green Airborne, red Grounded.
+- **Home screen:** a grid of widgets you can rearrange with **Customize**: drag a widget by its title, resize it from its corner, remove it with its ×, or add one from the list that appears. Undo and redo work while customizing. Your layout is saved to your account, so it is the same in every browser. **Reset layout** goes back to the start.
+  - **Departures:** each deployment under way drawn as a route through Holding, Preflight, Taking off, and Airborne. Legs flown are solid, the leg being flown moves.
+  - **Instruments:** CPU, memory, disk, temperature, battery, and uptime, each with its trend and a scale marked with caution (amber) and warning (red) ranges, like engine gauges. A reading turns amber or red when it enters them.
+  - **Projects:** one flight strip per app, edged in its status color. Hovering slides it along like a strip pushed in its rack.
+  - **Latest activity**, **Deployment results**, and **Machine** (processor, kernel, version).
+- **Motion:** buttons respond quietly (a primary button's icon lifts a pixel; others draw a short magenta line under the label). The only motion that runs by itself is a deployment moving along its route.
 - **Accessibility and phones:** keyboard focus is always visible, motion is turned off when your device asks for less motion, and every page works at phone width. The browser tests check desktop and phone.
 
 ---
@@ -392,6 +398,19 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 | Change the database structure              | Edit `apps/server/src/db/schema.ts`, then run `pnpm db:generate --name <change>`.                                                                                                         |
 | Add an API endpoint                        | Add it to `packages/shared/src/contract.ts` (and its shapes in `schemas.ts`), then register it with `route()` in the feature's `routes.ts`. The dashboard can call it by name right away. |
 | Ship to the laptop                         | `HANGAR_BIND_IP=100.113.190.111 pnpm ship`.                                                                                                                                               |
+
+### Putting apps on your own domain
+
+Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine.
+
+1. In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a tunnel (type "Cloudflared"). Copy its token. You do not need to install anything; Hangar runs the connector.
+2. In the tunnel, add a public hostname `*` on your domain (for example `*.example.com`) with service `http://hangar-proxy:8081`. Every app then gets `name.example.com`. Exact records you already have, like `example.com` and `www`, keep working; the wildcard only covers names that have no record of their own.
+3. In Hangar, under Settings, then Public access, enter the domain and save it, then paste the token and save it.
+
+To serve one app on an exact address, like `example.com` itself or `www.example.com`:
+
+1. On the project's Settings tab, under Custom domains, enter the addresses, one per line, and save. They take effect right away.
+2. In the same Cloudflare tunnel, add a public hostname for each address with the same service, `http://hangar-proxy:8081`. If the address already points somewhere else (another tunnel, or a server), Cloudflare asks to replace that record; replacing it moves the address's traffic to the app. To move back, point the hostname at the old tunnel again.
 
 ---
 

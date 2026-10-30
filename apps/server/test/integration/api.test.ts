@@ -271,6 +271,40 @@ describe('sessions', () => {
   })
 })
 
+describe('dashboard layout', () => {
+  const widget = { id: 'hangar.cpu', type: 'hangar.cpu', x: 0, y: 0, w: 2, h: 27 }
+
+  it('starts with no saved layout', async () => {
+    const res = await call({ url: '/api/me/dashboard', cookie })
+    expect(res.json()).toEqual({ layout: null })
+  })
+
+  it('saves and returns the layout, keeping fields the grid adds', async () => {
+    const layout = [
+      { ...widget, collapsed: true, breakpoints: { narrow: { x: 0, y: 0, w: 2, h: 27 } } },
+    ]
+    const saved = await call({
+      method: 'PUT',
+      url: '/api/me/dashboard',
+      body: { layout },
+      cookie,
+      csrf,
+    })
+    expect(saved.status).toBe(200)
+    expect((await call({ url: '/api/me/dashboard', cookie })).json()).toEqual({ layout })
+  })
+
+  it('rejects malformed and oversized layouts', async () => {
+    const put = (layout: unknown) =>
+      call({ method: 'PUT', url: '/api/me/dashboard', body: { layout }, cookie, csrf })
+    expect((await put([{ ...widget, w: -1 }])).status).toBe(400)
+    expect((await put([{ id: 'x' }])).status).toBe(400)
+    expect((await put('not a list')).status).toBe(400)
+    const huge = [{ ...widget, props: { text: 'x'.repeat(40_000) } }]
+    expect((await put(huge)).status).toBe(400)
+  })
+})
+
 describe('settings', () => {
   it('never returns secrets', async () => {
     const res = await call({ url: '/api/settings', cookie })
@@ -381,6 +415,51 @@ describe('projects and env vars', () => {
       csrf,
     })
     expect(again.status).toBe(409)
+  })
+
+  it('validates custom domains and applies them to routing', async () => {
+    const patch = (body: unknown) =>
+      call({ method: 'PATCH', url: `/api/projects/${projectId}`, body, cookie, csrf })
+    await call({
+      method: 'PATCH',
+      url: '/api/settings',
+      body: { publicDomain: 'example.com' },
+      cookie,
+      csrf,
+    })
+
+    const invalid = await patch({ domains: ['https://example.com'] })
+    expect(invalid.status).toBe(400)
+    expect(invalid.json().error.message).toContain('is not a domain')
+    const own = await patch({ domains: ['blog.example.com'] })
+    expect(own.status).toBe(400)
+    expect(own.json().error.message).toContain("Hangar's own addresses")
+    expect((await patch({ domains: ['tower.example.com'] })).status).toBe(400)
+    const lan = await patch({ domains: ['x.127-0-0-1.sslip.io'] })
+    expect(lan.status).toBe(400)
+
+    const saved = await patch({ domains: ['Example.com', 'www.example.com.', 'example.com'] })
+    expect(saved.status).toBe(200)
+    expect(saved.json().domains).toEqual(['example.com', 'www.example.com'])
+
+    const other = await call({
+      method: 'POST',
+      url: '/api/projects',
+      body: { name: 'other', repoUrl, branch: 'main', deploy: false, domains: ['www.example.com'] },
+      cookie,
+      csrf,
+    })
+    expect(other.status).toBe(409)
+    expect(other.json().error.message).toContain('already used by')
+
+    expect((await patch({ domains: [] })).json().domains).toEqual([])
+    await call({
+      method: 'PATCH',
+      url: '/api/settings',
+      body: { publicDomain: null },
+      cookie,
+      csrf,
+    })
   })
 
   it('stores env vars encrypted and lists only keys', async () => {

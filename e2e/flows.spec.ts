@@ -11,14 +11,27 @@ test('create, deploy, configure, roll back, and delete a project', async ({ page
 
   // First visit to the Control Tower: the tour walks through the main screen.
   await page.goto('/')
-  await expect(page.getByRole('dialog', { name: 'Instruments' })).toBeVisible()
-  for (const step of ['Instruments', 'Your projects', 'Add a project', 'Guide']) {
+  await expect(page.getByRole('dialog', { name: 'Departures' })).toBeVisible()
+  for (const step of ['Departures', 'Your projects', 'Make it yours', 'Add a project', 'Guide']) {
     await expect(page.getByRole('dialog', { name: step })).toBeVisible()
     await page.getByRole('button', { name: step === 'Guide' ? 'Done' : 'Next' }).click()
   }
   await expect(page.locator('.hg-tour')).toHaveCount(0)
   await expect(page.getByText('test-flight').first()).toBeVisible()
   await shot(page, `${device}-home`)
+
+  // Customize the home screen: a removed widget moves to the add list, and the layout is saved.
+  await page.getByRole('button', { name: 'Customize' }).click()
+  await page.getByRole('button', { name: 'Remove Disk' }).click()
+  await expect(page.locator('[data-widget="hangar.disk"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Done' }).click()
+  await page.reload()
+  await expect(page.getByText('test-flight').first()).toBeVisible()
+  await expect(page.locator('[data-widget="hangar.disk"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Customize' }).click()
+  await page.getByRole('button', { name: /^Disk/ }).click()
+  await expect(page.locator('[data-widget="hangar.disk"]')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Done' }).click()
 
   // Create a project from the fixtures repository.
   await page.getByRole('button', { name: 'New project' }).click()

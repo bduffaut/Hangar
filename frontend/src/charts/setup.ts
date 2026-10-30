@@ -51,6 +51,8 @@ export function chartColors() {
 export function baseOptions<T extends ChartType>(): ChartOptions<T> {
   const c = chartColors()
   const font = { family: cssVar('--hg-font'), size: 12 }
+  // Axis labels read the global default, not the chart's `font` option.
+  Chart.defaults.font.family = font.family
   return {
     responsive: true,
     maintainAspectRatio: false,

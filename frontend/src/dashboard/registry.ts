@@ -13,7 +13,9 @@ export function installDashboardPlugin(plugin: DashboardPlugin): void {
   plugin.install({ registerWidget })
 }
 
-/** Every registered widget in its default order. */
-export const allWidgets = computed(() =>
-  [...widgets.values()].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)),
-)
+export function widgetById(id: string): DashboardWidget | undefined {
+  return widgets.get(id)
+}
+
+/** Every registered widget, in the order they were registered. */
+export const allWidgets = computed(() => [...widgets.values()])

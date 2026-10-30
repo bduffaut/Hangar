@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "domains" text[] DEFAULT '{}'::text[] NOT NULL;

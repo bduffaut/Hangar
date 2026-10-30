@@ -46,6 +46,8 @@ export const users = pgTable('users', {
   id: id(),
   username: text().notNull().unique(),
   passwordHash: text().notNull(),
+  /** The home screen's widget layout, as the dashboard saved it. Null means the default. */
+  dashboardLayout: jsonb(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
@@ -85,6 +87,11 @@ export const projects = pgTable('projects', {
     onDelete: 'set null',
   }),
   desiredState: desiredState().notNull().default('running'),
+  /** Exact public hostnames the app also answers on, like example.com. Public entrypoint only. */
+  domains: text()
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   nextDeploymentNumber: integer().notNull().default(1),
   createdAt: createdAt(),
   updatedAt: updatedAt(),

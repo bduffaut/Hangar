@@ -4,7 +4,6 @@ import { computed } from 'vue'
 import { useNow } from '../../composables/useNow.ts'
 import type { DashboardWidgetProps } from '../../dashboard/index.ts'
 import { relativeTime, shortSha } from '../../lib/format.ts'
-import HgPanel from '../HgPanel.vue'
 import StatusBadge from '../StatusBadge.vue'
 
 // The newest deployment of every project, most recent first: what happened lately.
@@ -21,7 +20,7 @@ const rows = computed(() =>
 </script>
 
 <template>
-  <HgPanel title="Latest activity" :padded="false">
+  <div class="hg-activity-wrap">
     <p v-if="rows.length === 0" class="hg-muted hg-activity-empty">
       Nothing has been deployed yet.
     </p>
@@ -46,30 +45,37 @@ const rows = computed(() =>
         </RouterLink>
       </li>
     </ol>
-  </HgPanel>
+  </div>
 </template>
 
 <style scoped>
+.hg-activity-wrap {
+  container-type: inline-size;
+}
 .hg-activity {
   list-style: none;
   margin: 0;
-  padding: var(--hg-space-2) 0;
+  padding: 0 0 var(--hg-space-2);
 }
 .hg-activity-empty {
-  padding: var(--hg-space-4) var(--hg-space-5);
+  padding: 0 var(--hg-space-4) var(--hg-space-4);
+  font-size: var(--hg-size-sm);
 }
 .hg-activity-row {
   display: grid;
   grid-template-columns: 7.5rem 1fr auto auto;
   gap: var(--hg-space-3);
   align-items: center;
-  padding: var(--hg-space-2) var(--hg-space-5);
+  padding: var(--hg-space-2) var(--hg-space-4);
   color: inherit;
   text-decoration: none;
   font-size: var(--hg-size-sm);
 }
 .hg-activity-row > :first-child {
   justify-self: start;
+}
+.hg-activity-row {
+  transition: background-color var(--hg-motion-fast) var(--hg-motion-easing);
 }
 .hg-activity-row:hover {
   background: var(--hg-raised);
@@ -80,7 +86,7 @@ const rows = computed(() =>
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-@media (max-width: 36rem) {
+@container (max-width: 30rem) {
   .hg-activity-row {
     grid-template-columns: 6.5rem 1fr auto;
   }

@@ -354,7 +354,7 @@ watch(step, async () => {
 }
 .hg-setup-steps li.is-current {
   color: var(--hg-ink);
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 .hg-setup-marker {
   display: grid;

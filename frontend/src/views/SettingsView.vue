@@ -317,7 +317,7 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
 }
 .hg-connected {
   color: var(--hg-status-ready);
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 .hg-steps {
   margin: 0;

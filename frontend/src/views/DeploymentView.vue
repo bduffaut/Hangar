@@ -292,7 +292,7 @@ async function rollback() {
 }
 .hg-current {
   color: var(--hg-status-ready);
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 .hg-open {
   display: inline-flex;
@@ -346,7 +346,6 @@ async function rollback() {
 .hg-recorder-title .hg-muted {
   font-size: var(--hg-size-sm);
   font-weight: var(--hg-weight-regular);
-  font-stretch: 100%;
 }
 .hg-deploy-loading {
   display: grid;

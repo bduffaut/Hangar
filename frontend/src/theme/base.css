@@ -1,5 +1,4 @@
 /* Global base styles. Every value comes from the theme variables (theme/tokens.ts). */
-@import '@fontsource-variable/archivo/wdth.css';
 @import '@fontsource/b612/latin-400.css';
 @import '@fontsource/b612/latin-700.css';
 @import '@fontsource-variable/jetbrains-mono/index.css';
@@ -21,6 +20,14 @@ html {
   font-variant-numeric: tabular-nums;
 }
 
+/* Form controls do not inherit the page's typeface on their own. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 body {
   margin: 0;
   min-height: 100dvh;
@@ -32,10 +39,9 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-stretch: var(--hg-heading-stretch);
   font-weight: var(--hg-weight-bold);
   line-height: var(--hg-lh-tight);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
@@ -59,20 +65,37 @@ p {
 }
 
 a {
-  color: var(--hg-accent);
+  color: var(--hg-link);
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--hg-motion-fast) var(--hg-motion-easing);
 }
 
 a:hover {
-  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
 }
 
 code,
 kbd,
 pre {
   font-family: var(--hg-mono);
-  font-size: 0.92em;
+  font-size: 0.9em;
+}
+
+/* The dashboard grid's own parts, in chart colors. */
+:root {
+  --dg-radius: var(--hg-radius-lg);
+  --dg-placeholder-bg: color-mix(in srgb, var(--hg-accent) 10%, transparent);
+  --dg-placeholder-border: color-mix(in srgb, var(--hg-accent) 70%, transparent);
+  --dg-guide-color: color-mix(in srgb, var(--hg-accent) 5%, transparent);
+  --dg-handle-hover: color-mix(in srgb, var(--hg-accent) 45%, transparent);
+  --dg-cell-color: color-mix(in srgb, var(--hg-ink-muted) 7%, transparent);
+  --dg-cell-active-color: color-mix(in srgb, var(--hg-accent) 10%, transparent);
+  --dg-focus-color: var(--hg-accent);
+  --dg-selection-color: var(--hg-accent);
+  --dg-marquee-bg: color-mix(in srgb, var(--hg-accent) 8%, transparent);
+  --dg-snap-color: var(--hg-accent);
 }
 
 /* Headings focused by script (after a step or page change) need no ring. */

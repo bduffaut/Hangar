@@ -6,10 +6,12 @@ import { setSettings } from '../settings/repo.ts'
 import {
   deleteSession,
   getActiveSession,
+  getDashboardLayout,
   getUserByUsername,
   hasUsers,
   insertFirstUser,
   insertSession,
+  setDashboardLayout,
   touchSession,
   updatePassword,
 } from './repo.ts'
@@ -185,4 +187,13 @@ export async function resetPassword(ctx: Ctx, username: string, password: string
   const user = await getUserByUsername(ctx.db, username.trim().toLowerCase())
   if (!user) throw new AuthError(404, 'not_found', `No account named "${username}"`)
   await updatePassword(ctx.db, user.id, await hashPassword(password))
+}
+
+/** The signed-in user's home screen layout, or null for the default. */
+export async function dashboardLayout(ctx: Ctx, userId: string) {
+  return { layout: await getDashboardLayout(ctx.db, userId) }
+}
+
+export async function saveDashboardLayout(ctx: Ctx, userId: string, layout: unknown[]) {
+  await setDashboardLayout(ctx.db, userId, layout)
 }

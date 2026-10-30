@@ -15,6 +15,20 @@
       "when": 1793080403306,
       "tag": "0001_deployment_secrets_hash",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793343790797,
+      "tag": "0002_dashboard_layout",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793344572366,
+      "tag": "0003_project_domains",
+      "breakpoints": true
     }
   ]
 }

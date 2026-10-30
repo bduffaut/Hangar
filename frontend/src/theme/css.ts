@@ -32,7 +32,6 @@ function sharedVariables(): string[] {
     `--hg-font: ${typography.family};`,
     `--hg-data: ${typography.data};`,
     `--hg-mono: ${typography.mono};`,
-    `--hg-heading-stretch: ${typography.headingStretch};`,
   ]
   for (const [k, v] of Object.entries(typography.size)) vars.push(`--hg-size-${k}: ${v};`)
   for (const [k, v] of Object.entries(typography.lineHeight)) vars.push(`--hg-lh-${k}: ${v};`)

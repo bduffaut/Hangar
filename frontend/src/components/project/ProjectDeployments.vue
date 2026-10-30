@@ -352,7 +352,7 @@ const resources = computed(() => () => {
 }
 .hg-table th {
   text-align: left;
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
   color: var(--hg-ink-muted);
   padding: var(--hg-space-2) var(--hg-space-4);
   border-bottom: 1px solid var(--hg-line);
@@ -391,7 +391,7 @@ const resources = computed(() => () => {
 .hg-current {
   font-size: var(--hg-size-xs);
   color: var(--hg-status-ready);
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 .hg-cell-actions {
   text-align: right;

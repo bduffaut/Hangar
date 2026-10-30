@@ -56,11 +56,51 @@ const library = computed(() => ({
 </template>
 
 <style scoped>
+/*
+ * Hover is felt more than seen: the icon lifts a pixel on primary buttons, like a nose rotating
+ * on takeoff; other buttons draw a short magenta course line under the label.
+ */
 .hg-button {
-  font-weight: var(--hg-weight-medium);
+  position: relative;
+  font-weight: var(--hg-weight-regular);
   gap: var(--hg-space-2);
+  transition:
+    background-color var(--hg-motion-fast) var(--hg-motion-easing),
+    border-color var(--hg-motion-fast) var(--hg-motion-easing),
+    color var(--hg-motion-fast) var(--hg-motion-easing),
+    transform var(--hg-motion-fast) var(--hg-motion-easing);
 }
-/* A faded yellow reads as broken; an unavailable primary action goes plain instead. */
+.hg-button:not(:disabled):active {
+  transform: translateY(1px);
+}
+.hg-button .hg-icon {
+  transition: transform var(--hg-motion-base) var(--hg-motion-easing);
+}
+.hg-button:not(.p-button-secondary, .p-button-text, .p-button-danger, :disabled):hover .hg-icon {
+  transform: translate(1px, -1px);
+}
+.hg-button::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 3px;
+  height: 1px;
+  background: var(--hg-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--hg-motion-base) var(--hg-motion-easing);
+  pointer-events: none;
+}
+.hg-button.p-button-secondary:not(:disabled):hover::after,
+.hg-button.p-button-text:not(:disabled):hover::after {
+  transform: scaleX(1);
+}
+.hg-button.p-button-icon-only::after {
+  left: 0.6rem;
+  right: 0.6rem;
+}
+/* A faded primary reads as broken; an unavailable primary action goes plain instead. */
 .hg-button.is-unavailable {
   background: var(--hg-raised);
   border-color: var(--hg-line);

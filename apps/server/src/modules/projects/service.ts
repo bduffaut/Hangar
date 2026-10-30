@@ -6,9 +6,13 @@ import {
   githubRepoSlug,
   hooksHostname,
   isValidBranchName,
+  isValidDomain,
   isValidRepoUrl,
+  HOOKS_SUBDOMAIN,
   normalizeRootDir,
   type ProjectView,
+  RESERVED_NAMES,
+  TOWER_SUBDOMAIN,
   type TriggerMode,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
@@ -55,6 +59,7 @@ export interface ProjectSettings {
   port?: number | null
   memoryLimitMb?: number
   triggerMode?: TriggerMode
+  domains?: string[]
 }
 
 /** Validates and normalizes settings shared by create and update. */
@@ -84,7 +89,47 @@ function cleanSettings(settings: ProjectSettings): ProjectSettings {
   ) {
     throw new ProjectError('The memory limit must be at least 64 MB.')
   }
+  if (clean.domains !== undefined) {
+    clean.domains = [...new Set(clean.domains.map((d) => d.replace(/\.$/, '')))].filter(Boolean)
+    const invalid = clean.domains.find((d) => !isValidDomain(d))
+    if (invalid) {
+      throw new ProjectError(
+        `"${invalid}" is not a domain. Enter one like example.com, without https://.`,
+      )
+    }
+  }
   return clean
+}
+
+/**
+ * A custom domain may not be one Hangar already names: name.<public domain> belongs to the
+ * project called name, tower. and hooks. to Hangar, and the LAN address to the network. Labels no
+ * project can take (www, api, …) are free. Each domain belongs to one project.
+ */
+async function checkDomains(ctx: Ctx, projectId: string | null, domains: string[]) {
+  if (domains.length === 0) return
+  const { publicDomain, lanDomain } = await getSettings(ctx.db)
+  for (const domain of domains) {
+    const label = domain.slice(0, domain.indexOf('.'))
+    const parent = domain.slice(domain.indexOf('.') + 1)
+    const hangarOwned = label === TOWER_SUBDOMAIN || label === HOOKS_SUBDOMAIN
+    if (parent === publicDomain && (hangarOwned || !RESERVED_NAMES.has(label))) {
+      throw new ProjectError(
+        `${domain} is already one of Hangar's own addresses.`,
+        `Apps get name.${publicDomain} from their project name. Custom domains are for other addresses, like ${publicDomain} itself or www.${publicDomain}.`,
+      )
+    }
+    if (lanDomain && (domain === lanDomain || domain.endsWith(`.${lanDomain}`))) {
+      throw new ProjectError(`${domain} is Hangar's network address and cannot be a custom domain.`)
+    }
+  }
+  const owner = (await listProjects(ctx.db)).find(
+    (p) => p.id !== projectId && p.domains.some((d) => domains.includes(d)),
+  )
+  if (owner) {
+    const taken = owner.domains.find((d) => domains.includes(d))
+    throw new UserError(409, 'domain_taken', `${taken} is already used by ${owner.name}.`)
+  }
 }
 
 /** In development, tests and the CLI deploy from local file:// repositories. */
@@ -114,6 +159,7 @@ export async function createProject(
     )
   }
   const settings = cleanSettings(input)
+  await checkDomains(ctx, null, settings.domains ?? [])
   const token = await getGithubToken(ctx)
   const branch =
     settings.branch ??
@@ -160,7 +206,11 @@ export async function updateProjectSettings(
   project: Project,
   settings: ProjectSettings,
 ): Promise<Project> {
-  await updateProject(ctx.db, project.id, cleanSettings(settings))
+  const clean = cleanSettings(settings)
+  if (clean.domains) await checkDomains(ctx, project.id, clean.domains)
+  await updateProject(ctx.db, project.id, clean)
+  // Domains are routes, so they apply right away rather than on the next deploy.
+  if (clean.domains) await syncRouting(ctx)
   return (await getProject(ctx.db, project.id))!
 }
 
@@ -277,6 +327,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       publicUrl: settings.publicDomain
         ? `https://${appHostname(p.name, settings.publicDomain)}`
         : null,
+      domains: p.domains,
       current: currentRow ? deploymentView(currentRow, p.currentDeploymentId) : null,
       latest: latestRow ? deploymentView(latestRow, p.currentDeploymentId) : null,
       recent: recent

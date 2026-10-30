@@ -27,12 +27,23 @@ defineProps<{ tabs: { value: T; label: string; hint?: string }[] }>()
 
 <style scoped>
 /* Tabs sit on the page itself; the panels inside them provide their own surfaces. */
-:deep(.p-tabs),
+.p-tabs,
+:deep(.p-tablist),
+:deep(.p-tablist-content),
 :deep(.p-tablist-tab-list),
 :deep(.p-tabpanels) {
   background: transparent;
 }
 :deep(.p-tabpanels) {
   padding: var(--hg-space-5) 0 0;
+}
+:deep(.p-tab) {
+  font-weight: var(--hg-weight-regular);
+  padding-inline: 0;
+  margin-right: var(--hg-space-5);
+}
+:deep(.p-tablist-active-bar) {
+  height: 2px;
+  background: var(--hg-accent);
 }
 </style>

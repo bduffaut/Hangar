@@ -21,7 +21,7 @@ const children = [
       stdio: 'inherit',
     },
   ),
-  spawn('pnpm', ['--filter', '@hangar/web', 'dev'], { stdio: 'inherit' }),
+  spawn('pnpm', ['--filter', '@hangar/frontend', 'dev'], { stdio: 'inherit' }),
 ]
 
 let stopping = false

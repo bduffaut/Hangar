@@ -187,7 +187,7 @@ function download() {
 }
 .is-system {
   color: var(--hg-term-accent);
-  font-weight: var(--hg-weight-medium);
+  font-weight: var(--hg-weight-regular);
 }
 .is-stderr {
   color: color-mix(in srgb, var(--hg-console-ink) 85%, transparent);

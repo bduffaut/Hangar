@@ -3,12 +3,23 @@
 import type { MetricsSample, ProjectView, DeploymentView } from '@hangar/shared'
 import type { Component, Ref } from 'vue'
 
-/** How much of the dashboard's width a widget takes on wide screens. Narrow screens stack. */
-export type WidgetSize = 'full' | 'half' | 'third'
+/**
+ * Size in grid cells: 12 columns on wide screens, and rows 8px tall that include 16px of space
+ * below the widget. `rowsFor(px)` from the dashboard module converts a height in pixels.
+ */
+export interface WidgetSize {
+  w: number
+  h: number
+  minW?: number
+  minH?: number
+  maxW?: number
+  maxH?: number
+}
 
 /**
  * The props every widget component receives. Widgets get all their data this way, so an external
- * widget package needs nothing from inside the app except these types.
+ * widget package needs nothing from inside the app except these types. A widget's own `props`
+ * (see `DashboardWidget`) are passed alongside.
  */
 export interface DashboardWidgetProps {
   data: DashboardData
@@ -17,15 +28,20 @@ export interface DashboardWidgetProps {
 export interface DashboardWidget {
   /** Unique and stable: saved layouts refer to it. Prefix with your package name. */
   id: string
+  /** Shown at the top of the widget and in the add list. */
   title: string
+  /** One line for the add list. */
   description: string
+  /** Groups the add list. */
+  category: string
   /** A Vue component accepting `DashboardWidgetProps`. */
   component: Component
+  /** Extra props for the component, so one component can serve several widgets. */
+  props?: Record<string, unknown>
+  /** Size when added. */
   size: WidgetSize
-  /** Shown on the dashboard. Set false to register a widget without showing it yet. */
-  enabledByDefault: boolean
-  /** Lower comes first in the default order. */
-  order: number
+  /** Grow and shrink with the content instead of a fixed height, like a list. */
+  sizeToContent?: boolean
 }
 
 /** Data any widget may read (never write). Values update live. */

@@ -10,6 +10,7 @@ export async function listProjectRoutes(db: Db) {
   return db
     .select({
       name: projects.name,
+      domains: projects.domains,
       desiredState: projects.desiredState,
       deploymentNumber: deployments.number,
       port: deployments.port,

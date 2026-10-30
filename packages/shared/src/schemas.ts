@@ -5,7 +5,7 @@ import { PROJECT_NAME_MAX_LENGTH } from './hostnames.ts'
 import { DEPLOYMENT_TRIGGERS, DESIRED_STATES, LOG_STREAMS, TRIGGER_MODES } from './enums.ts'
 import { FAILURE_CODES } from './failures.ts'
 import { DEPLOYMENT_STATUSES } from './statuses.ts'
-import { ENV_KEY_PATTERN } from './constants.ts'
+import { ENV_KEY_PATTERN, MAX_PROJECT_DOMAINS } from './constants.ts'
 import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
@@ -68,6 +68,32 @@ export const session = z.object({
   csrfToken: z.string(),
 })
 export type Session = z.infer<typeof session>
+
+// Dashboard layout
+
+/** Generous for a home screen; keeps one account from storing megabytes of layout. */
+const DASHBOARD_LAYOUT_MAX_BYTES = 32_768
+const cell = z.int().min(0).max(1000)
+/** One widget as the dashboard grid saves it. Other fields the grid adds are kept as they are. */
+const dashboardWidget = z.looseObject({
+  id: z.string().min(1).max(100),
+  type: z.string().min(1).max(100),
+  x: cell,
+  y: cell,
+  w: cell,
+  h: cell,
+})
+export const dashboardLayout = z.object({
+  layout: z
+    .array(dashboardWidget)
+    .max(100)
+    .refine((widgets) => JSON.stringify(widgets).length <= DASHBOARD_LAYOUT_MAX_BYTES, {
+      error: 'The layout is too large.',
+    }),
+})
+/** `layout` is null until the owner customizes the dashboard. */
+export const dashboardLayoutView = z.object({ layout: z.array(z.unknown()).nullable() })
+export type DashboardLayoutView = z.infer<typeof dashboardLayoutView>
 
 // Settings
 
@@ -132,11 +158,25 @@ export const projectInput = z.object({
     .max(MEMORY_LIMIT_MAX_MB)
     .optional(),
   triggerMode: z.enum(TRIGGER_MODES).optional(),
+  /** Exact public hostnames, like example.com, served through the Cloudflare Tunnel. */
+  domains: z
+    .array(z.string().trim().toLowerCase().max(253, { error: 'That domain is too long.' }))
+    .max(MAX_PROJECT_DOMAINS, {
+      error: `A project can have at most ${MAX_PROJECT_DOMAINS} custom domains.`,
+    })
+    .optional(),
   /** Deploy the branch head right away (default true). */
   deploy: z.boolean().optional(),
 })
 export const projectPatch = projectInput
-  .pick({ branch: true, rootDir: true, port: true, memoryLimitMb: true, triggerMode: true })
+  .pick({
+    branch: true,
+    rootDir: true,
+    port: true,
+    memoryLimitMb: true,
+    triggerMode: true,
+    domains: true,
+  })
   .partial()
 
 export const deploymentView = z.object({
@@ -172,6 +212,8 @@ export const projectView = z.object({
   desiredState: z.enum(DESIRED_STATES),
   url: z.string().nullable(),
   publicUrl: z.string().nullable(),
+  /** Custom domains; they answer only once public access is set up. */
+  domains: z.array(z.string()),
   current: deploymentView.nullable(),
   latest: deploymentView.nullable(),
   /** The most recent deployments, oldest first: the runway lights on a project card. */

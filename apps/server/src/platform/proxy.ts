@@ -7,6 +7,8 @@ import { stringify } from 'yaml'
 
 export interface AppRoute {
   name: string
+  /** Custom domains, served on the public entrypoint only (they arrive through the tunnel). */
+  domains?: string[]
   /** null when the app has no running container; the fallback router then sends LAN visitors to core. */
   target: { host: string; port: number } | null
 }
@@ -118,6 +120,13 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
       routers[`app-${app.name}-public`] = {
         entryPoints: ['public'],
         rule: host(appHostname(app.name, publicDomain)),
+        service,
+      }
+    }
+    if (app.domains?.length) {
+      routers[`app-${app.name}-domains`] = {
+        entryPoints: ['public'],
+        rule: app.domains.map(host).join(' || '),
         service,
       }
     }

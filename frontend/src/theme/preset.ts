@@ -8,10 +8,11 @@ const mix = (a: string, b: string, percent: number) => `color-mix(in srgb, ${a} 
 
 const scheme = {
   primary: {
-    color: 'var(--hg-accent)',
+    color: 'var(--hg-accent-fill)',
     contrastColor: 'var(--hg-on-accent)',
-    hoverColor: mix('var(--hg-accent)', 'var(--hg-ink)', 85),
-    activeColor: mix('var(--hg-accent)', 'var(--hg-ink)', 75),
+    // Toward the ink: lighter at night, darker by day.
+    hoverColor: mix('var(--hg-accent-fill)', 'var(--hg-ink)', 86),
+    activeColor: mix('var(--hg-accent-fill)', 'var(--hg-ink)', 76),
   },
   highlight: {
     background: mix('var(--hg-accent)', 'transparent', 16),
