@@ -45,7 +45,7 @@ export class AuthError extends UserError {}
 
 // Password hashing
 
-// OWASP's recommended argon2id parameters. The library's default uses a fifth of this memory.
+// OWASP's recommended argon2id parameters, spelled out so a library update cannot change them.
 const ARGON2 = { memoryCost: 19_456, timeCost: 2, parallelism: 1 }
 const CURRENT_HASH = `$m=${ARGON2.memoryCost},t=${ARGON2.timeCost},p=${ARGON2.parallelism}$`
 
