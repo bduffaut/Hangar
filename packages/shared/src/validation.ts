@@ -22,6 +22,16 @@ export function isValidRepoUrl(value: string): boolean {
   return value.length <= 500 && REPO_URL_PATTERN.test(value)
 }
 
+/**
+ * Whether a repository lives on a public-looking host. Members may not point Hangar's git at
+ * loopback, private addresses, or single-label names like the containers next to core.
+ */
+export function isPublicRepoHost(repoUrl: string): boolean {
+  const host = /^https:\/\/([^/:]+)/i.exec(repoUrl)?.[1]?.toLowerCase()
+  if (!host || !host.includes('.')) return false
+  return !host.endsWith('.local') && !host.endsWith('.internal') && !/^[\d.]+$/.test(host)
+}
+
 /** `owner/name` for a github.com repository URL, or null. */
 export function githubRepoSlug(repoUrl: string): string | null {
   const match = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(repoUrl)

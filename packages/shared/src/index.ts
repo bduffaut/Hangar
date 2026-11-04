@@ -9,6 +9,10 @@ export * as schemas from './schemas.ts'
 export * from './validation.ts'
 export type {
   AddressCheckResult,
+  AddressEvent,
+  AddressView,
+  CreatedLink,
+  InviteView,
   DeploymentView,
   ErrorBody,
   LogLineView,
@@ -17,5 +21,6 @@ export type {
   Session,
   SettingsView,
   SystemInfo,
+  UserView,
 } from './schemas.ts'
 export * from './copy.ts'

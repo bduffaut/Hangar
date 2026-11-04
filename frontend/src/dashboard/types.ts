@@ -42,6 +42,8 @@ export interface DashboardWidget {
   size: WidgetSize
   /** Grow and shrink with the content instead of a fixed height, like a list. */
   sizeToContent?: boolean
+  /** Shows readings of the whole server, which only admins receive. */
+  adminOnly?: boolean
 }
 
 /** Data any widget may read (never write). Values update live. */

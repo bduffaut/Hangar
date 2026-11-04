@@ -1,12 +1,15 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import type { UserRole } from '@hangar/shared'
 import { hash, verify } from '@node-rs/argon2'
 import type { Ctx } from '../../context.ts'
 import { UserError } from '../../errors.ts'
 import { setSettings } from '../settings/repo.ts'
 import {
   deleteSession,
+  deleteSessions,
   getActiveSession,
   getDashboardLayout,
+  getUserById,
   getUserByUsername,
   hasUsers,
   insertFirstUser,
@@ -14,11 +17,14 @@ import {
   setDashboardLayout,
   touchSession,
   updatePassword,
+  upgradePasswordHash,
 } from './repo.ts'
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60_000
 /** Sliding expiry is refreshed at most this often, to avoid a write on every request. */
 const SESSION_REFRESH_MS = 60 * 60_000
+/** However active a session stays, it ends this long after sign-in. */
+const SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60_000
 
 // Crockford base32: no I, L, O, U, so the boarding pass is easy to read and type.
 const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -29,7 +35,7 @@ const sha256 = (value: string) => createHash('sha256').update(value).digest('hex
 
 export interface AuthenticatedSession {
   sessionId: string
-  user: { id: string; username: string }
+  user: { id: string; username: string; role: UserRole }
   expiresAt: Date
   /** True when the expiry moved, so the cookie should be re-sent. */
   refreshed: boolean
@@ -39,17 +45,22 @@ export class AuthError extends UserError {}
 
 // Password hashing
 
-export const hashPassword = (password: string) => hash(password)
+// OWASP's recommended argon2id parameters. The library's default uses a fifth of this memory.
+const ARGON2 = { memoryCost: 19_456, timeCost: 2, parallelism: 1 }
+const CURRENT_HASH = `$m=${ARGON2.memoryCost},t=${ARGON2.timeCost},p=${ARGON2.parallelism}$`
+
+export const hashPassword = (password: string) => hash(password, ARGON2)
 
 // A valid hash of a random password, verified when the username does not exist so a login attempt
 // takes the same time either way.
 let dummyHash: Promise<string> | null = null
-const getDummyHash = () => (dummyHash ??= hash(randomBytes(16).toString('hex')))
+const getDummyHash = () => (dummyHash ??= hashPassword(randomBytes(16).toString('hex')))
 
 // Failed logins per username, so a password cannot be guessed by spreading attempts over many IPs.
 // In memory: it resets on restart, which is acceptable for a single-process MVP.
 const LOCKOUT_ATTEMPTS = 10
 const LOCKOUT_WINDOW_MS = 15 * 60_000
+const LOCKOUT_MAX_TRACKED = 10_000
 const failures = new Map<string, { count: number; since: number }>()
 
 function checkLockout(username: string): void {
@@ -67,6 +78,8 @@ function checkLockout(username: string): void {
 
 function recordFailure(username: string): void {
   const entry = failures.get(username)
+  // Made-up usernames must not grow this without limit; the oldest entry goes first.
+  if (failures.size >= LOCKOUT_MAX_TRACKED && !entry) failures.delete(failures.keys().next().value!)
   if (entry && Date.now() - entry.since <= LOCKOUT_WINDOW_MS) entry.count++
   else failures.set(username, { count: 1, since: Date.now() })
 }
@@ -74,7 +87,7 @@ function recordFailure(username: string): void {
 // Sessions
 
 /** The cookie holds the random token; the database stores only its hash. */
-async function createSession(ctx: Ctx, userId: string) {
+export async function createSession(ctx: Ctx, userId: string) {
   const token = randomBytes(32).toString('base64url')
   const sessionId = sha256(token)
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
@@ -92,10 +105,17 @@ export async function resolveSession(
   let expiresAt = row.session.expiresAt
   const refreshed = Date.now() - row.session.lastSeenAt.getTime() > SESSION_REFRESH_MS
   if (refreshed) {
-    expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+    const limit = row.session.createdAt.getTime() + SESSION_MAX_AGE_MS
+    expiresAt = new Date(Math.min(Date.now() + SESSION_TTL_MS, limit))
     await touchSession(ctx.db, sessionId, expiresAt)
   }
   return { sessionId, user: row.user, expiresAt, refreshed }
+}
+
+/** For long-lived streams: is this session still valid, with the same role as when it opened? */
+export async function isSessionCurrent(ctx: Ctx, session: AuthenticatedSession): Promise<boolean> {
+  const row = await getActiveSession(ctx.db, session.sessionId)
+  return row?.user.role === session.user.role
 }
 
 export async function endSession(ctx: Ctx, sessionId: string): Promise<void> {
@@ -130,8 +150,37 @@ export async function login(ctx: Ctx, username: string, password: string) {
     throw new AuthError(401, 'invalid_credentials', 'The username or password is not correct.')
   }
   failures.delete(name)
-  return { user: { id: user.id, username: user.username }, ...(await createSession(ctx, user.id)) }
+  if (!user.passwordHash.includes(CURRENT_HASH)) {
+    await upgradePasswordHash(ctx.db, user.id, await hashPassword(password))
+  }
+  return {
+    user: { id: user.id, username: user.username, role: user.role },
+    ...(await createSession(ctx, user.id)),
+  }
 }
+
+/** Needs the current password. Ends every session, and starts a new one for this browser. */
+export async function changePassword(
+  ctx: Ctx,
+  userId: string,
+  input: { currentPassword: string; newPassword: string },
+) {
+  const user = await getUserById(ctx.db, userId)
+  if (!user) throw new AuthError(401, 'unauthenticated', 'Sign in to continue.')
+  checkLockout(user.username)
+  if (!(await verify(user.passwordHash, input.currentPassword).catch(() => false))) {
+    recordFailure(user.username)
+    throw new AuthError(400, 'wrong_password', 'That is not your current password.')
+  }
+  failures.delete(user.username)
+  await updatePassword(ctx.db, user.id, await hashPassword(input.newPassword))
+  return {
+    user: { id: user.id, username: user.username, role: user.role },
+    ...(await createSession(ctx, user.id)),
+  }
+}
+
+export const signOutEverywhere = (ctx: Ctx, userId: string) => deleteSessions(ctx.db, userId)
 
 // First-run setup (the boarding pass)
 
@@ -179,7 +228,10 @@ export async function completeSetup(
       'Check the code printed by the installer. To get a new one, run: sudo hangar-admin issue-setup-code',
     )
   }
-  return { user: { id: user.id, username: user.username }, ...(await createSession(ctx, user.id)) }
+  return {
+    user: { id: user.id, username: user.username, role: user.role },
+    ...(await createSession(ctx, user.id)),
+  }
 }
 
 /** Recovery from the command line. Signs out every session of that account. */

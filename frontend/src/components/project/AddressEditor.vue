@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { type AddressCheckResult, joinPublicHostname, splitPublicHostname } from '@hangar/shared'
+import { joinPublicHostname, RESERVED_NAMES, splitPublicHostname } from '@hangar/shared'
 import { computed, ref, watch } from 'vue'
-import { api, messageOf } from '../../api/client.ts'
-import { BaseButton, BaseIcon, BaseInput, BaseSelect } from '../../ui/index.ts'
+import { useSessionStore } from '../../stores/session.ts'
+import { BaseButton, BaseInput, BaseSelect } from '../../ui/index.ts'
 
 // A project's public addresses, one row each: a name and one of the owner's domains, read like
-// the address itself (https:// name . domain). An empty name means the domain itself. Saved
-// addresses can be checked: Hangar asks for them over the internet and says what answered.
+// the address itself (https:// name . domain). An empty name means the domain itself.
+const session = useSessionStore()
 const hostnames = defineModel<string[]>({ required: true })
 const props = defineProps<{
   /** The owner's domains, default first. */
   domains: string[]
   /** Name suggested for a new row, usually the project name. */
   suggestedName: string
-  /** Addresses already saved; only those can be checked. */
-  saved?: string[]
   idPrefix: string
 }>()
 
@@ -60,6 +58,9 @@ function problemOf(row: Row, index: number): string | null {
       : 'Use lowercase letters, digits, and dashes, not at the start or end.'
   }
   if (name === 'tower' || name === 'hooks') return 'This name is reserved for Hangar itself.'
+  if (!session.isAdmin && (!name || RESERVED_NAMES.has(name))) {
+    return 'Only an admin can use this address. Pick another name.'
+  }
   const hostname = joinPublicHostname({ subdomain: name, domain: row.domain })
   if (joined(rows.value).indexOf(hostname) !== index) return 'This address is already listed.'
   return null
@@ -78,23 +79,6 @@ function add() {
 function remove(key: number) {
   rows.value = rows.value.filter((r) => r.key !== key)
 }
-
-const checks = ref<Record<string, AddressCheckResult | 'checking'>>({})
-async function check(hostname: string) {
-  checks.value = { ...checks.value, [hostname]: 'checking' }
-  try {
-    checks.value = {
-      ...checks.value,
-      [hostname]: await api('checkAddress', { body: { hostname } }),
-    }
-  } catch (e) {
-    checks.value = {
-      ...checks.value,
-      [hostname]: { status: 'unreachable', message: messageOf(e) },
-    }
-  }
-}
-const isSaved = (hostname: string) => props.saved?.includes(hostname) ?? false
 </script>
 
 <template>
@@ -125,21 +109,6 @@ const isSaved = (hostname: string) => props.saved?.includes(hostname) ?? false
           />
           <span class="hg-address-actions">
             <BaseButton
-              v-if="saved"
-              v-hint.top="
-                isSaved(joinPublicHostname(row))
-                  ? 'Check that this address reaches this app'
-                  : 'Save first, then check'
-              "
-              size="sm"
-              variant="ghost"
-              icon="globe"
-              label="Check"
-              :disabled="!isSaved(joinPublicHostname(row))"
-              :loading="checks[joinPublicHostname(row)] === 'checking'"
-              @click="check(joinPublicHostname(row))"
-            />
-            <BaseButton
               v-hint.top="'Remove this address'"
               size="sm"
               variant="ghost"
@@ -151,24 +120,6 @@ const isSaved = (hostname: string) => props.saved?.includes(hostname) ?? false
         </div>
         <p v-if="problems[index]" class="hg-address-problem" role="alert">
           {{ problems[index] }}
-        </p>
-        <p
-          v-else-if="
-            checks[joinPublicHostname(row)] && checks[joinPublicHostname(row)] !== 'checking'
-          "
-          class="hg-address-check"
-          :class="`is-${(checks[joinPublicHostname(row)] as AddressCheckResult).status}`"
-          role="status"
-        >
-          <BaseIcon
-            :name="
-              (checks[joinPublicHostname(row)] as AddressCheckResult).status === 'ok'
-                ? 'check'
-                : 'alert'
-            "
-            :size="14"
-          />
-          {{ (checks[joinPublicHostname(row)] as AddressCheckResult).message }}
         </p>
       </li>
     </ul>
@@ -217,24 +168,12 @@ const isSaved = (hostname: string) => props.saved?.includes(hostname) ?? false
   flex: 1 1 11rem;
   min-width: 0;
 }
-.hg-address-problem,
-.hg-address-check {
-  font-size: var(--hg-size-sm);
-  color: var(--hg-ink-muted);
-}
 .hg-address-problem {
-  color: var(--hg-danger);
-}
-.hg-address-check {
   display: flex;
-  gap: var(--hg-space-2);
-  align-items: baseline;
-}
-.hg-address-check.is-ok {
-  color: var(--hg-status-ready);
-}
-.hg-address-check:not(.is-ok) {
-  color: var(--hg-caution);
+  align-items: flex-start;
+  gap: var(--hg-space-1);
+  font-size: var(--hg-size-sm);
+  color: var(--hg-danger);
 }
 .hg-address-none {
   font-size: var(--hg-size-sm);

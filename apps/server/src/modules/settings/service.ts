@@ -6,23 +6,49 @@ import {
   sslipDomain,
   towerHostname,
 } from '@hangar/shared'
+import { asc, eq } from 'drizzle-orm'
 import type { Ctx } from '../../context.ts'
 import { UserError } from '../../errors.ts'
 import { GithubError } from '../../platform/github.ts'
 import { ensureTunnel, syncRouting } from '../../worker/reconciler.ts'
+import { users } from '../../db/schema.ts'
 import { listProjects } from '../projects/repo.ts'
 import { getSettings, setSettings } from './repo.ts'
-import { GITHUB_TOKEN_AAD, TUNNEL_TOKEN_AAD } from './secrets.ts'
+import { GITHUB_TOKEN_AAD, getGithubToken, TUNNEL_TOKEN_AAD, userGithubAad } from './secrets.ts'
 
 /** First boot only: adopt the LAN IP the installer detected. Afterwards the database owns it. */
 export async function seedSettings(ctx: Ctx): Promise<void> {
+  await moveSharedGithubToken(ctx)
   const current = await getSettings(ctx.db)
   if (current.lanIp || !ctx.config.lanIp) return
   await setSettings(ctx.db, { lanIp: ctx.config.lanIp, lanDomain: sslipDomain(ctx.config.lanIp) })
   ctx.log.info({ lanIp: ctx.config.lanIp }, 'Seeded LAN address from installer')
 }
 
-export async function settingsView(ctx: Ctx): Promise<SettingsView> {
+/**
+ * Before accounts, one GitHub token served the whole server. It belonged to the owner, so it moves
+ * to the first admin; other accounts never get to use it.
+ */
+async function moveSharedGithubToken(ctx: Ctx): Promise<void> {
+  const { githubToken } = await getSettings(ctx.db)
+  if (!githubToken) return
+  const [owner] = await ctx.db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.role, 'admin'))
+    .orderBy(asc(users.createdAt))
+    .limit(1)
+  if (owner) {
+    const token = ctx.crypto.open(githubToken, GITHUB_TOKEN_AAD)
+    await ctx.db
+      .update(users)
+      .set({ githubToken: ctx.crypto.seal(token, userGithubAad(owner.id)) })
+      .where(eq(users.id, owner.id))
+  }
+  await setSettings(ctx.db, { githubToken: null })
+}
+
+export async function settingsView(ctx: Ctx, userId: string): Promise<SettingsView> {
   const s = await getSettings(ctx.db)
   return {
     lanIp: s.lanIp,
@@ -30,7 +56,7 @@ export async function settingsView(ctx: Ctx): Promise<SettingsView> {
     publicDomains: s.publicDomains,
     defaultDomain: defaultDomain(s),
     exposeTowerPublicly: s.exposeTowerPublicly,
-    githubConnected: s.githubToken !== null,
+    githubConnected: (await getGithubToken(ctx, userId)) !== null,
     tunnelConfigured: s.cloudflareTunnelToken !== null,
     towerUrl: s.lanDomain ? `http://${towerHostname(s.lanDomain)}` : null,
   }
@@ -63,6 +89,7 @@ export async function updateSettings(
   }
   await setSettings(ctx.db, next)
   await syncRouting(ctx)
+  await ctx.queue.send('addresses', {})
 }
 
 /**
@@ -109,9 +136,11 @@ async function cleanPublicDomains(ctx: Ctx, input: string[]): Promise<string[]> 
 }
 
 /** Verifies a GitHub token by asking GitHub who it belongs to, then stores it encrypted. */
-export async function connectGithub(ctx: Ctx, token: string | null) {
+export async function connectGithub(ctx: Ctx, userId: string, token: string | null) {
+  const store = (githubToken: string | null) =>
+    ctx.db.update(users).set({ githubToken }).where(eq(users.id, userId))
   if (!token) {
-    await setSettings(ctx.db, { githubToken: null })
+    await store(null)
     return { connected: false, login: null }
   }
   const user = await ctx.github.currentUser(token).catch((error: unknown) => {
@@ -129,7 +158,7 @@ export async function connectGithub(ctx: Ctx, token: string | null) {
       "Hangar could not reach GitHub. Check the server's internet connection.",
     )
   })
-  await setSettings(ctx.db, { githubToken: ctx.crypto.seal(token, GITHUB_TOKEN_AAD) })
+  await store(ctx.crypto.seal(token, userGithubAad(userId)))
   return { connected: true, login: user.login }
 }
 
@@ -147,4 +176,5 @@ export async function setTunnelToken(ctx: Ctx, token: string | null): Promise<vo
     cloudflareTunnelToken: token ? ctx.crypto.seal(token, TUNNEL_TOKEN_AAD) : null,
   })
   await ensureTunnel(ctx)
+  await ctx.queue.send('addresses', {})
 }

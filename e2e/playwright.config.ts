@@ -34,6 +34,12 @@ export default defineConfig({
       use: { viewport: { width: 1366, height: 900 }, storageState: SESSION },
     },
     {
+      name: 'accounts',
+      testMatch: /accounts\.spec\.ts/,
+      dependencies: ['setup'],
+      use: { viewport: { width: 1366, height: 900 }, storageState: SESSION },
+    },
+    {
       name: 'phone',
       testMatch: /flows\.spec\.ts/,
       dependencies: ['setup'],

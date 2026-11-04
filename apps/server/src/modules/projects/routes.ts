@@ -3,13 +3,14 @@ import { contract, schemas, streams } from '@hangar/shared'
 import { eventStream, type Http, OK, route } from '../../http/server.ts'
 import { queueBranchHead, queueDeployment } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
+import { refreshAddresses } from '../addresses/service.ts'
 import {
-  allProjectViews,
   createProject,
   deleteProject,
   followRuntimeLogs,
-  getProjectOrThrow,
+  ownedProject,
   projectView,
+  projectViewsOf,
   restartProject,
   setDesiredState,
   updateProjectSettings,
@@ -19,55 +20,67 @@ import {
 export function projectRoutes(http: Http) {
   const { ctx } = http
 
-  route(http, contract.listProjects, () => allProjectViews(ctx))
+  route(http, contract.listProjects, ({ auth }) => projectViewsOf(ctx, auth.user.id))
 
-  route(http, contract.createProject, async ({ body }) => {
+  route(http, contract.createProject, async ({ auth, body }) => {
     const { deploy, ...input } = body
-    const { project, headSha } = await createProject(ctx, input)
+    const { project, headSha } = await createProject(ctx, auth.user, input)
     if (deploy !== false) {
       await queueDeployment(ctx, project, { commitSha: headSha, trigger: 'manual' })
     }
-    return projectView(ctx, await getProjectOrThrow(ctx, project.id))
+    return projectView(ctx, await ownedProject(ctx, auth.user.id, project.id))
   })
 
-  route(http, contract.getProject, async ({ params }) =>
-    projectView(ctx, await getProjectOrThrow(ctx, params.id)),
+  route(http, contract.getProject, async ({ auth, params }) =>
+    projectView(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
 
-  route(http, contract.updateProject, async ({ params, body }) => {
-    const project = await getProjectOrThrow(ctx, params.id)
-    return projectView(ctx, await updateProjectSettings(ctx, project, body))
+  route(http, contract.updateProject, async ({ auth, params, body }) => {
+    const project = await ownedProject(ctx, auth.user.id, params.id)
+    return projectView(ctx, await updateProjectSettings(ctx, auth.user.role, project, body))
   })
 
-  route(http, contract.deleteProject, async ({ params }) => {
-    await deleteProject(ctx, await getProjectOrThrow(ctx, params.id))
+  route(http, contract.deleteProject, async ({ auth, params }) => {
+    await deleteProject(ctx, await ownedProject(ctx, auth.user.id, params.id))
     return OK
   })
 
-  route(http, contract.startProject, async ({ params }) => {
-    await setDesiredState(ctx, await getProjectOrThrow(ctx, params.id), 'running')
-    return projectView(ctx, await getProjectOrThrow(ctx, params.id))
+  route(http, contract.startProject, async ({ auth, params }) => {
+    await setDesiredState(ctx, await ownedProject(ctx, auth.user.id, params.id), 'running')
+    return projectView(ctx, await ownedProject(ctx, auth.user.id, params.id))
   })
 
-  route(http, contract.stopProject, async ({ params }) => {
-    await setDesiredState(ctx, await getProjectOrThrow(ctx, params.id), 'stopped')
-    return projectView(ctx, await getProjectOrThrow(ctx, params.id))
+  route(http, contract.stopProject, async ({ auth, params }) => {
+    await setDesiredState(ctx, await ownedProject(ctx, auth.user.id, params.id), 'stopped')
+    return projectView(ctx, await ownedProject(ctx, auth.user.id, params.id))
   })
 
-  route(http, contract.restartProject, async ({ params }) => {
-    const project = await getProjectOrThrow(ctx, params.id)
+  route(http, contract.restartProject, async ({ auth, params }) => {
+    const project = await ownedProject(ctx, auth.user.id, params.id)
     await restartProject(ctx, project)
     return projectView(ctx, project)
   })
 
-  route(http, contract.deployProject, async ({ params }) => {
-    const project = await getProjectOrThrow(ctx, params.id)
+  // Waits for the real result. The check goes over the internet, so a few a minute is plenty.
+  route(
+    http,
+    contract.checkProjectAddresses,
+    async ({ auth, params }) => {
+      const project = await ownedProject(ctx, auth.user.id, params.id)
+      await refreshAddresses(ctx, project.id)
+      return projectView(ctx, project)
+    },
+    { rateLimit: 10 },
+  )
+
+  route(http, contract.deployProject, async ({ auth, params }) => {
+    const project = await ownedProject(ctx, auth.user.id, params.id)
     const deployment = await queueBranchHead(ctx, project, 'manual')
     return deploymentView(deployment, project.currentDeploymentId)
   })
 
-  route(http, contract.projectWebhook, async ({ params }) =>
-    webhookInfo(ctx, await getProjectOrThrow(ctx, params.id)),
+  route(http, contract.projectWebhook, async ({ auth, params }) =>
+    webhookInfo(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
 
   // Radio: the live output of the project's running container.
@@ -75,7 +88,7 @@ export function projectRoutes(http: Http) {
     http,
     streams.runtimeLogs,
     schemas.idParams,
-    (params) => getProjectOrThrow(ctx, params.id),
+    (params, request) => ownedProject(ctx, request.auth!.user.id, params.id),
     async (stream, project) => {
       const output = await followRuntimeLogs(ctx, project, stream.signal)
       if (!output) {

@@ -28,6 +28,7 @@ import {
 } from '../../ui/index.ts'
 import CopyField from '../CopyField.vue'
 import AddressEditor from './AddressEditor.vue'
+import AddressStatus from './AddressStatus.vue'
 import HgPanel from '../HgPanel.vue'
 
 const props = defineProps<{ project: ProjectView }>()
@@ -209,12 +210,12 @@ async function remove() {
           <a :href="project.url" target="_blank" rel="noopener">{{ project.url }}</a>
         </p>
         <template v-if="settings && settings.publicDomains.length">
+          <AddressStatus :project="project" />
           <AddressEditor
             ref="addressEditor"
             v-model="hostnames"
             :domains="settings.publicDomains"
             :suggested-name="project.name"
-            :saved="project.hostnames"
             id-prefix="ps-address"
           />
           <BaseMessage v-if="!settings.tunnelConfigured" tone="info">
@@ -230,7 +231,8 @@ async function remove() {
             <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
             <p>
               If Cloudflare says the address already exists, it points somewhere else (another
-              tunnel or server). Replacing it moves the address to this app. Use Check to confirm.
+              tunnel or server). Replacing it moves the address to this app. The status above shows
+              what answers.
             </p>
           </details>
           <BaseMessage v-if="addressesError" tone="error">{{ addressesError }}</BaseMessage>

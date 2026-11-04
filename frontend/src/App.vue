@@ -2,6 +2,7 @@
 import { onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from './components/AppShell.vue'
+import { setShowAdminWidgets } from './dashboard/index.ts'
 import { useLiveStore } from './stores/live.ts'
 import { useProjectsStore } from './stores/projects.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -14,6 +15,8 @@ const session = useSessionStore()
 const live = useLiveStore()
 const projects = useProjectsStore()
 const notify = useNotify()
+
+watch(() => session.isAdmin, setShowAdminWidgets, { immediate: true })
 
 // While signed in: keep live updates connected and announce deployments that finish.
 watch(

@@ -32,3 +32,12 @@ export const MAX_PUBLIC_DOMAINS = 10
 
 /** Public addresses one project may answer on. */
 export const MAX_PROJECT_HOSTNAMES = 10
+
+/** Projects a member may own. Admins have no limit. */
+export const MAX_PROJECTS_PER_MEMBER = 20
+
+/** How long an invite or password reset link works. */
+export const LINK_TTL_MS = 7 * 24 * 60 * 60_000
+
+/** Live streams one account may hold open at a time. */
+export const MAX_STREAMS_PER_USER = 30

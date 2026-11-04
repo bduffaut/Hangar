@@ -90,7 +90,7 @@ export default async function globalSetup() {
   }
 
   const sql =
-    "delete from users; update settings set value = 'null'::jsonb where key = 'githubToken';"
+    "delete from projects; delete from users; update settings set value = 'null'::jsonb where key = 'githubToken';"
   run('docker', ['exec', 'hangar-db', 'psql', '-U', 'hangar', '-d', 'hangar', '-qc', sql])
 
   rmSync(CACHE, { recursive: true, force: true })

@@ -7,8 +7,9 @@ entryPoints:
   traefik:
     address: ':8082' # API and ping; never published to the host in production
 
+# The API has no router of its own: core adds one that requires a secret header, so apps on the
+# same Docker networks cannot read the routes (and so everyone's project names and addresses).
 api:
-  insecure: true
   dashboard: false
 
 ping:

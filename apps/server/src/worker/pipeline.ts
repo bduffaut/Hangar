@@ -25,9 +25,9 @@ import { getProject, listCurrentDeployments, type Project } from '../modules/pro
 import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/secrets.ts'
 import { secretsHash } from '../platform/builder.ts'
-import { appImageRef } from '../platform/names.ts'
+import { appImageRef, ownerBuilderName } from '../platform/names.ts'
 import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
-import { startAppContainer } from './app-container.ts'
+import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
 import { createDeploymentLog, type DeploymentLog } from './deployment-log.ts'
 import { switchRoute } from './reconciler.ts'
 
@@ -154,6 +154,7 @@ export async function runDeployment(
     })
     if (!live) throw new Preempted()
     await ctx.queue.send('gc', {})
+    await ctx.queue.send('addresses', { projectId: project.id })
   } catch (error) {
     if (error instanceof Preempted) return
     await fail(ctx, deployment, control, buildSignal, error, log)
@@ -183,7 +184,7 @@ async function build(
     ctx.git.cloneAt({
       repoUrl: project.repoUrl,
       sha: deployment.commitSha,
-      token: await getGithubToken(ctx),
+      token: await getGithubToken(ctx, project.ownerId),
       dir: sourceDir,
       signal,
       onLine: log.write,
@@ -210,8 +211,11 @@ async function build(
   const noCache = previousHashes.some((previous) => previous !== null && previous !== hash)
   await updateDeployment(ctx.db, deployment.id, { secretsHash: hash })
   if (noCache) log.system('Env vars changed since the last build; building without the cache')
-  await step('build_failed', signal, () =>
-    ctx.builder.build({
+  const builderName = ownerBuilderName(project.ownerId)
+  await step('build_failed', signal, async () => {
+    await ctx.builder.ensureBuilder(builderName, await ensureOwnerNetwork(ctx, project.ownerId))
+    await ctx.builder.build({
+      builderName,
       contextDir,
       repoDir: sourceDir,
       workDir,
@@ -227,8 +231,8 @@ async function build(
             ? 'Found a Dockerfile; building with it'
             : 'No Dockerfile found; detecting the framework with Railpack',
         ),
-    }),
-  )
+    })
+  })
   log.system(`Built ${tag}`)
 }
 

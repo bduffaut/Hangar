@@ -15,8 +15,8 @@ import {
   getDeployment,
   insertQueuedDeployment,
   listDeployments,
-  listDeploymentsByStatus,
   listLogs,
+  listOwnerDeploymentsByStatus,
   markDeploymentLive,
   type NewDeployment,
   updateDeploymentStatus,
@@ -105,7 +105,8 @@ export async function queueBranchHead(
   project: Project,
   trigger: Exclude<DeploymentTrigger, 'rollback'>,
 ): Promise<Deployment> {
-  const sha = await ctx.git.headOf(project.repoUrl, project.branch, await getGithubToken(ctx))
+  const token = await getGithubToken(ctx, project.ownerId)
+  const sha = await ctx.git.headOf(project.repoUrl, project.branch, token)
   if (!sha)
     throw new DeploymentError(`Branch "${project.branch}" was not found in ${project.repoUrl}`)
   return queueDeployment(ctx, project, { commitSha: sha, trigger })
@@ -180,17 +181,20 @@ export async function cancelAllActive(ctx: Ctx, project: Project): Promise<void>
 
 export const findDeployment = (ctx: Ctx, id: string) => getDeployment(ctx.db, id)
 
-export async function getDeploymentOrThrow(ctx: Ctx, id: string): Promise<Deployment> {
+/** The deployment, if `userId` owns its project. Anyone else gets the same as for a missing one. */
+export async function ownedDeployment(ctx: Ctx, userId: string, id: string): Promise<Deployment> {
   const deployment = await getDeployment(ctx.db, id)
-  if (!deployment) throw notFound('Deployment')
+  const project = deployment && (await getProject(ctx.db, deployment.projectId))
+  if (!deployment || project?.ownerId !== userId) throw notFound('Deployment')
   return deployment
 }
 
 export const listProjectDeployments = (ctx: Ctx, projectId: string, limit: number) =>
   listDeployments(ctx.db, projectId, limit)
 
-export const listActiveDeployments = (ctx: Ctx) =>
-  listDeploymentsByStatus(ctx.db, [...ACTIVE_DEPLOYMENT_STATUSES])
+/** The account's deployments still in progress. */
+export const listActiveDeployments = (ctx: Ctx, ownerId: string) =>
+  listOwnerDeploymentsByStatus(ctx.db, ownerId, [...ACTIVE_DEPLOYMENT_STATUSES])
 
 export const logsAfter = (ctx: Ctx, deploymentId: string, afterSeq: number) =>
   listLogs(ctx.db, deploymentId, afterSeq)

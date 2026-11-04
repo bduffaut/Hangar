@@ -36,6 +36,19 @@ export async function listDeploymentsByStatus(db: Db, statuses: DeploymentStatus
   return db.select().from(deployments).where(inArray(deployments.status, statuses))
 }
 
+export async function listOwnerDeploymentsByStatus(
+  db: Db,
+  ownerId: string,
+  statuses: DeploymentStatus[],
+): Promise<Deployment[]> {
+  const rows = await db
+    .select({ deployment: deployments })
+    .from(deployments)
+    .innerJoin(projects, eq(deployments.projectId, projects.id))
+    .where(and(eq(projects.ownerId, ownerId), inArray(deployments.status, statuses)))
+  return rows.map((row) => row.deployment)
+}
+
 export interface NewDeployment {
   projectId: string
   commitSha: string

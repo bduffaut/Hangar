@@ -1,4 +1,4 @@
-import type { DeploymentView, ProjectView } from '@hangar/shared'
+import type { AddressEvent, DeploymentView, ProjectView } from '@hangar/shared'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '../api/client.ts'
@@ -50,6 +50,12 @@ export const useProjectsStore = defineStore('projects', () => {
     upsert(next)
   }
 
+  /** Applies the newest address results the server pushed. */
+  function applyAddresses(event: AddressEvent) {
+    const project = byId.value.get(event.projectId)
+    if (project) upsert({ ...project, addresses: event.addresses })
+  }
+
   return {
     projects,
     loaded,
@@ -57,6 +63,7 @@ export const useProjectsStore = defineStore('projects', () => {
     byName,
     upsert,
     applyDeployment,
+    applyAddresses,
     load,
     /** Loads once; later calls reuse the list the live stream keeps current. */
     ensureLoaded: () => (loaded.value ? Promise.resolve() : load()),

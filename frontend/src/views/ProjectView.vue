@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { confirmCopy, projectTabsCopy, toastCopy, triggerModeCopy } from '@hangar/shared'
+import {
+  addressCopy,
+  confirmCopy,
+  projectTabsCopy,
+  toastCopy,
+  triggerModeCopy,
+} from '@hangar/shared'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
@@ -133,14 +139,17 @@ const running = computed(
           <span v-else-if="project.desiredState === 'stopped'" class="hg-muted">Stopped</span>
           <template v-if="running">
             <a
-              v-for="publicUrl in project.publicUrls"
-              :key="publicUrl"
-              :href="publicUrl"
+              v-for="address in project.addresses"
+              :key="address.hostname"
+              v-hint.bottom="addressCopy[address.status].label"
+              :href="address.url"
               target="_blank"
               rel="noopener"
               class="hg-project-link"
             >
-              {{ publicUrl.replace(/^https:\/\//, '') }}
+              <span class="hg-address-dot" :class="`is-${address.status}`" aria-hidden="true" />
+              {{ address.hostname }}
+              <span class="hg-visually-hidden">: {{ addressCopy[address.status].label }}</span>
               <BaseIcon name="globe" :size="14" />
             </a>
           </template>
@@ -230,6 +239,19 @@ const running = computed(
 </template>
 
 <style scoped>
+.hg-address-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--hg-caution);
+}
+.hg-address-dot.is-live {
+  background: var(--hg-status-ready);
+}
+.hg-address-dot.is-checking,
+.hg-address-dot.is-not_running {
+  background: var(--hg-ink-muted);
+}
 .hg-project-meta {
   display: flex;
   flex-wrap: wrap;

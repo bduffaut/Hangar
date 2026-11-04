@@ -7,6 +7,8 @@ declare module 'vue-router' {
     public?: boolean
     /** Shown inside the app frame (header and navigation). */
     shell?: boolean
+    /** Needs the admin role. The server enforces this; here it only keeps people off dead pages. */
+    admin?: boolean
   }
 }
 
@@ -24,6 +26,13 @@ export const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('./views/LoginView.vue'),
+      meta: { public: true },
+    },
+    {
+      // The token is in the #fragment, which browsers never send to any server.
+      path: '/invite',
+      name: 'link',
+      component: () => import('./views/LinkView.vue'),
       meta: { public: true },
     },
     {
@@ -54,6 +63,18 @@ export const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: () => import('./views/SettingsView.vue'),
+      meta: { shell: true, admin: true },
+    },
+    {
+      path: '/people',
+      name: 'users',
+      component: () => import('./views/UsersView.vue'),
+      meta: { shell: true, admin: true },
+    },
+    {
+      path: '/account',
+      name: 'account',
+      component: () => import('./views/AccountView.vue'),
       meta: { shell: true },
     },
     {
@@ -95,4 +116,5 @@ router.beforeEach(async (to) => {
   if (!to.meta.public && !session.signedIn) {
     return { name: 'login', query: to.fullPath === '/' ? {} : { next: to.fullPath } }
   }
+  if (to.meta.admin && !session.isAdmin) return { name: 'home' }
 })

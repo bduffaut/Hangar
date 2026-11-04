@@ -1,11 +1,12 @@
 import type { Ctx } from '../context.ts'
+import { refreshAddresses } from '../modules/addresses/service.ts'
 import { listDeploymentsByStatus } from '../modules/deployments/repo.ts'
 import { sendJob, transition } from '../modules/deployments/service.ts'
 import { listCurrentDeployments } from '../modules/projects/repo.ts'
 import { collectGarbage, sweepBuildDirs } from './gc.ts'
 import { ABORT_CANCEL, ABORT_SHUTDOWN, runDeployment } from './pipeline.ts'
 import { pollProjects } from './poller.ts'
-import { reconcile } from './reconciler.ts'
+import { reconcile, reconnectOwnerNetworks } from './reconciler.ts'
 
 const SHUTDOWN_WAIT_MS = 5_000
 
@@ -63,8 +64,13 @@ export async function startWorker(ctx: Ctx): Promise<{ stop: () => Promise<void>
   await ctx.queue.work('gc', () => collectGarbage(ctx))
   await ctx.queue.work('reconcile', () => reconcile(ctx))
   await ctx.queue.work('poll', () => pollProjects(ctx))
+  await ctx.queue.work('addresses', async ({ projectId }) => {
+    await reconnectOwnerNetworks(ctx)
+    await refreshAddresses(ctx, projectId)
+  })
   await ctx.queue.schedule('gc', '17 * * * *')
   await ctx.queue.schedule('poll', '* * * * *')
+  await ctx.queue.schedule('addresses', '* * * * *')
   ctx.log.info('Worker started')
 
   return {

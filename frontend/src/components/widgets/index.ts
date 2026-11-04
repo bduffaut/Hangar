@@ -51,6 +51,7 @@ export const builtInWidgets = defineDashboardPlugin({
         id: `hangar.${reading}`,
         ...copy[reading],
         category: categories.instruments,
+        adminOnly: true,
         component: GaugeWidget,
         props: { reading },
         size: {
@@ -64,6 +65,7 @@ export const builtInWidgets = defineDashboardPlugin({
       id: 'hangar.machine',
       ...copy.machine,
       category: categories.machine,
+      adminOnly: true,
       component: MachineWidget,
       size: { w: 12, h: rowsFor(96), minW: 4, minH: rowsFor(96) },
     })

@@ -74,12 +74,6 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 ok "$(docker --version)"
 docker compose version >/dev/null 2>&1 || fail "The Docker Compose plugin is missing." "Install it: apt-get install docker-compose-plugin"
-if docker info --format '{{json .DriverStatus}}' | grep -q io.containerd.snapshotter; then
-  ok "Docker uses the containerd image store"
-else
-  warn "Docker's containerd image store is off, so repositories without a Dockerfile cannot be built."
-  warn "To turn it on: add \"features\": {\"containerd-snapshotter\": true} to /etc/docker/daemon.json and restart Docker."
-fi
 
 step "Rolling open the hangar doors..." "Writing Hangar's files to $HANGAR_DIR."
 install -d -m 0755 "$HANGAR_DIR"

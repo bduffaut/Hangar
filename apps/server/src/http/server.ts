@@ -1,7 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
-import type { Endpoint } from '@hangar/shared'
+import { type Endpoint, MAX_STREAMS_PER_USER } from '@hangar/shared'
 import Fastify, {
   type FastifyBaseLogger,
   type FastifyInstance,
@@ -14,15 +14,21 @@ import { UserError } from '../errors.ts'
 import {
   type AuthenticatedSession,
   csrfTokenFor,
+  isSessionCurrent,
   isValidCsrfToken,
   resolveSession,
 } from '../modules/auth/service.ts'
 import { isPendingCheck } from '../modules/settings/reachability.ts'
-import { ADDRESS_CHECK_PATH } from '../platform/proxy.ts'
+import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 import { type AccessPolicyCache, classifyRequest, createAccessPolicy } from './access.ts'
 import { type EventStream, openEventStream } from './sse.ts'
 
 export const SESSION_COOKIE = 'hangar_session'
+// Over HTTPS the browser only accepts a __Host- cookie from this exact host, so an app on a sibling
+// name (blog.example.com) cannot plant a session cookie for tower.example.com.
+const SECURE_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`
+/** How often a long-lived stream checks that its session is still valid. */
+const STREAM_RECHECK_MS = 60_000
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 declare module 'fastify' {
@@ -80,6 +86,23 @@ function trackProxyAddresses(host: string) {
 const isLoopback = (address: string) =>
   address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 
+/**
+ * True for traffic from the public entrypoint, which is always HTTPS at Cloudflare. Traefik sets
+ * this header on every request to core and sees plain HTTP from the tunnel, so the usual
+ * X-Forwarded-Proto says http here.
+ */
+const isPublicRequest = (request: FastifyRequest) =>
+  request.headers[ENTRYPOINT_HEADER.toLowerCase()] === 'public'
+
+/**
+ * The visitor's address. Behind the tunnel every request comes from cloudflared, so rate limits
+ * use the address Cloudflare reports; the public entrypoint can only be reached through it.
+ */
+function clientAddress(request: FastifyRequest): string {
+  const forwarded = request.headers['cf-connecting-ip']
+  return isPublicRequest(request) && typeof forwarded === 'string' ? forwarded : request.ip
+}
+
 export function createHttpServer(ctx: Ctx): Http {
   const isProxy = trackProxyAddresses(ctx.config.proxyHost)
   const app = Fastify({
@@ -93,7 +116,7 @@ export function createHttpServer(ctx: Ctx): Http {
   const access = createAccessPolicy(ctx)
 
   app.register(cookie, { secret: ctx.config.sessionSecret })
-  app.register(rateLimit, { global: false })
+  app.register(rateLimit, { global: false, keyGenerator: clientAddress })
   app.decorateRequest('auth', null)
 
   app.addHook('onRequest', async (request, reply) => {
@@ -174,24 +197,27 @@ export function createHttpServer(ctx: Ctx): Http {
   }
 }
 
+const sessionCookieName = (request: FastifyRequest) =>
+  isPublicRequest(request) ? SECURE_SESSION_COOKIE : SESSION_COOKIE
+
 export function setSessionCookie(
   request: FastifyRequest,
   reply: FastifyReply,
   token: string,
   expiresAt: Date,
 ) {
-  reply.setCookie(SESSION_COOKIE, token, {
+  reply.setCookie(sessionCookieName(request), token, {
     signed: true,
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    secure: request.protocol === 'https',
+    secure: isPublicRequest(request),
     expires: expiresAt,
   })
 }
 
-export function clearSessionCookie(reply: FastifyReply) {
-  reply.clearCookie(SESSION_COOKIE, { path: '/' })
+export function clearSessionCookie(request: FastifyRequest, reply: FastifyReply) {
+  reply.clearCookie(sessionCookieName(request), { path: '/', secure: isPublicRequest(request) })
 }
 
 /** Loads the session from the cookie; for non-GET requests also checks the CSRF token. */
@@ -200,7 +226,7 @@ export async function authenticate(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<AuthenticatedSession> {
-  const raw = request.cookies[SESSION_COOKIE]
+  const raw = request.cookies[sessionCookieName(request)]
   const unsigned = raw ? request.unsignCookie(raw) : null
   const session =
     unsigned?.valid && unsigned.value ? await resolveSession(ctx, unsigned.value) : null
@@ -246,7 +272,7 @@ export interface HandlerInput<E extends Endpoint> {
   params: Parsed<E['params']>
   query: Parsed<E['query']>
   body: Parsed<E['body']>
-  auth: E['access'] extends 'session' ? AuthenticatedSession : null
+  auth: E['access'] extends 'public' ? null : AuthenticatedSession
   request: FastifyRequest
   reply: FastifyReply
 }
@@ -273,7 +299,10 @@ export function route<E extends Endpoint>(
       ? { rateLimit: { max: options.rateLimit, timeWindow: '1 minute' } }
       : {},
     handler: async (request, reply) => {
-      const auth = endpoint.access === 'session' ? await authenticate(ctx, request, reply) : null
+      const auth = endpoint.access === 'public' ? null : await authenticate(ctx, request, reply)
+      if (endpoint.access === 'admin' && auth?.user.role !== 'admin') {
+        throw new UserError(403, 'admin_only', 'Only an admin can do this.')
+      }
       const input = {
         params: endpoint.params && parseInput(endpoint.params, request.params),
         query: endpoint.query && parseInput(endpoint.query, request.query),
@@ -287,6 +316,9 @@ export function route<E extends Endpoint>(
   })
 }
 
+// Open streams per account. Each holds a connection and often a Docker log stream.
+const openStreams = new Map<string, number>()
+
 /**
  * Registers a server-sent event stream that needs a session. Params are validated and `prepare`
  * runs before the stream opens, so not-found and similar errors still get a normal JSON response.
@@ -299,9 +331,30 @@ export function eventStream<P extends z.ZodType, T>(
   run: (stream: EventStream, prepared: T, request: FastifyRequest) => Promise<void>,
 ) {
   app.get(path, async (request, reply) => {
-    await authenticate(ctx, request, reply)
+    const session = await authenticate(ctx, request, reply)
     const prepared = await prepare(parseInput(params, request.params), request)
+    const userId = session.user.id
+    const open = openStreams.get(userId) ?? 0
+    if (open >= MAX_STREAMS_PER_USER) {
+      throw new UserError(429, 'too_many_streams', 'Too many open pages. Close some and try again.')
+    }
+    openStreams.set(userId, open + 1)
     const stream = openEventStream(request, reply)
+    // A stream outlives the request that opened it, so signing out, a password change, a removed
+    // account, or a changed role must also end it.
+    const recheck = setInterval(() => {
+      isSessionCurrent(ctx, session)
+        .then((current) => {
+          if (!current) stream.close()
+        })
+        .catch(() => {})
+    }, STREAM_RECHECK_MS)
+    stream.onClose(() => {
+      clearInterval(recheck)
+      const left = (openStreams.get(userId) ?? 1) - 1
+      if (left > 0) openStreams.set(userId, left)
+      else openStreams.delete(userId)
+    })
     try {
       await run(stream, prepared, request)
     } catch (error) {

@@ -5,8 +5,11 @@ import * as s from './schemas.ts'
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
-/** `public`: anyone. `session`: a signed-in user (and a CSRF token for non-GET requests). */
-export type Access = 'public' | 'session'
+/**
+ * `public`: anyone. `session`: a signed-in user (and a CSRF token for non-GET requests).
+ * `admin`: the same, with the admin role.
+ */
+export type Access = 'public' | 'session' | 'admin'
 
 export interface Endpoint {
   method: HttpMethod
@@ -45,7 +48,35 @@ export const contract = {
     response: s.session,
   }),
   logout: endpoint({ method: 'POST', path: '/api/auth/logout', access: 'session', response: s.ok }),
+  // POST, so the token travels in the body and never lands in a URL or a log.
+  checkLink: endpoint({
+    method: 'POST',
+    path: '/api/auth/link/check',
+    access: 'public',
+    body: s.linkToken,
+    response: s.linkInfo,
+  }),
+  redeemLink: endpoint({
+    method: 'POST',
+    path: '/api/auth/link/redeem',
+    access: 'public',
+    body: s.redeemLink,
+    response: s.session,
+  }),
   me: endpoint({ method: 'GET', path: '/api/auth/me', access: 'session', response: s.session }),
+  changePassword: endpoint({
+    method: 'POST',
+    path: '/api/me/password',
+    access: 'session',
+    body: s.changePassword,
+    response: s.session,
+  }),
+  signOutEverywhere: endpoint({
+    method: 'POST',
+    path: '/api/me/sign-out-everywhere',
+    access: 'session',
+    response: s.ok,
+  }),
   getDashboardLayout: endpoint({
     method: 'GET',
     path: '/api/me/dashboard',
@@ -69,7 +100,7 @@ export const contract = {
   updateSettings: endpoint({
     method: 'PATCH',
     path: '/api/settings',
-    access: 'session',
+    access: 'admin',
     body: s.settingsPatch,
     response: s.settingsView,
   }),
@@ -83,16 +114,65 @@ export const contract = {
   checkAddress: endpoint({
     method: 'POST',
     path: '/api/settings/check-address',
-    access: 'session',
+    access: 'admin',
     body: s.addressCheck,
     response: s.addressCheckResult,
   }),
   setTunnelToken: endpoint({
     method: 'POST',
     path: '/api/settings/tunnel',
-    access: 'session',
+    access: 'admin',
     body: s.tunnelToken,
     response: s.settingsView,
+  }),
+
+  listUsers: endpoint({
+    method: 'GET',
+    path: '/api/users',
+    access: 'admin',
+    response: z.array(s.userView),
+  }),
+  updateUser: endpoint({
+    method: 'PATCH',
+    path: '/api/users/:id',
+    access: 'admin',
+    params: s.idParams,
+    body: s.userPatch,
+    response: s.userView,
+  }),
+  deleteUser: endpoint({
+    method: 'DELETE',
+    path: '/api/users/:id',
+    access: 'admin',
+    params: s.idParams,
+    response: s.ok,
+  }),
+  createResetLink: endpoint({
+    method: 'POST',
+    path: '/api/users/:id/reset-link',
+    access: 'admin',
+    params: s.idParams,
+    response: s.createdLink,
+  }),
+  listInvites: endpoint({
+    method: 'GET',
+    path: '/api/invites',
+    access: 'admin',
+    response: z.array(s.inviteView),
+  }),
+  createInvite: endpoint({
+    method: 'POST',
+    path: '/api/invites',
+    access: 'admin',
+    body: s.inviteInput,
+    response: s.createdLink,
+  }),
+  revokeInvite: endpoint({
+    method: 'DELETE',
+    path: '/api/invites/:id',
+    access: 'admin',
+    params: s.idParams,
+    response: s.ok,
   }),
 
   githubRepos: endpoint({
@@ -172,6 +252,13 @@ export const contract = {
     params: s.idParams,
     response: s.deploymentView,
   }),
+  checkProjectAddresses: endpoint({
+    method: 'POST',
+    path: '/api/projects/:id/addresses/check',
+    access: 'session',
+    params: s.idParams,
+    response: s.projectView,
+  }),
   projectWebhook: endpoint({
     method: 'GET',
     path: '/api/projects/:id/webhook',
@@ -244,7 +331,7 @@ export const contract = {
   systemInfo: endpoint({
     method: 'GET',
     path: '/api/system/info',
-    access: 'session',
+    access: 'admin',
     response: s.systemInfo,
   }),
 } as const

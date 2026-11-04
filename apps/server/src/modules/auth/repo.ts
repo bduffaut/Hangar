@@ -40,18 +40,34 @@ export async function insertFirstUser(
     if (cleared.length === 0) return null
     const [user] = await tx
       .insert(users)
-      .values({ username: values.username, passwordHash: values.passwordHash })
+      .values({ username: values.username, passwordHash: values.passwordHash, role: 'admin' })
       .returning()
     return user!
   })
 }
 
 export async function updatePassword(db: Db, userId: string, passwordHash: string) {
-  await db.transaction(async (tx) => {
-    await tx.update(users).set({ passwordHash }).where(eq(users.id, userId))
-    // A password change signs out every existing session.
-    await tx.delete(sessions).where(eq(sessions.userId, userId))
-  })
+  await db.transaction((tx) => replacePassword(tx as unknown as Db, userId, passwordHash))
+}
+
+/** Sets the password and signs out every existing session. Call inside a transaction. */
+export async function replacePassword(tx: Db, userId: string, passwordHash: string) {
+  await tx.update(users).set({ passwordHash }).where(eq(users.id, userId))
+  await tx.delete(sessions).where(eq(sessions.userId, userId))
+}
+
+/** Stores a stronger hash of the same password, without touching any session. */
+export async function upgradePasswordHash(db: Db, userId: string, passwordHash: string) {
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId))
+}
+
+export async function getUserById(db: Db, id: string): Promise<User | null> {
+  const [row] = await db.select().from(users).where(eq(users.id, id))
+  return row ?? null
+}
+
+export async function deleteSessions(db: Db, userId: string): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.userId, userId))
 }
 
 export async function getDashboardLayout(db: Db, userId: string): Promise<unknown[] | null> {
@@ -76,7 +92,10 @@ export async function insertSession(
 /** A session that has not expired, with its user. */
 export async function getActiveSession(db: Db, id: string) {
   const [row] = await db
-    .select({ session: sessions, user: { id: users.id, username: users.username } })
+    .select({
+      session: sessions,
+      user: { id: users.id, username: users.username, role: users.role },
+    })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .where(and(eq(sessions.id, id), gt(sessions.expiresAt, new Date())))

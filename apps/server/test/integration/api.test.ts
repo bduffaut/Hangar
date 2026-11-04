@@ -3,17 +3,24 @@
 import { execFileSync } from 'node:child_process'
 import { createHmac } from 'node:crypto'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import pg from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { contract, streams } from '@hangar/shared'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../src/app.ts'
 import { loadConfig } from '../../src/config.ts'
 import { createContext } from '../../src/context.ts'
 import { runMigrations } from '../../src/db/migrate.ts'
 import { createLogger } from '../../src/logger.ts'
+import { refreshAddresses } from '../../src/modules/addresses/service.ts'
 import { issueSetupCode } from '../../src/modules/auth/service.ts'
+import { insertQueuedDeployment } from '../../src/modules/deployments/repo.ts'
+import { getSettings, setSettings } from '../../src/modules/settings/repo.ts'
+import { getGithubToken, TUNNEL_TOKEN_AAD } from '../../src/modules/settings/secrets.ts'
 import { seedSettings } from '../../src/modules/settings/service.ts'
+import { redeemLink } from '../../src/modules/users/service.ts'
 import { DEV_DATABASE_URL, devCoreEnv, REPO_ROOT } from './harness.ts'
 
 const TEST_DB = 'hangar_api_test'
@@ -182,7 +189,7 @@ describe('sessions', () => {
   it('returns the signed-in user', async () => {
     const res = await call({ url: '/api/auth/me', cookie })
     expect(res.json()).toEqual({
-      user: { id: expect.any(String), username: 'admin' },
+      user: { id: expect.any(String), username: 'admin', role: 'admin' },
       csrfToken: csrf,
     })
   })
@@ -462,7 +469,7 @@ describe('projects and env vars', () => {
     expect((await patch({ hostnames: ['tower.example.com'] })).status).toBe(400)
     const taken = await patch({ hostnames: ['auto.example.com'] })
     expect(taken.status).toBe(409)
-    expect(taken.json().error.message).toContain('already used by auto')
+    expect(taken.json().error.message).toContain('already in use by another project')
 
     // A domain in use cannot be removed.
     const removing = await settings({ publicDomains: ['example.com'] })
@@ -553,6 +560,421 @@ describe('projects and env vars', () => {
       (await call({ method: 'DELETE', url: `/api/projects/${projectId}`, cookie, csrf })).status,
     ).toBe(200)
     expect((await call({ url: `/api/projects/${projectId}`, cookie })).status).toBe(404)
+  })
+})
+
+describe('accounts', () => {
+  const PASSWORD = 'a long enough password'
+  const ADMIN_PASSWORD = 'correct horse battery'
+  let member = { cookie: '', csrf: '', id: '' }
+  let adminProject = ''
+  let adminDeployment = ''
+
+  const invite = async (body: object = {}) =>
+    (await call({ method: 'POST', url: '/api/invites', body, cookie, csrf })).json().token as string
+
+  async function join(token: string, username: string, password = PASSWORD) {
+    const res = await call({
+      method: 'POST',
+      url: '/api/auth/link/redeem',
+      body: { token, username, password },
+    })
+    const body = res.json()
+    return { res, cookie: res.cookie ?? '', csrf: body.csrfToken as string, id: body.user?.id }
+  }
+
+  it('has no way to sign up without an invite', async () => {
+    const res = await join('made-up-token', 'stranger')
+    expect(res.res.status).toBe(400)
+    expect(res.res.json().error.code).toBe('invalid_link')
+  })
+
+  it('creates a member from a one-time invite', async () => {
+    const token = await invite({ label: 'for a friend' })
+    const open = (await call({ url: '/api/invites', cookie })).json()
+    expect(open).toHaveLength(1)
+    // The list never holds the link itself: only its hash is stored.
+    expect(JSON.stringify(open)).not.toContain(token)
+    expect(
+      (await call({ method: 'POST', url: '/api/auth/link/check', body: { token } })).json(),
+    ).toEqual({ valid: true, kind: 'invite', username: null })
+
+    const joined = await join(token, 'member')
+    expect(joined.res.status).toBe(200)
+    expect(joined.res.json().user.role).toBe('member')
+    member = { cookie: joined.cookie, csrf: joined.csrf, id: joined.id }
+
+    expect((await join(token, 'second')).res.json().error.code).toBe('invalid_link')
+    expect((await call({ url: '/api/invites', cookie })).json()).toHaveLength(0)
+  })
+
+  it('keeps an invite usable when the username is taken, and honours its role', async () => {
+    const token = await invite({ role: 'admin' })
+    expect((await join(token, 'member')).res.status).toBe(409)
+    const second = await join(token, 'second-admin')
+    expect(second.res.json().user.role).toBe('admin')
+    await call({
+      method: 'DELETE',
+      url: `/api/users/${second.id}`,
+      cookie,
+      csrf,
+    })
+  })
+
+  it('refuses expired and revoked invites', async () => {
+    const revoked = await invite()
+    const [open] = (await call({ url: '/api/invites', cookie })).json()
+    await call({ method: 'DELETE', url: `/api/invites/${open.id}`, cookie, csrf })
+    expect((await join(revoked, 'revoked')).res.status).toBe(400)
+
+    const expired = await invite()
+    await ctx.db.execute(`update access_links set expires_at = now() - interval '1 minute'`)
+    expect((await join(expired, 'expired')).res.status).toBe(400)
+  })
+
+  it('stores passwords with strong argon2id settings', async () => {
+    const { rows } = await ctx.db.execute(`select password_hash from users where username='member'`)
+    expect(String(rows[0]!.password_hash)).toContain('$argon2id$')
+    expect(String(rows[0]!.password_hash)).toContain('m=19456,t=2,p=1')
+  })
+
+  it('hides every project and deployment of another account behind the same 404', async () => {
+    const created = await call({
+      method: 'POST',
+      url: '/api/projects',
+      body: { name: 'admins-app', repoUrl, deploy: false, hostnames: [] },
+      cookie,
+      csrf,
+    })
+    adminProject = created.json().id
+    const { deployment } = await insertQueuedDeployment(ctx.db, {
+      projectId: adminProject,
+      commitSha: 'a'.repeat(40),
+      branch: 'main',
+      trigger: 'manual',
+    })
+    adminDeployment = deployment.id
+
+    const body = { hostnames: [], vars: {} }
+    const scoped = [
+      ...Object.values(contract).filter((e) => e.access === 'session' && e.path.includes(':id')),
+      { method: 'GET', path: streams.runtimeLogs },
+      { method: 'GET', path: streams.deploymentLogs },
+    ]
+    expect(scoped.length).toBeGreaterThan(15)
+    for (const endpoint of scoped) {
+      const id = endpoint.path.includes('/deployments/') ? adminDeployment : adminProject
+      const res = await call({
+        method: endpoint.method as 'GET',
+        url: endpoint.path.replace(':id', id).replace(':key', 'KEY'),
+        ...(endpoint.method === 'GET' ? {} : { body }),
+        cookie: member.cookie,
+        csrf: member.csrf,
+      })
+      expect([endpoint.path, res.status]).toEqual([endpoint.path, 404])
+    }
+    expect((await call({ url: '/api/projects', cookie: member.cookie })).json()).toEqual([])
+    // Still there, untouched, for its owner.
+    expect((await call({ url: `/api/projects/${adminProject}`, cookie })).status).toBe(200)
+  })
+
+  it('keeps every admin endpoint from members', async () => {
+    const admin = Object.values(contract).filter((e) => e.access === 'admin')
+    expect(admin.length).toBeGreaterThan(8)
+    for (const endpoint of admin) {
+      const res = await call({
+        method: endpoint.method as 'GET',
+        url: endpoint.path.replace(':id', member.id),
+        ...(endpoint.method === 'GET' ? {} : { body: {} }),
+        cookie: member.cookie,
+        csrf: member.csrf,
+      })
+      expect([endpoint.path, res.status]).toEqual([endpoint.path, 403])
+    }
+  })
+
+  it('does not show one account another account deployments on the live stream', async () => {
+    await app.listen({ port: 0, host: '127.0.0.1' })
+    const { port } = app.server.address() as { port: number }
+    const firstEvent = (sessionCookie: string) =>
+      new Promise<string>((resolve, reject) => {
+        const req = request(
+          { port, path: '/api/events', headers: { host: HOST, cookie: sessionCookie } },
+          (res) => {
+            let text = ''
+            res.on('data', (chunk) => {
+              text += chunk
+              if (text.includes('event: snapshot')) {
+                req.destroy()
+                resolve(text)
+              }
+            })
+          },
+        )
+        req.on('error', reject)
+        req.end()
+      })
+    expect(await firstEvent(cookie)).toContain(adminDeployment)
+    expect(await firstEvent(member.cookie)).not.toContain(adminDeployment)
+  })
+
+  it('gives each account its own GitHub token', async () => {
+    const { rows } = await ctx.db.execute(`select id from users where username = 'admin'`)
+    const adminId = String(rows[0]!.id)
+    await ctx.db.execute(
+      `update users set github_token = '${ctx.crypto.seal('admin-token', `user:${adminId}:githubToken`)}' where id = '${adminId}'`,
+    )
+    expect(await getGithubToken(ctx, adminId)).toBe('admin-token')
+    expect(await getGithubToken(ctx, member.id)).toBeNull()
+    expect((await call({ url: '/api/settings', cookie })).json().githubConnected).toBe(true)
+    const theirs = await call({ url: '/api/settings', cookie: member.cookie })
+    expect(theirs.json().githubConnected).toBe(false)
+    expect((await call({ url: '/api/github/repos', cookie: member.cookie })).status).toBe(409)
+  })
+
+  it('moves the old shared GitHub token to the first admin on start', async () => {
+    const { rows } = await ctx.db.execute(`select id from users where username = 'admin'`)
+    await setSettings(ctx.db, { githubToken: ctx.crypto.seal('shared', 'setting:githubToken') })
+    await seedSettings(ctx)
+    expect(await getGithubToken(ctx, String(rows[0]!.id))).toBe('shared')
+    expect(await getGithubToken(ctx, member.id)).toBeNull()
+    expect((await getSettings(ctx.db)).githubToken).toBeNull()
+  })
+
+  it('keeps project limits and addresses on members', async () => {
+    await setSettings(ctx.db, { publicDomains: ['example.com'] })
+    const create = (body: object) =>
+      call({
+        method: 'POST',
+        url: '/api/projects',
+        body: { name: 'mine', repoUrl, deploy: false, ...body },
+        cookie: member.cookie,
+        csrf: member.csrf,
+      })
+    expect((await create({ hostnames: ['example.com'] })).status).toBe(400)
+    expect((await create({ hostnames: ['www.example.com'] })).status).toBe(400)
+    const internal = await create({ repoUrl: 'https://hangar-db/repo', hostnames: [] })
+    expect(internal.status).toBe(400)
+    const mine = await create({ hostnames: ['mine.example.com'] })
+    expect(mine.status).toBe(200)
+    // A taken address says nothing about who has it.
+    const taken = await call({
+      method: 'PATCH',
+      url: `/api/projects/${adminProject}`,
+      body: { hostnames: ['mine.example.com'] },
+      cookie,
+      csrf,
+    })
+    expect(taken.status).toBe(409)
+    expect(taken.json().error.message).not.toContain('mine.example.com is already used by mine')
+  })
+
+  it('shows what a real request to an address found, and pushes nothing it did not see', async () => {
+    const [mine] = (await call({ url: '/api/projects', cookie: member.cookie })).json()
+    expect(mine.addresses[0].status).toBe('checking')
+    await ctx.db.execute(`update projects set desired_state = 'stopped' where id = '${mine.id}'`)
+    await refreshAddresses(ctx, mine.id)
+    const stopped = (await call({ url: `/api/projects/${mine.id}`, cookie: member.cookie })).json()
+    // Nothing is deployed, so no request is needed to know the app cannot answer.
+    expect(stopped.addresses[0]).toMatchObject({ status: 'not_running', lastLiveAt: null })
+
+    await ctx.db.execute(
+      `update projects set desired_state = 'running', current_deployment_id = '${adminDeployment}' where id = '${mine.id}'`,
+    )
+    await setSettings(ctx.db, {
+      cloudflareTunnelToken: ctx.crypto.seal('tunnel-token', TUNNEL_TOKEN_AAD),
+    })
+    let appStatus = 200
+    const fetchStub = vi.fn(async (input: string) => {
+      const url = new URL(input)
+      if (url.pathname.startsWith('/.well-known/hangar-check/')) {
+        // Answered by core's own handler, as Cloudflare and the tunnel would deliver it.
+        const res = await app.inject({
+          url: url.pathname,
+          headers: { host: url.host, 'x-hangar-entrypoint': 'public' },
+        })
+        return new Response(res.body, { status: res.statusCode })
+      }
+      return new Response('app', { status: appStatus })
+    })
+    vi.stubGlobal('fetch', fetchStub)
+    try {
+      const statusAfter = async () => {
+        await refreshAddresses(ctx, mine.id)
+        return (await call({ url: `/api/projects/${mine.id}`, cookie: member.cookie })).json()
+          .addresses[0]
+      }
+      const live = await statusAfter()
+      expect(live.status).toBe('live')
+      expect(live.lastLiveAt).not.toBeNull()
+      expect(fetchStub).toHaveBeenCalledTimes(2)
+
+      appStatus = 502
+      const down = await statusAfter()
+      expect(down.status).toBe('app_down')
+      expect(down.lastLiveAt).toBe(live.lastLiveAt)
+
+      fetchStub.mockImplementation(async () => new Response('another server', { status: 200 }))
+      expect((await statusAfter()).status).toBe('elsewhere')
+
+      fetchStub.mockImplementation(async () => {
+        throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } })
+      })
+      expect((await statusAfter()).status).toBe('unreachable')
+    } finally {
+      vi.unstubAllGlobals()
+      await setSettings(ctx.db, { cloudflareTunnelToken: null })
+      await ctx.db.execute(
+        `update projects set current_deployment_id = null where id = '${mine.id}'`,
+      )
+    }
+  })
+
+  it('changes a password only with the current one, ending other sessions', async () => {
+    const other = await call({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: { username: 'member', password: PASSWORD },
+    })
+    const change = (currentPassword: string) =>
+      call({
+        method: 'POST',
+        url: '/api/me/password',
+        body: { currentPassword, newPassword: 'a different long password' },
+        cookie: member.cookie,
+        csrf: member.csrf,
+      })
+    expect((await change('wrong')).status).toBe(400)
+    const changed = await change(PASSWORD)
+    expect(changed.status).toBe(200)
+    expect((await call({ url: '/api/auth/me', cookie: other.cookie })).status).toBe(401)
+    expect((await call({ url: '/api/auth/me', cookie: member.cookie })).status).toBe(401)
+    member.cookie = changed.cookie!
+    member.csrf = changed.json().csrfToken
+    expect((await call({ url: '/api/auth/me', cookie: member.cookie })).status).toBe(200)
+  })
+
+  it('resets a password from an admin link, once, and signs the account out', async () => {
+    const link = await call({
+      method: 'POST',
+      url: `/api/users/${member.id}/reset-link`,
+      cookie,
+      csrf,
+    })
+    const { token } = link.json()
+    expect(
+      (await call({ method: 'POST', url: '/api/auth/link/check', body: { token } })).json(),
+    ).toEqual({ valid: true, kind: 'reset', username: 'member' })
+    const redeem = () =>
+      call({
+        method: 'POST',
+        url: '/api/auth/link/redeem',
+        body: { token, password: PASSWORD },
+      })
+    const reset = await redeem()
+    expect(reset.status).toBe(200)
+    expect((await call({ url: '/api/auth/me', cookie: member.cookie })).status).toBe(401)
+    expect((await redeem()).status).toBe(400)
+    member.cookie = reset.cookie!
+    member.csrf = reset.json().csrfToken
+  })
+
+  it('always keeps an admin', async () => {
+    const { rows } = await ctx.db.execute(`select id from users where username = 'admin'`)
+    const adminId = String(rows[0]!.id)
+    const demote = await call({
+      method: 'PATCH',
+      url: `/api/users/${adminId}`,
+      body: { role: 'member' },
+      cookie,
+      csrf,
+    })
+    expect(demote.json().error.code).toBe('last_admin')
+    const self = await call({ method: 'DELETE', url: `/api/users/${adminId}`, cookie, csrf })
+    expect(self.json().error.code).toBe('cannot_delete_self')
+  })
+
+  it('cancels the links of a demoted admin, so they cannot buy their way back', async () => {
+    const second = await join(await invite({ role: 'admin' }), 'temporary-admin')
+    const asSecond = { cookie: second.cookie, csrf: second.csrf }
+    const heldInvite = await call({
+      method: 'POST',
+      url: '/api/invites',
+      body: { role: 'admin' },
+      ...asSecond,
+    })
+    const heldReset = await call({
+      method: 'POST',
+      url: `/api/users/${member.id}/reset-link`,
+      ...asSecond,
+    })
+    await call({
+      method: 'PATCH',
+      url: `/api/users/${second.id}`,
+      body: { role: 'member' },
+      cookie,
+      csrf,
+    })
+    // Directly, not over HTTP: this suite has used up the route's per-minute limit by now.
+    const redeem = (token: string, username?: string) =>
+      redeemLink(ctx, { token, username, password: PASSWORD })
+    await expect(redeem(heldInvite.json().token, 'way-back')).rejects.toThrow('expired')
+    await expect(redeem(heldReset.json().token)).rejects.toThrow('expired')
+    await call({ method: 'DELETE', url: `/api/users/${second.id}`, cookie, csrf })
+  })
+
+  it('applies a role change at once', async () => {
+    const promote = (role: string) =>
+      call({ method: 'PATCH', url: `/api/users/${member.id}`, body: { role }, cookie, csrf })
+    expect((await promote('admin')).json().role).toBe('admin')
+    expect((await call({ url: '/api/users', cookie: member.cookie })).status).toBe(200)
+    await promote('member')
+    expect((await call({ url: '/api/users', cookie: member.cookie })).status).toBe(403)
+  })
+
+  it('removes an account with its projects and sessions', async () => {
+    const before = (await call({ url: '/api/users', cookie })).json()
+    expect(before.find((u: { id: string }) => u.id === member.id).projectCount).toBe(1)
+    const removed = await call({ method: 'DELETE', url: `/api/users/${member.id}`, cookie, csrf })
+    expect(removed.status).toBe(200)
+    expect((await call({ url: '/api/auth/me', cookie: member.cookie })).status).toBe(401)
+    const { rows } = await ctx.db.execute(
+      `select count(*)::int as n from projects where name='mine'`,
+    )
+    expect(rows[0]!.n).toBe(0)
+    await setSettings(ctx.db, { publicDomains: [] })
+    await call({ method: 'DELETE', url: `/api/projects/${adminProject}`, cookie, csrf })
+  })
+
+  it('uses a __Host- cookie and HSTS on the public HTTPS address', async () => {
+    await setSettings(ctx.db, { publicDomains: ['example.com'], exposeTowerPublicly: true })
+    const headers = {
+      host: 'tower.example.com',
+      origin: 'https://tower.example.com',
+      'x-hangar-entrypoint': 'public',
+      'content-type': 'application/json',
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5_100)) // the access policy cache
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers,
+      payload: { username: 'admin', password: ADMIN_PASSWORD },
+    })
+    expect(login.statusCode).toBe(200)
+    const cookieHeader = String([login.headers['set-cookie']].flat()[0])
+    expect(cookieHeader).toMatch(/^__Host-hangar_session=/)
+    expect(cookieHeader).toContain('Secure')
+    expect(cookieHeader).toContain('HttpOnly')
+    expect(login.headers['strict-transport-security']).toBeDefined()
+    // The name the LAN uses means nothing here, so a planted cookie gets nowhere.
+    const value = cookieHeader.split(';')[0]!.split('=').slice(1).join('=')
+    const planted = await app.inject({
+      url: '/api/auth/me',
+      headers: { ...headers, cookie: `hangar_session=${value}` },
+    })
+    expect(planted.statusCode).toBe(401)
+    await setSettings(ctx.db, { publicDomains: [], exposeTowerPublicly: false })
   })
 })
 

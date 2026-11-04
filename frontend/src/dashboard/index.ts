@@ -1,6 +1,6 @@
 export { useDashboardData } from './data.ts'
 export { defaultLayout, GRID, restoreLayout, rowsFor, widgetFor } from './layout.ts'
 export { installDashboardPlugins } from './plugins.ts'
-export { allWidgets, widgetById } from './registry.ts'
+export { allWidgets, setShowAdminWidgets, widgetById } from './registry.ts'
 export * from './types.ts'
 export { useDashboardLayout } from './useDashboardLayout.ts'

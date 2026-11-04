@@ -1,4 +1,4 @@
-import type { DeploymentView } from '@hangar/shared'
+import type { AddressEvent, DeploymentView } from '@hangar/shared'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { openStream, type Stream, streamUrl } from '../api/streams.ts'
@@ -52,6 +52,7 @@ export const useLiveStore = defineStore('live', () => {
             }
           },
           status: (data: { deployment: DeploymentView }) => apply(data.deployment),
+          address: (data: AddressEvent) => useProjectsStore().applyAddresses(data),
         },
         {
           onOpen: (reconnect) => (catchingUp = reconnect),

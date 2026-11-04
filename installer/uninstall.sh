@@ -14,6 +14,10 @@ confirm "Continue?" || fail "Stopped. Nothing was changed."
 step "Stopping Hangar" "Removing app containers, the tunnel, and the Hangar stack."
 managed=$(docker ps -aq --filter label=hangar.managed=true)
 [ -n "$managed" ] && docker rm -f $managed >/dev/null
+# Each account's builder, with its cache.
+builders=$(docker ps -aq --filter name=buildx_buildkit_hangar-builder-)
+[ -n "$builders" ] && docker rm -fv $builders >/dev/null
+docker volume ls -q --filter name=buildx_buildkit_hangar-builder- | xargs -r docker volume rm >/dev/null
 [ -f "$HANGAR_DIR/docker-compose.yml" ] && compose down --remove-orphans
 ok "Stopped"
 
@@ -40,6 +44,8 @@ elif confirm "Delete $HANGAR_DIR, including the secrets file and database backup
   ok "Deleted $HANGAR_DIR"
 fi
 
+# Each account's apps have a network of their own.
+docker network ls -q --filter label=hangar.managed=true | xargs -r docker network rm >/dev/null 2>&1 || true
 docker network rm hangar hangar-apps >/dev/null 2>&1 || true
 rm -f /usr/local/bin/hangar-update /usr/local/bin/hangar-uninstall /usr/local/bin/hangar-admin
 printf '\nHangar has been removed.\n'

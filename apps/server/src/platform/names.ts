@@ -4,6 +4,16 @@ export function appContainerName(projectName: string, deploymentNumber: number):
   return `hangar-app-${projectName}-${deploymentNumber}`
 }
 
+/** The Docker network holding every app of one account. */
+export function ownerNetworkName(ownerId: string): string {
+  return `hangar-apps-${ownerId}`
+}
+
+/** The BuildKit builder of one account. */
+export function ownerBuilderName(ownerId: string): string {
+  return `hangar-builder-${ownerId}`
+}
+
 /** The image repository holding every build of a project, e.g. `hangar/blog`. */
 export function appImageRepository(projectName: string): string {
   return `hangar/${projectName}`

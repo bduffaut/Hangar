@@ -13,6 +13,7 @@ export const useSessionStore = defineStore('session', () => {
 
   const signedIn = computed(() => session.value !== null)
   const username = computed(() => session.value?.user.username ?? null)
+  const isAdmin = computed(() => session.value?.user.role === 'admin')
 
   function apply(next: Session | null) {
     session.value = next
@@ -41,7 +42,10 @@ export const useSessionStore = defineStore('session', () => {
     unreachable,
     signedIn,
     username,
+    isAdmin,
     load,
+    /** Signs in with a session the server just issued (a redeemed link, a changed password). */
+    apply,
     async completeSetup(body: { setupCode: string; username: string; password: string }) {
       apply(await api('setupComplete', { body }))
       needsSetup.value = false

@@ -5,13 +5,13 @@ import { type Http, route } from '../../http/server.ts'
 import { GithubError } from '../../platform/github.ts'
 import { getGithubToken } from '../settings/secrets.ts'
 
-async function requireToken(ctx: Ctx): Promise<string> {
-  const token = await getGithubToken(ctx)
+async function requireToken(ctx: Ctx, userId: string): Promise<string> {
+  const token = await getGithubToken(ctx, userId)
   if (!token) {
     throw new UserError(
       409,
       'github_not_connected',
-      'Connect a GitHub token in Settings to list repositories.',
+      'Connect your GitHub token under Account to list repositories.',
     )
   }
   return token
@@ -23,7 +23,7 @@ function githubFailure(error: unknown): never {
       400,
       'github_rejected',
       'GitHub refused the request with the saved token.',
-      'The token may have expired. Connect a new one in Settings.',
+      'The token may have expired. Connect a new one under Account.',
     )
   }
   if (error instanceof GithubError && error.status === 404) {
@@ -43,13 +43,13 @@ function githubFailure(error: unknown): never {
 export function githubRoutes(http: Http) {
   const { ctx } = http
 
-  route(http, contract.githubRepos, async () => {
-    const token = await requireToken(ctx)
+  route(http, contract.githubRepos, async ({ auth }) => {
+    const token = await requireToken(ctx, auth.user.id)
     return ctx.github.listRepos(token).catch(githubFailure)
   })
 
-  route(http, contract.githubBranches, async ({ query }) => {
-    const token = await requireToken(ctx)
+  route(http, contract.githubBranches, async ({ auth, query }) => {
+    const token = await requireToken(ctx, auth.user.id)
     return ctx.github.listBranches(token, query.repo).catch(githubFailure)
   })
 }

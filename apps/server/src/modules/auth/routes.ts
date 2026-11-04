@@ -7,13 +7,16 @@ import {
   sessionView,
   setSessionCookie,
 } from '../../http/server.ts'
+import { linkInfo, redeemLink } from '../users/service.ts'
 import {
+  changePassword,
   completeSetup,
   dashboardLayout,
   endSession,
   login,
   needsSetup,
   saveDashboardLayout,
+  signOutEverywhere,
 } from './service.ts'
 
 // Per client address, per minute. Failed logins are also limited per username (see service.ts).
@@ -46,9 +49,41 @@ export function authRoutes(http: Http) {
     { rateLimit: AUTH_RATE_LIMIT },
   )
 
-  route(http, contract.logout, async ({ auth, reply }) => {
+  route(http, contract.logout, async ({ auth, request, reply }) => {
     await endSession(ctx, auth.sessionId)
-    clearSessionCookie(reply)
+    clearSessionCookie(request, reply)
+    return OK
+  })
+
+  route(http, contract.checkLink, ({ body }) => linkInfo(ctx, body.token), {
+    rateLimit: AUTH_RATE_LIMIT,
+  })
+
+  route(
+    http,
+    contract.redeemLink,
+    async ({ body, request, reply }) => {
+      const result = await redeemLink(ctx, body)
+      setSessionCookie(request, reply, result.token, result.expiresAt)
+      return sessionView(ctx, result)
+    },
+    { rateLimit: AUTH_RATE_LIMIT },
+  )
+
+  route(
+    http,
+    contract.changePassword,
+    async ({ auth, body, request, reply }) => {
+      const result = await changePassword(ctx, auth.user.id, body)
+      setSessionCookie(request, reply, result.token, result.expiresAt)
+      return sessionView(ctx, result)
+    },
+    { rateLimit: AUTH_RATE_LIMIT },
+  )
+
+  route(http, contract.signOutEverywhere, async ({ auth, request, reply }) => {
+    await signOutEverywhere(ctx, auth.user.id)
+    clearSessionCookie(request, reply)
     return OK
   })
 

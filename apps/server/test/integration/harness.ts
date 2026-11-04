@@ -8,13 +8,15 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { appHostname, type DeploymentStatus, isTerminal } from '@hangar/shared'
 import { parse } from 'yaml'
+import { eq } from 'drizzle-orm'
 import { loadConfig } from '../../src/config.ts'
 import { createContext } from '../../src/context.ts'
+import { users } from '../../src/db/schema.ts'
 import { createLogger } from '../../src/logger.ts'
 import { type Deployment, getDeployment } from '../../src/modules/deployments/repo.ts'
 import { deleteProject, insertProject, type Project } from '../../src/modules/projects/repo.ts'
 import { getSettings } from '../../src/modules/settings/repo.ts'
-import { appImageRepository } from '../../src/platform/names.ts'
+import { appImageRepository, ownerBuilderName } from '../../src/platform/names.ts'
 
 export const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..')
 /** Where hangar-core sees the repository (docker/compose.dev.yml bind mount). */
@@ -37,6 +39,18 @@ export function createHarness() {
   const { ctx, close } = createContext(config, createLogger({ ...config, logLevel: 'warn' }))
   const runId = Date.now().toString(36).slice(-5)
   const projects: Project[] = []
+  let ownerId: string | null = null
+
+  /** An account for this run's projects, removed again by `close`. */
+  async function testOwner(): Promise<string> {
+    if (ownerId) return ownerId
+    const [owner] = await ctx.db
+      .insert(users)
+      .values({ username: `it-owner-${runId}`, passwordHash: 'x', role: 'admin' })
+      .returning()
+    ownerId = owner!.id
+    return ownerId
+  }
 
   return {
     ctx,
@@ -50,6 +64,7 @@ export function createHarness() {
 
     async createProject(name: string, values: Partial<Project> & { repoUrl: string }) {
       const project = await insertProject(ctx.db, {
+        ownerId: await testOwner(),
         name: `it-${runId}-${name}`,
         branch: 'main',
         triggerMode: 'manual',
@@ -120,6 +135,14 @@ export function createHarness() {
           await ctx.docker.removeImage(tag).catch(() => {})
         }
         await deleteProject(ctx.db, project.id)
+      }
+      if (ownerId) {
+        await ctx.db.delete(users).where(eq(users.id, ownerId))
+        // Builders are recorded inside hangar-core, so only it can remove them.
+        const builder = ownerBuilderName(ownerId)
+        execFileSync('docker', ['exec', 'hangar-core', 'docker', 'buildx', 'rm', '-f', builder], {
+          stdio: 'ignore',
+        })
       }
       await ctx.queue.send('reconcile', {})
       await close()

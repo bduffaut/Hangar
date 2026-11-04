@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import fastifyStatic from '@fastify/static'
 import type { FastifyInstance } from 'fastify'
+import { ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 import type { Http } from './server.ts'
 
 /**
@@ -24,7 +25,11 @@ const CONTENT_SECURITY_POLICY = [
 
 /** Headers on every response from core. */
 export function addSecurityHeaders(app: FastifyInstance) {
-  app.addHook('onSend', async (_request, reply) => {
+  app.addHook('onSend', async (request, reply) => {
+    // Only public traffic is HTTPS. No includeSubDomains: apps under the domain are their own.
+    if (request.headers[ENTRYPOINT_HEADER.toLowerCase()] === 'public') {
+      reply.header('Strict-Transport-Security', 'max-age=31536000')
+    }
     reply.header('X-Content-Type-Options', 'nosniff')
     reply.header('Referrer-Policy', 'same-origin')
     reply.header('X-Frame-Options', 'DENY')

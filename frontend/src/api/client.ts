@@ -85,7 +85,7 @@ export async function api<N extends EndpointName>(
   if (!response.ok) {
     const error = (payload as { error?: { code: string; message: string; hint?: string } } | null)
       ?.error
-    if (response.status === 401 && endpoint.access === 'session') {
+    if (response.status === 401 && endpoint.access !== 'public') {
       for (const listener of unauthorizedListeners) listener()
     }
     throw new ApiError(

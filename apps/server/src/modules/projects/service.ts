@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import {
   appHostname,
+  checkMemberHostname,
   checkProjectName,
   checkPublicHostname,
   CONTAINER_STOP_GRACE_SECONDS,
@@ -8,16 +9,20 @@ import {
   githubRepoSlug,
   hooksHostname,
   isValidBranchName,
+  isPublicRepoHost,
   isValidRepoUrl,
+  MAX_PROJECTS_PER_MEMBER,
   normalizeRootDir,
   type PublicHostnameProblem,
   type ProjectView,
   type TriggerMode,
+  type UserRole,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository } from '../../platform/names.ts'
+import { addressViews, listAddressChecks, pruneAddressChecks } from '../addresses/service.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
 import {
   listDeploymentsById,
@@ -33,6 +38,7 @@ import {
   getProject,
   insertProject,
   listProjects,
+  listProjectsOf,
   type Project,
   updateProject,
 } from './repo.ts'
@@ -112,49 +118,76 @@ const HOSTNAME_PROBLEMS: Record<PublicHostnameProblem, (h: string, domains: stri
   too_deep: (h) =>
     `${h} is more than one level under your domain. Cloudflare's free certificate covers one level, like blog.example.com.`,
   reserved: (h) => `${h} is reserved for Hangar itself. Pick another name.`,
+  admin_only: (h) => `Only an admin can use ${h}. Pick another name under the domain.`,
 }
 
-/** Each address must sit on one of the owner's domains and belong to one project only. */
-async function checkHostnames(ctx: Ctx, projectId: string | null, hostnames: string[]) {
+/** The account a project is created for. */
+export interface ProjectOwner {
+  id: string
+  role: UserRole
+}
+
+/** Each address must sit on one of the server's domains and belong to one project only. */
+async function checkHostnames(
+  ctx: Ctx,
+  role: UserRole,
+  projectId: string | null,
+  hostnames: string[],
+) {
   if (hostnames.length === 0) return
   const { publicDomains } = await getSettings(ctx.db)
   for (const hostname of hostnames) {
-    const problem = checkPublicHostname(hostname, publicDomains)
+    const problem =
+      checkPublicHostname(hostname, publicDomains) ??
+      (role === 'admin' ? null : checkMemberHostname(hostname, publicDomains))
     if (problem) throw new ProjectError(HOSTNAME_PROBLEMS[problem](hostname, publicDomains))
   }
   const owner = (await listProjects(ctx.db)).find(
     (p) => p.id !== projectId && p.hostnames.some((h) => hostnames.includes(h)),
   )
   if (owner) {
+    // Says nothing about the other project: it may belong to someone else.
     const taken = owner.hostnames.find((h) => hostnames.includes(h))
-    throw new UserError(409, 'address_taken', `${taken} is already used by ${owner.name}.`)
+    throw new UserError(409, 'address_taken', `${taken} is already in use by another project.`)
   }
 }
 
 /** In development, tests and the CLI deploy from local file:// repositories. */
-function isAllowedRepoUrl(ctx: Ctx, repoUrl: string): boolean {
-  return isValidRepoUrl(repoUrl) || (!ctx.config.isProduction && repoUrl.startsWith('file:///'))
+function isAllowedRepoUrl(ctx: Ctx, repoUrl: string, role: UserRole): boolean {
+  if (!ctx.config.isProduction && repoUrl.startsWith('file:///')) return true
+  return isValidRepoUrl(repoUrl) && (role === 'admin' || isPublicRepoHost(repoUrl))
 }
 
 export const findProject = (ctx: Ctx, id: string) => getProject(ctx.db, id)
 
-export async function getProjectOrThrow(ctx: Ctx, id: string): Promise<Project> {
+/**
+ * The project, if `userId` owns it. Everyone else gets the same answer as for a project that does
+ * not exist, so ids cannot be probed. Every request about a project goes through here.
+ */
+export async function ownedProject(ctx: Ctx, userId: string, id: string): Promise<Project> {
   const project = await getProject(ctx.db, id)
-  if (!project) throw notFound('Project')
+  if (!project || project.ownerId !== userId) throw notFound('Project')
   return project
 }
 
 export async function createProject(
   ctx: Ctx,
+  owner: ProjectOwner,
   input: ProjectSettings & { name: string; repoUrl: string },
 ): Promise<{ project: Project; headSha: string }> {
   const problem = checkProjectName(input.name)
   if (problem) throw new ProjectError(NAME_PROBLEMS[problem])
   const repoUrl = input.repoUrl.trim()
-  if (!isAllowedRepoUrl(ctx, repoUrl)) {
+  if (
+    owner.role !== 'admin' &&
+    (await listProjectsOf(ctx.db, owner.id)).length >= MAX_PROJECTS_PER_MEMBER
+  ) {
+    throw new ProjectError(`An account can have at most ${MAX_PROJECTS_PER_MEMBER} projects.`)
+  }
+  if (!isAllowedRepoUrl(ctx, repoUrl, owner.role)) {
     throw new ProjectError(
       "Enter the repository's HTTPS address, like https://github.com/you/app.",
-      'Hangar clones over HTTPS. For a private repository, connect a GitHub token in Settings.',
+      'Hangar clones over HTTPS. For a private repository, connect your GitHub token under Account.',
     )
   }
   const settings = cleanSettings(input)
@@ -162,14 +195,14 @@ export async function createProject(
   const domain = defaultDomain(current)
   // By default an app goes public as <name>.<default domain>, as soon as there is a domain.
   settings.hostnames ??= domain ? [appHostname(input.name, domain)] : []
-  await checkHostnames(ctx, null, settings.hostnames)
-  const token = await getGithubToken(ctx)
+  await checkHostnames(ctx, owner.role, null, settings.hostnames)
+  const token = await getGithubToken(ctx, owner.id)
   const branch =
     settings.branch ??
     (await ctx.git.defaultBranch(repoUrl, token).catch(() => {
       throw new ProjectError(
         'Hangar could not reach that repository.',
-        'Check the address. If the repository is private, connect a GitHub token in Settings first.',
+        'Check the address. If the repository is private, connect your GitHub token under Account first.',
       )
     }))
   if (!branch) throw new ProjectError('That repository has no default branch. Enter a branch name.')
@@ -183,6 +216,7 @@ export async function createProject(
   try {
     project = await insertProject(ctx.db, {
       ...settings,
+      ownerId: owner.id,
       name: input.name,
       repoUrl,
       branch,
@@ -205,14 +239,19 @@ export async function createProject(
 /** Changes take effect on the next deploy. */
 export async function updateProjectSettings(
   ctx: Ctx,
+  role: UserRole,
   project: Project,
   settings: ProjectSettings,
 ): Promise<Project> {
   const clean = cleanSettings(settings)
-  if (clean.hostnames) await checkHostnames(ctx, project.id, clean.hostnames)
+  if (clean.hostnames) await checkHostnames(ctx, role, project.id, clean.hostnames)
   await updateProject(ctx.db, project.id, clean)
   // Addresses are routes, so they apply right away rather than on the next deploy.
-  if (clean.hostnames) await syncRouting(ctx)
+  if (clean.hostnames) {
+    await syncRouting(ctx)
+    await pruneAddressChecks(ctx, project.id, clean.hostnames)
+    await ctx.queue.send('addresses', { projectId: project.id })
+  }
   return (await getProject(ctx.db, project.id))!
 }
 
@@ -244,6 +283,7 @@ export async function setDesiredState(ctx: Ctx, project: Project, state: 'runnin
   }
   await updateProject(ctx.db, project.id, { desiredState: state })
   await reconcileOne(ctx, project.id)
+  await ctx.queue.send('addresses', { projectId: project.id })
 }
 
 export async function restartProject(ctx: Ctx, project: Project): Promise<void> {
@@ -285,7 +325,7 @@ export async function webhookInfo(ctx: Ctx, project: Project) {
 async function tryCreateGithubWebhook(ctx: Ctx, project: Project, secret: string) {
   const domain = defaultDomain(await getSettings(ctx.db))
   const slug = githubRepoSlug(project.repoUrl)
-  const token = await getGithubToken(ctx)
+  const token = await getGithubToken(ctx, project.ownerId)
   const url = webhookUrl(domain, project.id)
   if (!slug || !token || !url) return
   await ctx.github.createPushWebhook(token, slug, url, secret).catch((error: unknown) => {
@@ -305,10 +345,11 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
   const settings = await getSettings(ctx.db)
   const ids = projects.map((p) => p.id)
   const currentIds = projects.flatMap((p) => (p.currentDeploymentId ? [p.currentDeploymentId] : []))
-  const [latest, current, recent] = await Promise.all([
+  const [latest, current, recent, checks] = await Promise.all([
     listLatestDeployments(ctx.db, ids),
     listDeploymentsById(ctx.db, currentIds),
     listRecentStatuses(ctx.db, ids, RUNWAY_LIGHTS),
+    listAddressChecks(ctx, ids),
   ])
   return projects.map((p) => {
     const latestRow = latest.find((d) => d.projectId === p.id)
@@ -326,6 +367,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       url: settings.lanDomain ? `http://${appHostname(p.name, settings.lanDomain)}` : null,
       hostnames: p.hostnames,
       publicUrls: p.hostnames.map((h) => `https://${h}`),
+      addresses: addressViews(p.hostnames, checks),
       current: currentRow ? deploymentView(currentRow, p.currentDeploymentId) : null,
       latest: latestRow ? deploymentView(latestRow, p.currentDeploymentId) : null,
       recent: recent
@@ -340,8 +382,8 @@ export async function projectView(ctx: Ctx, project: Project): Promise<ProjectVi
   return (await projectViews(ctx, [project]))[0]!
 }
 
-export async function allProjectViews(ctx: Ctx): Promise<ProjectView[]> {
-  return projectViews(ctx, await listProjects(ctx.db))
+export async function projectViewsOf(ctx: Ctx, ownerId: string): Promise<ProjectView[]> {
+  return projectViews(ctx, await listProjectsOf(ctx.db, ownerId))
 }
 
 const RUNTIME_LOG_TAIL = 500

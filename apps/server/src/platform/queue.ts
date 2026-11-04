@@ -9,6 +9,8 @@ export interface JobMap {
   gc: Record<string, never>
   reconcile: Record<string, never>
   poll: Record<string, never>
+  /** Checks one project's public addresses, or every project's. */
+  addresses: { projectId?: string }
 }
 
 export type JobName = keyof JobMap
@@ -20,6 +22,7 @@ const QUEUE_OPTIONS: Record<JobName, { expireInSeconds: number }> = {
   gc: { expireInSeconds: 600 },
   reconcile: { expireInSeconds: 300 },
   poll: { expireInSeconds: 300 },
+  addresses: { expireInSeconds: 300 },
 }
 
 export function createQueue(options: { connectionString: string; log: Logger }) {

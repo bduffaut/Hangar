@@ -2,7 +2,15 @@
 // listed here (a secret, an internal column) can never leak.
 import { z } from 'zod'
 import { PROJECT_NAME_MAX_LENGTH } from './hostnames.ts'
-import { DEPLOYMENT_TRIGGERS, DESIRED_STATES, LOG_STREAMS, TRIGGER_MODES } from './enums.ts'
+import {
+  ADDRESS_STATUSES,
+  DEPLOYMENT_TRIGGERS,
+  DESIRED_STATES,
+  LINK_KINDS,
+  LOG_STREAMS,
+  TRIGGER_MODES,
+  USER_ROLES,
+} from './enums.ts'
 import { FAILURE_CODES } from './failures.ts'
 import { DEPLOYMENT_STATUSES } from './statuses.ts'
 import { ENV_KEY_PATTERN, MAX_PROJECT_HOSTNAMES, MAX_PUBLIC_DOMAINS } from './constants.ts'
@@ -63,11 +71,62 @@ export const login = z.object({
   password: z.string().max(PASSWORD_MAX_LENGTH, { error: WRONG_LOGIN }),
 })
 export const session = z.object({
-  user: z.object({ id, username: z.string() }),
+  user: z.object({ id, username: z.string(), role: z.enum(USER_ROLES) }),
   /** Send as X-CSRF-Token on every non-GET request. */
   csrfToken: z.string(),
 })
 export type Session = z.infer<typeof session>
+
+export const changePassword = z.object({
+  currentPassword: z.string().max(PASSWORD_MAX_LENGTH, { error: WRONG_LOGIN }),
+  newPassword: password,
+})
+
+// One-time links: an invite creates an account, a reset sets a new password. There is no sign-up.
+
+const linkTokenValue = z.string().trim().min(1).max(100)
+export const linkToken = z.object({ token: linkTokenValue })
+export const linkInfo = z.object({
+  valid: z.boolean(),
+  kind: z.enum(LINK_KINDS).nullable(),
+  /** The account a reset link is for. */
+  username: z.string().nullable(),
+})
+export const redeemLink = z.object({
+  token: linkTokenValue,
+  /** Required on an invite; a reset link already belongs to an account. */
+  username: username.optional(),
+  password,
+})
+export const createdLink = z.object({
+  /** Shown once. Only its hash is stored, so it can never be read back. */
+  token: z.string(),
+  expiresAt: timestamp,
+})
+export type CreatedLink = z.infer<typeof createdLink>
+
+export const userView = z.object({
+  id,
+  username: z.string(),
+  role: z.enum(USER_ROLES),
+  projectCount: z.number().int(),
+  createdAt: timestamp,
+})
+export type UserView = z.infer<typeof userView>
+export const userPatch = z.object({ role: z.enum(USER_ROLES) })
+export const inviteInput = z.object({
+  role: z.enum(USER_ROLES).default('member'),
+  /** A note for the admin, like who the link is for. */
+  label: z.string().trim().max(100, { error: 'Keep the note under 100 characters.' }).optional(),
+})
+export const inviteView = z.object({
+  id,
+  role: z.enum(USER_ROLES),
+  label: z.string().nullable(),
+  expiresAt: timestamp,
+  createdAt: timestamp,
+})
+export type InviteView = z.infer<typeof inviteView>
 
 // Dashboard layout
 
@@ -100,10 +159,11 @@ export type DashboardLayoutView = z.infer<typeof dashboardLayoutView>
 export const settingsView = z.object({
   lanIp: z.string().nullable(),
   lanDomain: z.string().nullable(),
-  /** The owner's domains for public access; the first is the default. */
+  /** The server's domains for public access; the first is the default. */
   publicDomains: z.array(z.string()),
   defaultDomain: z.string().nullable(),
   exposeTowerPublicly: z.boolean(),
+  /** Whether the signed-in user has connected their own GitHub token. */
   githubConnected: z.boolean(),
   tunnelConfigured: z.boolean(),
   towerUrl: z.string().nullable(),
@@ -221,6 +281,19 @@ export const deploymentView = z.object({
 })
 export type DeploymentView = z.infer<typeof deploymentView>
 
+/** The newest real result for one public address. `checking` until the first one is in. */
+export const addressView = z.object({
+  hostname: z.string(),
+  url: z.string(),
+  status: z.enum([...ADDRESS_STATUSES, 'checking']),
+  /** What was found, and what to do about it, in plain words. */
+  message: z.string().nullable(),
+  checkedAt: timestamp.nullable(),
+  /** The last time the address answered. */
+  lastLiveAt: timestamp.nullable(),
+})
+export type AddressView = z.infer<typeof addressView>
+
 export const projectView = z.object({
   id,
   name: z.string(),
@@ -235,6 +308,7 @@ export const projectView = z.object({
   /** Public addresses (hostnames) and the same as https:// URLs. */
   hostnames: z.array(z.string()),
   publicUrls: z.array(z.string()),
+  addresses: z.array(addressView),
   current: deploymentView.nullable(),
   latest: deploymentView.nullable(),
   /** The most recent deployments, oldest first: the runway lights on a project card. */
@@ -304,21 +378,26 @@ export const statusEvent = z.object({
   status: z.enum(DEPLOYMENT_STATUSES),
   deployment: deploymentView,
 })
+export const addressEvent = z.object({ projectId: id, addresses: z.array(addressView) })
+export type AddressEvent = z.infer<typeof addressEvent>
 export const metricsSample = z.object({
   ts: timestamp,
-  host: z.object({
-    cpuPercent: z.number(),
-    memoryUsedBytes: z.number(),
-    memoryTotalBytes: z.number(),
-    diskUsedBytes: z.number(),
-    diskTotalBytes: z.number(),
-    loadAverage: z.number(),
-    uptimeSeconds: z.number(),
-    /** One reading per kind of sensor (CPU, SSD, …); empty when the machine exposes none. */
-    temperatures: z.array(z.object({ name: z.string(), celsius: z.number() })),
-    /** Null on machines without a battery. */
-    battery: z.object({ percent: z.number(), status: z.string() }).nullable(),
-  }),
+  /** Readings of the whole server: admins only. */
+  host: z
+    .object({
+      cpuPercent: z.number(),
+      memoryUsedBytes: z.number(),
+      memoryTotalBytes: z.number(),
+      diskUsedBytes: z.number(),
+      diskTotalBytes: z.number(),
+      loadAverage: z.number(),
+      uptimeSeconds: z.number(),
+      /** One reading per kind of sensor (CPU, SSD, …); empty when the machine exposes none. */
+      temperatures: z.array(z.object({ name: z.string(), celsius: z.number() })),
+      /** Null on machines without a battery. */
+      battery: z.object({ percent: z.number(), status: z.string() }).nullable(),
+    })
+    .nullable(),
   containers: z.array(
     z.object({ projectId: id, cpuPercent: z.number(), memoryUsedBytes: z.number() }),
   ),

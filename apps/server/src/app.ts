@@ -9,6 +9,7 @@ import { metricsRoutes } from './modules/metrics/routes.ts'
 import { projectRoutes } from './modules/projects/routes.ts'
 import { settingsRoutes } from './modules/settings/routes.ts'
 import { systemRoutes } from './modules/system/routes.ts'
+import { userRoutes } from './modules/users/routes.ts'
 import { webhookRoutes } from './modules/webhooks/routes.ts'
 
 export function buildApp(ctx: Ctx) {
@@ -19,6 +20,7 @@ export function buildApp(ctx: Ctx) {
     const scoped = { ...http, app: scope }
     systemRoutes(scoped)
     authRoutes(scoped)
+    userRoutes(scoped)
     settingsRoutes(scoped)
     githubRoutes(scoped)
     projectRoutes(scoped)

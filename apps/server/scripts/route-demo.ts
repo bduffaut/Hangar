@@ -23,7 +23,11 @@ const settings = await getSettings(db)
 await pool.end()
 if (!settings.lanIp || !settings.lanDomain) throw new Error('LAN address is not configured')
 
-const proxy = createProxy({ dynamicDir: config.traefikDynamicDir, apiUrl: config.traefikApiUrl })
+const proxy = createProxy({
+  dynamicDir: config.traefikDynamicDir,
+  apiUrl: config.traefikApiUrl,
+  apiKey: config.proxyApiKey,
+})
 const target = { host: container, port: Number(portArg) }
 await proxy.apply(
   renderRouting({
@@ -32,6 +36,7 @@ await proxy.apply(
     defaultDomain: null,
     exposeTowerPublicly: false,
     coreUrl: config.coreUrl,
+    proxyApiKey: config.proxyApiKey,
     apps: [{ name, target }],
   }),
 )

@@ -15,14 +15,12 @@ import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { formatBytes } from '../lib/format.ts'
-import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
 import {
   BaseButton,
   BaseField,
   BaseInput,
   BaseMessage,
   BasePassword,
-  BaseSegmented,
   BaseSkeleton,
   BaseSwitch,
   useNotify,
@@ -30,15 +28,12 @@ import {
 
 useDocumentTitle(navCopy.settings)
 const notify = useNotify()
-const theme = useTheme()
 
 const settings = ref<SettingsView | null>(null)
 const info = ref<SystemInfo | null>(null)
 const lanIp = ref('')
 const newDomain = ref('')
 const exposeTower = ref(false)
-const githubToken = ref('')
-const githubLogin = ref<string | null>(null)
 const tunnelToken = ref('')
 const busy = ref<string | null>(null)
 const errors = ref<Record<string, string | null>>({})
@@ -136,24 +131,6 @@ const saveTunnel = (token: string | null) =>
     apply(await api('setTunnelToken', { body: { token } }))
     tunnelToken.value = ''
   })
-
-const saveGithub = (token: string | null) =>
-  act('github', async () => {
-    const account = await api('setGithubToken', { body: { token } })
-    githubLogin.value = account.login
-    githubToken.value = ''
-    apply(await api('getSettings'))
-  })
-
-const themeChoice = computed<ThemePreference>({
-  get: () => theme.preference.value,
-  set: (value) => theme.setPreference(value),
-})
-const themeOptions: { label: string; value: ThemePreference }[] = [
-  { label: 'Dark', value: 'dark' },
-  { label: 'Light', value: 'light' },
-  { label: 'Match system', value: 'system' },
-]
 </script>
 
 <template>
@@ -200,42 +177,6 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
           />
         </div>
       </form>
-    </HgPanel>
-
-    <HgPanel
-      title="GitHub"
-      description="Needed only for private repositories and for picking repositories from a list."
-    >
-      <div class="hg-form">
-        <p v-if="settings.githubConnected" class="hg-connected">
-          Connected{{ githubLogin ? ` as ${githubLogin}` : '' }}.
-        </p>
-        <BaseField
-          :label="settings.githubConnected ? 'Replace token' : 'Token'"
-          for="set-github"
-          help="A fine-grained token with read access to Contents and Metadata."
-        >
-          <BasePassword id="set-github" v-model="githubToken" autocomplete="off" />
-        </BaseField>
-        <BaseMessage v-if="errors.github" tone="error">{{ errors.github }}</BaseMessage>
-        <div class="hg-actions">
-          <BaseButton
-            variant="primary"
-            icon="github"
-            label="Connect"
-            :disabled="!githubToken.trim() || busy !== null"
-            :loading="busy === 'github'"
-            @click="saveGithub(githubToken.trim())"
-          />
-          <BaseButton
-            v-if="settings.githubConnected"
-            variant="ghost"
-            label="Disconnect"
-            :disabled="busy !== null"
-            @click="saveGithub(null)"
-          />
-        </div>
-      </div>
     </HgPanel>
 
     <HgPanel
@@ -401,10 +342,6 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
       </div>
     </HgPanel>
 
-    <HgPanel title="Appearance">
-      <BaseSegmented v-model="themeChoice" :options="themeOptions" label="Color theme" />
-    </HgPanel>
-
     <HgPanel v-if="info" title="System">
       <dl class="hg-system">
         <div>
@@ -438,10 +375,6 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
   display: flex;
   flex-wrap: wrap;
   gap: var(--hg-space-2);
-}
-.hg-connected {
-  color: var(--hg-status-ready);
-  font-weight: var(--hg-weight-regular);
 }
 .hg-steps {
   margin: 0;

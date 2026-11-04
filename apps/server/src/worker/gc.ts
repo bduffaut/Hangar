@@ -9,8 +9,9 @@ import path from 'node:path'
 import type { Ctx } from '../context.ts'
 import { listDeploymentsByStatus, listImages, pruneLogs } from '../modules/deployments/repo.ts'
 import { deleteExpiredSessions } from '../modules/auth/repo.ts'
+import { deleteExpiredLinks } from '../modules/users/repo.ts'
 import { listProjects } from '../modules/projects/repo.ts'
-import { appImageRepository } from '../platform/names.ts'
+import { appImageRepository, ownerBuilderName } from '../platform/names.ts'
 
 /** BuildKit cache unused for a week goes; the rest is capped at 10 GiB. */
 const BUILD_CACHE_UNUSED_HOURS = 24 * 7
@@ -64,9 +65,13 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
   const prunedLogs = await pruneLogs(ctx.db, LOGS_KEPT_PER_PROJECT)
   const removedDirs = await sweepBuildDirs(ctx)
   const expiredSessions = await deleteExpiredSessions(ctx.db)
-  await ctx.builder
-    .pruneCache({ unusedForHours: BUILD_CACHE_UNUSED_HOURS, maxBytes: BUILD_CACHE_MAX_BYTES })
-    .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not trim the build cache'))
+  await deleteExpiredLinks(ctx.db)
+  const cacheLimits = { unusedForHours: BUILD_CACHE_UNUSED_HOURS, maxBytes: BUILD_CACHE_MAX_BYTES }
+  for (const ownerId of new Set((await listProjects(ctx.db)).map((p) => p.ownerId))) {
+    await ctx.builder
+      .pruneCache(ownerBuilderName(ownerId), cacheLimits)
+      .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not trim a build cache'))
+  }
   ctx.log.info({ removedImages, prunedLogs, removedDirs, expiredSessions }, 'Cleanup finished')
 }
 

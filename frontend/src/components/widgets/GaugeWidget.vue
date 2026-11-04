@@ -12,7 +12,7 @@ export type Reading = 'cpu' | 'memory' | 'disk' | 'temperature' | 'battery' | 'u
 
 const props = defineProps<DashboardWidgetProps & { reading: Reading }>()
 
-type Host = MetricsSample['host']
+type Host = NonNullable<MetricsSample['host']>
 interface Instrument {
   value: (h: Host) => number | null
   unit: string
@@ -98,7 +98,9 @@ const detail = computed(() =>
   host.value && instrument.value ? instrument.value.detail(host.value) : '',
 )
 const series = computed(() =>
-  instrument.value?.trend ? samples.value.map((s) => instrument.value!.value(s.host)) : [],
+  instrument.value?.trend
+    ? samples.value.flatMap((s) => (s.host ? [instrument.value!.value(s.host)] : []))
+    : [],
 )
 
 const range = computed<'normal' | 'caution' | 'warning'>(() => {

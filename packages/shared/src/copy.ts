@@ -4,6 +4,7 @@
 //
 // Voice rules: one pun at most per element, none in errors, warnings, destructive confirmations,
 // or setup instructions. Buttons and form labels stay plain. Sentence case throughout.
+import type { AddressStatus } from './enums.ts'
 import type { FailureCode } from './failures.ts'
 import type { DeploymentStatus } from './statuses.ts'
 
@@ -41,7 +42,7 @@ export interface FailureCopy {
 export const failureCopy: Record<FailureCode, FailureCopy> = {
   clone_failed: {
     explanation: 'Hangar could not download this commit from the repository.',
-    fix: 'Check that the repository still exists. If it is private, connect a GitHub token in Settings.',
+    fix: 'Check that the repository still exists. If it is private, connect a GitHub token in Account.',
   },
   build_failed: {
     explanation: 'The build stopped with an error.',
@@ -105,6 +106,8 @@ export const navCopy = {
   projects: 'Projects',
   projectCount: (n: number) => `${n} ${n === 1 ? 'app' : 'apps'} in the hangar`,
   settings: 'Settings',
+  users: 'People',
+  account: 'Account',
   guide: 'Guide',
   signOut: 'Sign out',
   newProject: 'New project',
@@ -249,6 +252,79 @@ export const confirmCopy = {
     body: 'Visitors will see a "not running" page until you start it again.',
     action: 'Stop app',
   },
+} as const
+
+/** What the last real request to a public address found. Plain words: this is a diagnosis. */
+export const addressCopy: Record<AddressStatus | 'checking', StatusCopy> = {
+  checking: { label: 'Checking', meaning: 'Hangar is checking this address now' },
+  live: { label: 'Live', meaning: 'The app answered over the internet' },
+  app_down: { label: 'App not answering', meaning: 'The address works, but the app did not reply' },
+  not_running: { label: 'Not running', meaning: 'There is no running app behind this address' },
+  elsewhere: { label: 'Points elsewhere', meaning: 'Another server answered at this address' },
+  unreachable: { label: 'Not reachable', meaning: 'This address did not reach Hangar' },
+  no_tunnel: { label: 'No tunnel', meaning: 'Hangar has no tunnel to the internet yet' },
+}
+
+export const accountCopy = {
+  title: 'Account',
+  passwordTitle: 'Password',
+  passwordBody: 'Changing it signs you out everywhere else.',
+  currentPassword: 'Current password',
+  newPassword: 'New password',
+  changePassword: 'Change password',
+  githubDescription:
+    'Your own token, used only for your projects. Needed for private repositories and for picking repositories from a list.',
+  sessionsTitle: 'Sessions',
+  sessionsBody:
+    'Lost a device or signed in somewhere shared? This ends every session, this one too.',
+  signOutEverywhere: 'Sign out everywhere',
+  signOutConfirm: {
+    title: 'Sign out everywhere?',
+    body: 'Every browser signed in to this account, including this one, will need to sign in again.',
+    action: 'Sign out everywhere',
+  },
+} as const
+
+export const usersCopy = {
+  title: 'People',
+  subtitle:
+    'Everyone here signs in with their own account and sees only their own projects. Each account can run code on this server, so invite only people you trust.',
+  accounts: 'Accounts',
+  invites: 'Invites',
+  inviteDescription: 'There is no public sign-up. An invite link works once, for 7 days.',
+  inviteLabel: 'Who is it for? (optional)',
+  invite: 'Create invite link',
+  inviteReady: 'Send this link to them. It is shown only once.',
+  resetReady: (name: string) =>
+    `Send this link to ${name}. It works once, for 7 days, and is shown only once.`,
+  linkHint: 'They need to be able to reach this address.',
+  roles: { admin: 'Admin', member: 'Member' },
+  roleHelp:
+    'Admins also manage accounts and server settings. Nobody sees anyone else’s projects, admins included.',
+  resetPassword: 'Reset link',
+  noInvites: 'No open invites.',
+  projects: (n: number) => `${n} ${n === 1 ? 'project' : 'projects'}`,
+  deleteConfirm: (name: string, projects: number) => ({
+    title: `Delete ${name}?`,
+    body:
+      projects > 0
+        ? `This deletes the account and its ${projects === 1 ? 'project' : `${projects} projects`}, with their apps, images, logs, and environment variables. It cannot be undone.`
+        : 'This deletes the account. It cannot be undone.',
+    action: 'Delete account',
+  }),
+} as const
+
+/** The page behind an invite or password reset link. */
+export const linkCopy = {
+  inviteTitle: 'Create your account',
+  inviteBody: 'Choose a username and a password for this Hangar.',
+  resetTitle: (name: string) => `Set a new password for ${name}`,
+  resetBody: 'This signs the account out everywhere.',
+  invalidTitle: 'This link does not work',
+  invalidBody: 'It has expired or was already used. Ask your admin for a new one.',
+  create: 'Create account',
+  save: 'Set password',
+  toSignIn: 'Go to sign in',
 } as const
 
 export const authCopy = {

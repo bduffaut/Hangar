@@ -17,7 +17,6 @@ const backoff = new Map<string, { failures: number; until: number }>()
  * which allows only 60 unauthenticated requests an hour) and deploys new commits.
  */
 export async function pollProjects(ctx: Ctx): Promise<void> {
-  const token = await getGithubToken(ctx)
   const domain = defaultDomain(await getSettings(ctx.db))
   // A stopped app stays stopped: new commits wait until it is started or deployed by hand.
   // Webhook projects are polled too while there is no public domain for GitHub to reach.
@@ -30,6 +29,7 @@ export async function pollProjects(ctx: Ctx): Promise<void> {
     const state = backoff.get(project.id)
     if (state && Date.now() < state.until) continue
     try {
+      const token = await getGithubToken(ctx, project.ownerId)
       const sha = await ctx.git.headOf(project.repoUrl, project.branch, token)
       backoff.delete(project.id)
       if (!sha || sha === project.lastSeenSha) continue

@@ -3,13 +3,17 @@ import { createHash } from 'node:crypto'
 import type { Ctx } from '../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../db/lock.ts'
 import { updateDeployment } from '../modules/deployments/repo.ts'
-import { listCurrentDeployments, listProjectRoutes } from '../modules/projects/repo.ts'
+import {
+  listCurrentDeployments,
+  listProjectRoutes,
+  listProjects,
+} from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getTunnelToken } from '../modules/settings/secrets.ts'
 import { LABELS } from '../platform/docker.ts'
 import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
-import { startAppContainer } from './app-container.ts'
+import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
 
 // There is one routing file, so every write to it is serialized across processes.
 const ROUTING_LOCK = 'routing'
@@ -76,6 +80,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
       defaultDomain: defaultDomain(settings),
       exposeTowerPublicly: settings.exposeTowerPublicly,
       coreUrl: ctx.config.coreUrl,
+      proxyApiKey: ctx.config.proxyApiKey,
       apps,
     }),
   )
@@ -87,6 +92,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
  * stopped) as desired, recreated from its image if the container is gone. Idempotent.
  */
 export async function reconcile(ctx: Ctx): Promise<void> {
+  await reconnectOwnerNetworks(ctx)
   for (const { project: listed } of await listCurrentDeployments(ctx.db)) {
     try {
       await withAdvisoryLock(ctx.db, projectLockKey(listed.id), () =>
@@ -100,6 +106,19 @@ export async function reconcile(ctx: Ctx): Promise<void> {
   await ensureTunnel(ctx).catch((error: unknown) => {
     ctx.log.error({ err: error }, 'Could not start the Cloudflare tunnel')
   })
+}
+
+/**
+ * Puts Traefik and core back on every account's network. They lose those attachments when they
+ * are recreated, which an update can do to the proxy alone, and apps would stop answering.
+ */
+export async function reconnectOwnerNetworks(ctx: Ctx): Promise<void> {
+  const owners = new Set((await listProjects(ctx.db)).map((p) => p.ownerId))
+  for (const ownerId of owners) {
+    await ensureOwnerNetwork(ctx, ownerId).catch((error: unknown) => {
+      ctx.log.error({ err: error, ownerId }, 'Could not attach to an app network')
+    })
+  }
 }
 
 /** Converges one project (after start, stop, or a settings change) and the routing file. */

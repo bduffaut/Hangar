@@ -17,6 +17,8 @@ export interface BuildRequest {
   secrets: Record<string, string>
   /** Isolates Railpack's cache mounts per project. */
   cacheKey: string
+  /** The account's own builder, from `ensureBuilder`. */
+  builderName: string
   /**
    * Build without BuildKit's cache. Secret mounts do not invalidate cached steps, so a Dockerfile
    * build must skip the cache when the secrets changed. (Railpack builds use `secrets-hash`.)
@@ -33,21 +35,21 @@ export type BuildMethod = 'dockerfile' | 'railpack'
 // `railpack prepare` exits with 75 for transient problems (e.g. a download failed) worth one retry.
 const RAILPACK_RETRYABLE_EXIT = 75
 
-const CONTAINERD_STORE_REQUIRED =
-  "This repository has no Dockerfile, so Hangar builds it with Railpack. Railpack needs Docker's " +
-  'containerd image store, which is turned off on this server. Turn it on by adding ' +
-  '"features": { "containerd-snapshotter": true } to /etc/docker/daemon.json and restarting ' +
-  'Docker, or add a Dockerfile to the repository.'
+// Pinned by digest; upgrade deliberately.
+const BUILDKIT_IMAGE =
+  'moby/buildkit:v0.26.3@sha256:5601811fde88bb9e8a577bfe804af82bccb712e1cd07ff94663bded5e628cf75'
 
 /**
- * Railpack's frontend uses BuildKit merge operations, which Docker's built-in BuildKit only
- * supports with the containerd image store (the default for new installs since Docker 29).
+ * Env vars that change how a program runs rather than what it does. Railpack runs inside core,
+ * next to the Docker socket, so a project must not steer it or the tools it starts. They still
+ * reach the app and its build steps, which run in containers.
  */
-async function usesContainerdStore(): Promise<boolean> {
-  const { stdout } = await runChecked('docker', ['info', '--format', '{{json .DriverStatus}}'], {
-    captureStdout: true,
-  })
-  return stdout.includes('io.containerd.snapshotter')
+const TOOL_CONTROL_ENV =
+  /^(LD_|DYLD_|GIT_|MISE_|DOCKER_|BUILDKIT_|BUILDX_|SSL_|CURL_|HTTPS?_PROXY$)/i
+
+/** The env vars that are safe to hand to the Railpack CLI. */
+export function railpackEnv(secrets: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(secrets).filter(([key]) => !TOOL_CONTROL_ENV.test(key)))
 }
 
 /** A fingerprint of a build's env vars (names and values), never stored alongside them. */
@@ -68,9 +70,12 @@ async function hasDockerfile(contextDir: string): Promise<boolean> {
   return stats?.isFile() ?? false
 }
 
+/**
+ * Each account builds on its own BuildKit container, on its own network, instead of the Docker
+ * daemon's built-in builder. The built-in one shares its cache between all accounts (a build could
+ * reuse, or plant, layers of another account's image) and fetches `ADD http://…` from the host.
+ */
 export function createBuilder(options: { railpackFrontend: string | null }) {
-  let containerdStore: Promise<boolean> | null = null
-
   /** Writes each secret to its own file so values never pass through argv or the CLI's env. */
   async function secretArgs(request: BuildRequest): Promise<string[]> {
     const dir = path.join(request.workDir, 'secrets')
@@ -88,11 +93,12 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
   async function railpackPlan(request: BuildRequest): Promise<string> {
     const planFile = path.join(request.workDir, 'railpack-plan.json')
     const args = ['prepare', request.contextDir, '--plan-out', planFile]
+    const env = railpackEnv(request.secrets)
     // A bare `--env NAME` makes Railpack read the value from its environment and list NAME as a
     // build secret in the plan.
-    for (const key of Object.keys(request.secrets)) args.push('--env', key)
+    for (const key of Object.keys(env)) args.push('--env', key)
     const runOptions = {
-      env: request.secrets,
+      env,
       signal: request.signal,
       onLine: request.onLine,
     }
@@ -117,7 +123,8 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
         ? 'dockerfile'
         : 'railpack'
       request.onMethod?.(method)
-      const args = ['buildx', 'build', '--load', '--progress', 'plain', '--tag', request.tag]
+      const args = ['buildx', 'build', '--builder', request.builderName]
+      args.push('--load', '--provenance=false', '--progress', 'plain', '--tag', request.tag)
       args.push(...(await secretArgs(request)))
       if (request.noCache && method === 'dockerfile') args.push('--no-cache')
 
@@ -125,11 +132,6 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
         if (!options.railpackFrontend) {
           throw new Error('HANGAR_RAILPACK_FRONTEND is not set, so Railpack builds are unavailable')
         }
-        containerdStore ??= usesContainerdStore().catch((error: unknown) => {
-          containerdStore = null
-          throw error
-        })
-        if (!(await containerdStore)) throw new Error(CONTAINERD_STORE_REQUIRED)
         const planFile = await railpackPlan(request)
         args.push(
           '--build-arg',
@@ -148,12 +150,38 @@ export function createBuilder(options: { railpackFrontend: string | null }) {
       if (result.code !== 0) throw new CommandError('docker buildx build', result.code, result.tail)
     },
 
+    /** Creates the builder if needed. Its record lives in core, so an update may have lost it. */
+    async ensureBuilder(name: string, network: string): Promise<void> {
+      const known = await run('docker', ['buildx', 'inspect', name])
+      if (known.code === 0) return
+      await runChecked('docker', [
+        'buildx',
+        'create',
+        '--name',
+        name,
+        '--driver',
+        'docker-container',
+        '--driver-opt',
+        `network=${network}`,
+        '--driver-opt',
+        `image=${BUILDKIT_IMAGE}`,
+      ])
+    },
+
+    /** Removes an account's builder with its cache. A missing builder is fine. */
+    async removeBuilder(name: string): Promise<void> {
+      await run('docker', ['buildx', 'rm', '--force', name])
+    },
+
     /**
-     * Trims BuildKit's cache: entries unused for `unusedFor`, then the oldest until the total fits
-     * in `maxBytes`. Without this, cache from every build (and deleted projects) grows forever.
+     * Trims one builder's cache: entries unused for `unusedFor`, then the oldest until the total
+     * fits in `maxBytes`. Without this, cache from every build grows forever.
      */
-    async pruneCache(options: { unusedForHours: number; maxBytes: number }): Promise<void> {
-      const prune = ['buildx', 'prune', '--force']
+    async pruneCache(
+      name: string,
+      options: { unusedForHours: number; maxBytes: number },
+    ): Promise<void> {
+      const prune = ['buildx', 'prune', '--builder', name, '--force']
       await runChecked('docker', [...prune, '--filter', `until=${options.unusedForHours}h`])
       await runChecked('docker', [...prune, '--max-used-space', String(options.maxBytes)])
     },

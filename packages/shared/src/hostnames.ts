@@ -70,7 +70,21 @@ export function joinPublicHostname({ subdomain, domain }: PublicAddress): string
   return subdomain ? `${subdomain}.${domain}` : domain
 }
 
-export type PublicHostnameProblem = 'invalid' | 'not_your_domain' | 'too_deep' | 'reserved'
+export type PublicHostnameProblem =
+  'invalid' | 'not_your_domain' | 'too_deep' | 'reserved' | 'admin_only'
+
+/**
+ * Admins may use a domain's root and names like www; members get ordinary names under it, so an
+ * invited account cannot take an address the whole domain depends on.
+ */
+export function checkMemberHostname(
+  hostname: string,
+  domains: readonly string[],
+): PublicHostnameProblem | null {
+  const address = splitPublicHostname(hostname, domains)
+  if (!address) return 'not_your_domain'
+  return !address.subdomain || RESERVED_NAMES.has(address.subdomain) ? 'admin_only' : null
+}
 
 /**
  * Whether `hostname` can be a project's public address: the root of one of the owner's domains or

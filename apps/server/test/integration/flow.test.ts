@@ -5,7 +5,7 @@ import { sign } from '@fastify/cookie'
 import type { DeploymentView, ProjectView } from '@hangar/shared'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { sessions, users } from '../../src/db/schema.ts'
+import { projects, sessions, users } from '../../src/db/schema.ts'
 import { csrfTokenFor } from '../../src/modules/auth/service.ts'
 import { getProject } from '../../src/modules/projects/repo.ts'
 import { createFixtureRepo, createHarness, eventually } from './harness.ts'
@@ -130,7 +130,7 @@ beforeAll(async () => {
   // Sign in by creating a session directly: the dev instance's own account is left alone.
   const [user] = await h.ctx.db
     .insert(users)
-    .values({ username: `it-${h.runId}`, passwordHash: 'x' })
+    .values({ username: `it-${h.runId}`, passwordHash: 'x', role: 'admin' })
     .returning()
   userId = user!.id
   const token = randomBytes(32).toString('base64url')
@@ -143,6 +143,7 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  await h.ctx.db.delete(projects).where(eq(projects.ownerId, userId))
   await h.ctx.db.delete(users).where(eq(users.id, userId))
   await h.close()
   repo.remove()

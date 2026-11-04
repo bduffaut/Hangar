@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto'
 import path from 'node:path'
 import { z } from 'zod'
 
@@ -53,6 +54,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     lanIp: e.HANGAR_LAN_IP ?? null,
     instanceKey: Buffer.from(e.HANGAR_INSTANCE_KEY, 'base64'),
     sessionSecret: e.HANGAR_SESSION_SECRET,
+    proxyApiKey: createHmac('sha256', e.HANGAR_SESSION_SECRET).update('proxy-api').digest('hex'),
     traefikDynamicDir: e.HANGAR_TRAEFIK_DYNAMIC_DIR,
     traefikApiUrl: e.HANGAR_TRAEFIK_API_URL,
     coreUrl: e.HANGAR_CORE_URL,

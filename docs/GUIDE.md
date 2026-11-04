@@ -399,6 +399,12 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 | Add an API endpoint                        | Add it to `packages/shared/src/contract.ts` (and its shapes in `schemas.ts`), then register it with `route()` in the feature's `routes.ts`. The dashboard can call it by name right away. |
 | Ship to the laptop                         | `HANGAR_BIND_IP=100.113.190.111 pnpm ship`.                                                                                                                                               |
 
+### Sharing Hangar with other people
+
+There is no public sign-up. Open **People**, create an invite link, and send it to the person; it works once, for 7 days. They choose a username and password. Everyone sees only their own projects, logs, and settings, and connects their own GitHub token under **Account**. Admins also manage accounts and server settings, but they do not see other people's projects either. Forgotten password? An admin creates a reset link on **People**.
+
+Each account can run code on your server, so invite only people you trust. SECURITY.md lists what the separation does and does not cover.
+
 ### Putting apps on your own domain
 
 Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine. Everything below is in Settings, under **Public access**.
@@ -406,6 +412,8 @@ Apps reach the internet through a **Cloudflare Tunnel**: the server makes an out
 1. **Connect a tunnel.** In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a tunnel of type Cloudflared. Copy the token from the install command it shows (you do not install anything; Hangar runs the tunnel) and save it in Hangar.
 2. **Add your domains**, for example `benduffaut.com` and `joshduffaut.com`. Any domain on your Cloudflare account works. For each one, add a public hostname to the tunnel with subdomain `*`, that domain, and service `http://hangar-proxy:8081`. Exact records you already have, like the root domain and `www`, keep working; the `*` only covers names that have no record of their own. Press **Check** to confirm names under the domain reach Hangar.
 3. **Pick a default domain.** New projects are suggested `name.<default domain>`, and GitHub webhooks use `hooks.<default domain>`.
+
+**Is it working?** Each address on a project page shows what Hangar actually found. Every minute, and after anything that could change it, Hangar requests the address over the internet and reports the result: Live, App not answering, Points elsewhere, Not reachable, No tunnel, or Not running, with what to do about it. Results appear on their own; **Check now** runs one immediately.
 
 **Choosing where a project lives.** When you create a project, and later on its Settings tab, **Public addresses** lists where it answers on the internet. Each address is a name plus one of your domains, so a project can be `test.benduffaut.com` and `test.joshduffaut.com` at once, or the domain itself (leave the name empty), or nothing at all (remove every address to keep it on your network). Changes apply right away.
 

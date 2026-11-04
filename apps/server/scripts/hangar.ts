@@ -4,6 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { appHostname, isTerminal } from '@hangar/shared'
 import { loadConfig } from '../src/config.ts'
+import { users } from '../src/db/schema.ts'
 import { createContext } from '../src/context.ts'
 import { createLogger } from '../src/logger.ts'
 import {
@@ -126,21 +127,27 @@ try {
     case 'add': {
       const [name, repoUrl] = args
       if (!name || !repoUrl) throw new Error(USAGE)
-      await createProject(ctx, {
-        name,
-        repoUrl,
-        triggerMode: 'manual',
-        branch: flags.branch,
-        rootDir: flags.root,
-        port: parsePort(flags.port),
-        memoryLimitMb: parseMemory(flags.memory),
-      })
+      const [owner] = (await ctx.db.select().from(users).limit(1)) as { id: string }[]
+      if (!owner) throw new Error('Finish setup first: a project needs an account to belong to.')
+      await createProject(
+        ctx,
+        { id: owner.id, role: 'admin' },
+        {
+          name,
+          repoUrl,
+          triggerMode: 'manual',
+          branch: flags.branch,
+          rootDir: flags.root,
+          port: parsePort(flags.port),
+          memoryLimitMb: parseMemory(flags.memory),
+        },
+      )
       console.log(`Added ${name}. Deploy it with: pnpm hangar deploy ${name}`)
       break
     }
     case 'set': {
       const p = await project(args[0])
-      await updateProjectSettings(ctx, p, {
+      await updateProjectSettings(ctx, 'admin', p, {
         branch: flags.branch,
         rootDir: flags.root,
         port: parsePort(flags.port),

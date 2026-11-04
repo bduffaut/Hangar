@@ -50,7 +50,11 @@ async function signOut() {
         <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
           navCopy.projects
         }}</RouterLink>
-        <RouterLink :to="{ name: 'settings' }">{{ navCopy.settings }}</RouterLink>
+        <RouterLink v-if="session.isAdmin" :to="{ name: 'users' }">{{ navCopy.users }}</RouterLink>
+        <RouterLink v-if="session.isAdmin" :to="{ name: 'settings' }">{{
+          navCopy.settings
+        }}</RouterLink>
+        <RouterLink :to="{ name: 'account' }">{{ navCopy.account }}</RouterLink>
         <RouterLink :to="{ name: 'guide' }" data-tour="guide">{{ navCopy.guide }}</RouterLink>
       </nav>
       <div class="hg-shell-tools">

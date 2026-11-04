@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Tools hangar-core shells out to: git for cloning, the Docker CLI with buildx for builds.
-FROM node:24-trixie-slim AS base
+FROM node:24-trixie-slim@sha256:54f84b4cf8432b21aaffd5d3ce8d41e12cea0d10d33c09d2f3c9879d49d6b446 AS base
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git gnupg \
  && install -m 0755 -d /etc/apt/keyrings \

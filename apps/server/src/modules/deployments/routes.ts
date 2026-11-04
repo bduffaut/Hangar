@@ -1,14 +1,16 @@
 import { contract, isTerminal, type LogLineView, schemas, streams } from '@hangar/shared'
 import { z } from 'zod'
 import { eventStream, type Http, OK, parseInput, route } from '../../http/server.ts'
-import { getProjectOrThrow } from '../projects/service.ts'
+import { addressEvent } from '../addresses/service.ts'
+import { getProject } from '../projects/repo.ts'
+import { ownedProject } from '../projects/service.ts'
 import {
   deploymentViewOf as viewOf,
   findDeployment,
-  getDeploymentOrThrow,
   listActiveDeployments,
   listProjectDeployments,
   logsAfter,
+  ownedDeployment,
   queueRollback,
   requestCancel,
 } from './service.ts'
@@ -22,38 +24,43 @@ const logView = (row: Awaited<ReturnType<typeof logsAfter>>[number]): LogLineVie
 export function deploymentRoutes(http: Http) {
   const { ctx } = http
 
-  route(http, contract.listDeployments, async ({ params, query }) => {
-    const project = await getProjectOrThrow(ctx, params.id)
+  route(http, contract.listDeployments, async ({ auth, params, query }) => {
+    const project = await ownedProject(ctx, auth.user.id, params.id)
     const rows = await listProjectDeployments(ctx, project.id, query.limit)
     return rows.map((d) => deploymentView(d, project.currentDeploymentId))
   })
 
-  route(http, contract.getDeployment, async ({ params }) =>
-    viewOf(ctx, await getDeploymentOrThrow(ctx, params.id)),
+  route(http, contract.getDeployment, async ({ auth, params }) =>
+    viewOf(ctx, await ownedDeployment(ctx, auth.user.id, params.id)),
   )
 
-  route(http, contract.deploymentLogs, async ({ params, query }) => {
-    await getDeploymentOrThrow(ctx, params.id)
+  route(http, contract.deploymentLogs, async ({ auth, params, query }) => {
+    await ownedDeployment(ctx, auth.user.id, params.id)
     return (await logsAfter(ctx, params.id, query.after)).map(logView)
   })
 
-  route(http, contract.cancelDeployment, async ({ params }) => {
+  route(http, contract.cancelDeployment, async ({ auth, params }) => {
+    await ownedDeployment(ctx, auth.user.id, params.id)
     await requestCancel(ctx, params.id)
     return OK
   })
 
-  route(http, contract.rollbackDeployment, async ({ params }) => {
-    const source = await getDeploymentOrThrow(ctx, params.id)
+  route(http, contract.rollbackDeployment, async ({ auth, params }) => {
+    const source = await ownedDeployment(ctx, auth.user.id, params.id)
     return viewOf(ctx, await queueRollback(ctx, source))
   })
 
-  // Every deployment status change, starting with a snapshot of the ones in progress.
+  // The signed-in user's deployment status changes and address results, starting with a snapshot
+  // of the deployments in progress. Events carry only ids; each is checked against the owner
+  // before anything is read out, so this stream never shows another account's work.
   eventStream(
     http,
     streams.events,
     z.object({}),
-    async () => null,
-    async (stream) => {
+    async (_params, request) => request.auth!.user.id,
+    async (stream, userId) => {
+      const isMine = async (projectId: string) =>
+        (await getProject(ctx.db, projectId))?.ownerId === userId
       // Subscribe before taking the snapshot, and hold events until it is sent, so a change in
       // between is neither lost nor delivered ahead of the snapshot.
       let pending: string[] | null = []
@@ -62,7 +69,16 @@ export function deploymentRoutes(http: Http) {
         else sendStatus(event.deploymentId)
       })
       stream.onClose(unsubscribe)
-      const active = await listActiveDeployments(ctx)
+      stream.onClose(
+        await ctx.events.subscribe('address_status', ({ projectId }) => {
+          void isMine(projectId)
+            .then(async (mine) => {
+              if (mine) stream.send('address', await addressEvent(ctx, projectId))
+            })
+            .catch((error: unknown) => ctx.log.warn({ err: error }, 'Could not send address event'))
+        }),
+      )
+      const active = await listActiveDeployments(ctx, userId)
       stream.send('snapshot', {
         deployments: await Promise.all(active.map((d) => viewOf(ctx, d))),
       })
@@ -73,7 +89,7 @@ export function deploymentRoutes(http: Http) {
       function sendStatus(deploymentId: string) {
         void findDeployment(ctx, deploymentId)
           .then(async (deployment) => {
-            if (!deployment) return
+            if (!deployment || !(await isMine(deployment.projectId))) return
             stream.send('status', {
               deploymentId: deployment.id,
               projectId: deployment.projectId,
@@ -93,7 +109,7 @@ export function deploymentRoutes(http: Http) {
     streams.deploymentLogs,
     schemas.idParams,
     async (params, request) => {
-      await getDeploymentOrThrow(ctx, params.id)
+      await ownedDeployment(ctx, request.auth!.user.id, params.id)
       const lastEventId = Number(request.headers['last-event-id'])
       const after = parseInput(schemas.logsQuery, request.query).after
       return { id: params.id, after: Number.isInteger(lastEventId) ? lastEventId : after }

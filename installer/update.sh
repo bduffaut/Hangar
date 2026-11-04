@@ -37,7 +37,9 @@ fi
 # Each release carries its own stack files (compose, proxy config, scripts); use the new ones.
 staging=$(mktemp -d)
 container=$(docker create "$image")
+proxy_config_changed=0
 if docker cp "$container:/app/installer/." "$staging" >/dev/null 2>&1; then
+  cmp -s "$staging/traefik.yml" "$HANGAR_DIR/traefik.yml" || proxy_config_changed=1
   install -m 0644 "$staging/docker-compose.yml" "$HANGAR_DIR/docker-compose.yml"
   install -m 0644 "$staging/traefik.yml" "$HANGAR_DIR/traefik.yml"
   install -m 0644 "$staging/lib.sh" "$HANGAR_DIR/lib.sh"
@@ -54,6 +56,8 @@ for network in hangar hangar-apps; do
 done
 
 compose up -d --remove-orphans
+# Traefik reads this file once, at start, and Compose does not notice a change inside a mount.
+[ "$proxy_config_changed" = 1 ] && compose restart hangar-proxy
 if ! wait_for_core; then
   printf '\n%sError:%s Hangar did not become healthy after the update.\n' "$RED$BOLD" "$RESET" >&2
   printf 'See what went wrong: docker logs hangar-core\n' >&2

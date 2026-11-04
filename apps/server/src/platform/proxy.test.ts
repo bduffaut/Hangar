@@ -10,6 +10,7 @@ const lanOnly: RoutingInput = {
   defaultDomain: null,
   exposeTowerPublicly: false,
   coreUrl: 'http://hangar-core:3000',
+  proxyApiKey: 'test-key',
   apps: [
     { name: 'blog', target: { host: 'hangar-app-blog-3', port: 3000 } },
     { name: 'stopped', target: null },
@@ -58,7 +59,7 @@ describe('renderRouting', () => {
       { name: 'off', hostnames: ['off.example.com'], target: null },
     ]
     const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com', apps }).http
-    expect(routers['app-site-public']).toEqual({
+    expect(routers['public-site']).toEqual({
       entryPoints: ['public'],
       rule: 'Host(`example.com`) || Host(`site.example.com`) || Host(`site.other.dev`)',
       service: 'app-site',
@@ -109,7 +110,7 @@ describe('renderRouting', () => {
 describe('createProxy().apply', () => {
   it('writes the file once and skips identical rewrites', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'hangar-proxy-'))
-    const proxy = createProxy({ dynamicDir: dir, apiUrl: 'http://unused' })
+    const proxy = createProxy({ dynamicDir: dir, apiKey: 'test-key', apiUrl: 'http://unused' })
     const config = renderRouting(lanOnly)
 
     expect(await proxy.apply(config)).toBe(true)

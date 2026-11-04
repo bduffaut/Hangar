@@ -15,6 +15,8 @@ const pending = new Set<string>()
 /** True for a token issued by a check that is still waiting for its answer. */
 export const isPendingCheck = (token: string) => pending.has(token)
 
+export const CHECK_TIMEOUT = CHECK_TIMEOUT_MS
+
 export async function checkAddress(
   ctx: Ctx,
   input: { hostname: string; wildcard?: boolean },

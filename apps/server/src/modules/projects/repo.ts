@@ -33,6 +33,10 @@ export async function listProjects(db: Db): Promise<Project[]> {
   return db.select().from(projects).orderBy(projects.name)
 }
 
+export async function listProjectsOf(db: Db, ownerId: string): Promise<Project[]> {
+  return db.select().from(projects).where(eq(projects.ownerId, ownerId)).orderBy(projects.name)
+}
+
 export async function getProject(db: Db, id: string): Promise<Project | null> {
   const [row] = await db.select().from(projects).where(eq(projects.id, id))
   return row ?? null

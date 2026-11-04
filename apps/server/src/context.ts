@@ -34,7 +34,11 @@ export function createContext(config: Config, log: Logger = createLogger(config)
     config,
     db,
     log,
-    proxy: createProxy({ dynamicDir: config.traefikDynamicDir, apiUrl: config.traefikApiUrl }),
+    proxy: createProxy({
+      dynamicDir: config.traefikDynamicDir,
+      apiUrl: config.traefikApiUrl,
+      apiKey: config.proxyApiKey,
+    }),
     docker: createDocker(),
     git: createGit(),
     builder: createBuilder({ railpackFrontend: config.railpackFrontend }),

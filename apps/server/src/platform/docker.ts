@@ -2,12 +2,16 @@ import { PassThrough, type Readable } from 'node:stream'
 import Dockerode from 'dockerode'
 
 /**
- * Deployed apps (and the tunnel) live on their own network with Traefik and core only, so an app
- * cannot reach the database or anything else on the platform network.
+ * The tunnel's network, shared with Traefik and core. Each account's apps and builds get a network
+ * of their own (see `ensureAppNetwork`), so they cannot connect to the database or directly to
+ * another account's containers. Traefik remains a way to reach any routed app, like any visitor.
  */
 export const APP_NETWORK = 'hangar-apps'
 const APP_PIDS_LIMIT = 4096
 const APP_CPU_SHARES = 512
+// Docker's defaults minus what a web app never needs: raw sockets (spoofing, ARP tricks on the
+// bridge), device nodes, and writing to the audit log. Apps cannot gain privileges with setuid.
+const APP_DROPPED_CAPABILITIES = ['NET_RAW', 'MKNOD', 'AUDIT_WRITE', 'SETFCAP']
 
 // Every container Hangar creates carries these labels; cleanup finds containers by label, never by name.
 export const LABELS = {
@@ -15,6 +19,8 @@ export const LABELS = {
   kind: 'hangar.kind',
   project: 'hangar.project',
   deployment: 'hangar.deployment',
+  /** On a network: the account whose apps run on it. */
+  owner: 'hangar.owner',
   /** On the tunnel container: a hash of the token it runs with, to detect a changed token. */
   tunnelToken: 'hangar.tunnel-token',
 } as const
@@ -28,6 +34,7 @@ export interface AppContainerSpec {
   deploymentId: string
   env: Record<string, string>
   memoryLimitMb: number
+  network: string
 }
 
 export interface ManagedContainer {
@@ -119,7 +126,49 @@ export function createDocker(docker = new Dockerode()) {
       }
     },
 
-    /** Creates and starts an app container on the app network. Replaces a leftover with the same name. */
+    /**
+     * Creates an account's app network if needed and attaches `peers` (Traefik and core) to it.
+     * Safe to repeat: a recreated proxy loses these attachments, and this puts them back.
+     */
+    async ensureAppNetwork(name: string, ownerId: string, peers: string[]): Promise<void> {
+      const network = docker.getNetwork(name)
+      const info = await network.inspect().catch(async (error: unknown) => {
+        if (!isNotFound(error)) throw error
+        await docker.createNetwork({
+          Name: name,
+          Driver: 'bridge',
+          Labels: { [LABELS.managed]: 'true', [LABELS.owner]: ownerId },
+        })
+        return (await network.inspect()) as { Containers?: Record<string, { Name: string }> }
+      })
+      const attached = Object.values(
+        (info as { Containers?: Record<string, { Name: string }> }).Containers ?? {},
+      ).map((container) => container.Name)
+      for (const peer of peers) {
+        if (attached.includes(peer)) continue
+        await network.connect({ Container: peer }).catch((error: unknown) => {
+          // Not a container here (development and tests), or attached a moment ago.
+          const status = (error as { statusCode?: number }).statusCode
+          if (status !== 404 && status !== 403) throw error
+        })
+      }
+    },
+
+    /** Removes an account's network, detaching the peers first. Missing networks are ignored. */
+    async removeAppNetwork(name: string): Promise<void> {
+      const network = docker.getNetwork(name)
+      try {
+        const info = (await network.inspect()) as { Containers?: Record<string, { Name: string }> }
+        for (const container of Object.values(info.Containers ?? {})) {
+          await network.disconnect({ Container: container.Name, Force: true })
+        }
+        await network.remove()
+      } catch (error) {
+        if (!isNotFound(error)) throw error
+      }
+    },
+
+    /** Creates and starts an app container on its network. Replaces a leftover with the same name. */
     async runApp(spec: AppContainerSpec): Promise<string> {
       const leftover = await inspectContainer(spec.name)
       if (leftover) await docker.getContainer(leftover.Id).remove({ force: true, v: true })
@@ -135,8 +184,10 @@ export function createDocker(docker = new Dockerode()) {
           [LABELS.deployment]: spec.deploymentId,
         },
         HostConfig: {
-          NetworkMode: APP_NETWORK,
+          NetworkMode: spec.network,
           RestartPolicy: { Name: 'unless-stopped' },
+          CapDrop: APP_DROPPED_CAPABILITIES,
+          SecurityOpt: ['no-new-privileges'],
           Memory: spec.memoryLimitMb * 1024 * 1024,
           // A runaway app (fork loop, busy loop) must not starve the database or Hangar itself:
           // cap its processes, and give it half the default CPU weight when the CPU is contended.
@@ -224,6 +275,8 @@ export function createDocker(docker = new Dockerode()) {
         HostConfig: {
           NetworkMode: APP_NETWORK,
           RestartPolicy: { Name: 'unless-stopped' },
+          CapDrop: ['ALL'],
+          SecurityOpt: ['no-new-privileges'],
           LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         },
       })

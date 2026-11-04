@@ -7,6 +7,7 @@ export interface EventMap {
   deployment_status: { deploymentId: string; projectId: string; status: string }
   deployment_logs: { deploymentId: string; seq: number }
   deployment_cancel: { deploymentId: string }
+  address_status: { projectId: string }
 }
 
 export type EventName = keyof EventMap
