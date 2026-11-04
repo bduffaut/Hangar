@@ -45,4 +45,6 @@ is not a hosting service for strangers.
   shared, so one account can slow others down.
 - **The Control Tower speaks plain HTTP on your network.** Use it on a network you trust, such as
   Tailscale, or expose it through the tunnel, which adds HTTPS.
-- **No two-factor sign-in yet.** Make the Control Tower public only with strong passwords.
+- **No two-factor sign-in yet.** A public Control Tower (`hangar.<your domain>`) shows its sign-in
+  page to the whole internet, protected by passwords and sign-in limits alone. Use long, unique
+  passwords, or add Cloudflare Access in front of that address.

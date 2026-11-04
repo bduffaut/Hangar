@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { appHostname, hooksHostname, towerHostname } from '@hangar/shared'
+import { appHostname, hooksHostname, publicTowerHostname, towerHostname } from '@hangar/shared'
 
 /** Public path that answers a reachability check; core decides whether the token is real. */
 export const ADDRESS_CHECK_PATH = '/.well-known/hangar-check/'
@@ -19,7 +19,7 @@ export interface AppRoute {
 export interface RoutingInput {
   lanIp: string
   lanDomain: string
-  /** Home of hooks.<domain> and, when exposed, tower.<domain>. */
+  /** Home of hooks.<domain> and, when exposed, hangar.<domain>. */
   defaultDomain: string | null
   exposeTowerPublicly: boolean
   coreUrl: string
@@ -123,7 +123,7 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
     if (input.exposeTowerPublicly) {
       routers['tower-public'] = {
         entryPoints: ['public'],
-        rule: host(towerHostname(defaultDomain)),
+        rule: host(publicTowerHostname(defaultDomain)),
         service: CORE,
         middlewares: [FROM_PUBLIC],
       }

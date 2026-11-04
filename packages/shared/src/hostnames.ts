@@ -1,4 +1,5 @@
 export const TOWER_SUBDOMAIN = 'tower'
+export const PUBLIC_TOWER_SUBDOMAIN = 'hangar'
 export const HOOKS_SUBDOMAIN = 'hooks'
 
 export const RESERVED_NAMES: ReadonlySet<string> = new Set([
@@ -38,6 +39,11 @@ export function sslipDomain(ip: string): string {
 
 export function towerHostname(domain: string): string {
   return `${TOWER_SUBDOMAIN}.${domain}`
+}
+
+/** Where the Control Tower answers on the internet, when an admin makes it public. */
+export function publicTowerHostname(domain: string): string {
+  return `${PUBLIC_TOWER_SUBDOMAIN}.${domain}`
 }
 
 export function hooksHostname(domain: string): string {
@@ -89,7 +95,7 @@ export function checkMemberHostname(
 /**
  * Whether `hostname` can be a project's public address: the root of one of the owner's domains or
  * one name directly under it. Deeper names are refused because Cloudflare's free certificate only
- * covers one level, and tower. and hooks. belong to Hangar.
+ * covers one level, and tower., hangar., and hooks. belong to Hangar.
  */
 export function checkPublicHostname(
   hostname: string,
@@ -102,7 +108,11 @@ export function checkPublicHostname(
   const address = splitPublicHostname(hostname, domains)
   if (!address) return 'not_your_domain'
   if (address.subdomain.includes('.')) return 'too_deep'
-  if (address.subdomain === TOWER_SUBDOMAIN || address.subdomain === HOOKS_SUBDOMAIN) {
+  if (
+    address.subdomain === TOWER_SUBDOMAIN ||
+    address.subdomain === PUBLIC_TOWER_SUBDOMAIN ||
+    address.subdomain === HOOKS_SUBDOMAIN
+  ) {
     return 'reserved'
   }
   return null

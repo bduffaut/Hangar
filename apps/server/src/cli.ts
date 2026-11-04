@@ -4,6 +4,8 @@ import { createInterface } from 'node:readline'
 import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  publicTowerHostname,
+  defaultDomain,
   schemas,
   sslipDomain,
   towerHostname,
@@ -12,6 +14,7 @@ import { ConfigError, loadConfig } from './config.ts'
 import { createContext } from './context.ts'
 import { createLogger } from './logger.ts'
 import { issueSetupCode, resetPassword } from './modules/auth/service.ts'
+import { getSettings } from './modules/settings/repo.ts'
 import { updateSettings } from './modules/settings/service.ts'
 
 const USAGE = `Usage: hangar-admin <command>
@@ -19,7 +22,8 @@ const USAGE = `Usage: hangar-admin <command>
   issue-setup-code           Print a new one-time setup code (only before the first account exists)
   reset-password <username>  Set a new password, read from standard input; signs out all sessions
   set-lan-ip <address>       Change the address devices use to reach Hangar (if the server's IP
-                             changed and the Control Tower no longer opens)`
+                             changed and the Control Tower no longer opens)
+  set-public-tower <on|off>  Make the Control Tower public at hangar.<default domain>, or private`
 
 /** The first line of standard input, so a typed password ends with Enter (no Ctrl+D needed). */
 async function readLine(): Promise<string> {
@@ -71,6 +75,18 @@ async function main() {
         await updateSettings(ctx, { lanIp: parsed.data })
         const tower = towerHostname(sslipDomain(parsed.data))
         console.error(`Hangar now answers at http://${tower} and http://${parsed.data}`)
+        break
+      }
+      case 'set-public-tower': {
+        const [choice] = args
+        if (choice !== 'on' && choice !== 'off') throw new Error(USAGE)
+        await updateSettings(ctx, { exposeTowerPublicly: choice === 'on' })
+        const domain = defaultDomain(await getSettings(ctx.db))
+        console.error(
+          choice === 'on'
+            ? `The Control Tower is public at https://${publicTowerHostname(domain!)}`
+            : 'The Control Tower is private again.',
+        )
         break
       }
       default:

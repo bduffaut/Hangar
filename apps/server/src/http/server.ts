@@ -25,7 +25,7 @@ import { type EventStream, openEventStream } from './sse.ts'
 
 export const SESSION_COOKIE = 'hangar_session'
 // Over HTTPS the browser only accepts a __Host- cookie from this exact host, so an app on a sibling
-// name (blog.example.com) cannot plant a session cookie for tower.example.com.
+// name (blog.example.com) cannot plant a session cookie for hangar.example.com.
 const SECURE_SESSION_COOKIE = `__Host-${SESSION_COOKIE}`
 /** How often a long-lived stream checks that its session is still valid. */
 const STREAM_RECHECK_MS = 60_000

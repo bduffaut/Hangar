@@ -209,7 +209,8 @@ describe('sessions', () => {
       url: '/api/settings',
       body,
       cookie,
-      csrf: 'x' + csrf.slice(1),
+      // Random tokens can start with any character, so "x" alone would sometimes be right.
+      csrf: (csrf.startsWith('x') ? 'y' : 'x') + csrf.slice(1),
     })
     expect(wrong.status).toBe(403)
   })
@@ -467,6 +468,7 @@ describe('projects and env vars', () => {
       'one level',
     )
     expect((await patch({ hostnames: ['tower.example.com'] })).status).toBe(400)
+    expect((await patch({ hostnames: ['hangar.example.com'] })).status).toBe(400)
     const taken = await patch({ hostnames: ['auto.example.com'] })
     expect(taken.status).toBe(409)
     expect(taken.json().error.message).toContain('already in use by another project')
@@ -949,8 +951,8 @@ describe('accounts', () => {
   it('uses a __Host- cookie and HSTS on the public HTTPS address', async () => {
     await setSettings(ctx.db, { publicDomains: ['example.com'], exposeTowerPublicly: true })
     const headers = {
-      host: 'tower.example.com',
-      origin: 'https://tower.example.com',
+      host: 'hangar.example.com',
+      origin: 'https://hangar.example.com',
       'x-hangar-entrypoint': 'public',
       'content-type': 'application/json',
     }

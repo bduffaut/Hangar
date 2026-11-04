@@ -29,7 +29,7 @@ export const SETTING_KEYS = Object.keys(settingsSchema) as SettingKey[]
 
 /**
  * The default public domain: suggested for new projects, and home of the webhook address
- * (hooks.<domain>) and, when exposed, the public Control Tower (tower.<domain>).
+ * (hooks.<domain>) and, when exposed, the public Control Tower (hangar.<domain>).
  */
 export const defaultDomain = (settings: Pick<Settings, 'publicDomains'>): string | null =>
   settings.publicDomains[0] ?? null

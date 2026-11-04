@@ -84,6 +84,7 @@ describe('public addresses', () => {
     expect(checkPublicHostname('example.net', domains)).toBe('not_your_domain')
     expect(checkPublicHostname('a.b.example.com', domains)).toBe('too_deep')
     expect(checkPublicHostname('tower.example.com', domains)).toBe('reserved')
+    expect(checkPublicHostname('hangar.example.com', domains)).toBe('reserved')
     expect(checkPublicHostname('hooks.other.dev', domains)).toBe('reserved')
   })
 })

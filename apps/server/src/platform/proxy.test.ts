@@ -83,7 +83,7 @@ describe('renderRouting', () => {
       defaultDomain: 'example.com',
       exposeTowerPublicly: true,
     }).http
-    expect(routers['tower-public']).toMatchObject({ rule: 'Host(`tower.example.com`)' })
+    expect(routers['tower-public']).toMatchObject({ rule: 'Host(`hangar.example.com`)' })
   })
 
   it('never sends public traffic to core except through hooks, address checks, or an exposed tower', () => {

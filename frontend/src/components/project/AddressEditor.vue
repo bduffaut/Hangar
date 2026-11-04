@@ -57,7 +57,8 @@ function problemOf(row: Row, index: number): string | null {
       ? 'Use a single name, without dots. Cloudflare covers one level under your domain.'
       : 'Use lowercase letters, digits, and dashes, not at the start or end.'
   }
-  if (name === 'tower' || name === 'hooks') return 'This name is reserved for Hangar itself.'
+  if (name === 'tower' || name === 'hangar' || name === 'hooks')
+    return 'This name is reserved for Hangar itself.'
   if (!session.isAdmin && (!name || RESERVED_NAMES.has(name))) {
     return 'Only an admin can use this address. Pick another name.'
   }

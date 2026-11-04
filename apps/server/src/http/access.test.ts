@@ -36,7 +36,7 @@ describe('classifyRequest', () => {
 
   it('keeps the public entrypoint away from the API', () => {
     expect(classify('tower.192-168-1-50.sslip.io', '/api/projects', 'public')).toBe('not-found')
-    expect(classify('tower.example.com', '/api/projects', 'public')).toBe('not-found')
+    expect(classify('hangar.example.com', '/api/projects', 'public')).toBe('not-found')
     expect(classify('hooks.example.com', '/api/projects', 'public')).toBe('not-found')
   })
 
@@ -48,8 +48,8 @@ describe('classifyRequest', () => {
   })
 
   it('serves the API publicly only on an exposed tower hostname', () => {
-    const exposed = { ...policy, publicTowerHost: 'tower.example.com' }
-    expect(classify('tower.example.com', '/api/projects', 'public', exposed)).toBe('api')
+    const exposed = { ...policy, publicTowerHost: 'hangar.example.com' }
+    expect(classify('hangar.example.com', '/api/projects', 'public', exposed)).toBe('api')
     expect(classify('blog.example.com', '/api/projects', 'public', exposed)).toBe('not-found')
   })
 })

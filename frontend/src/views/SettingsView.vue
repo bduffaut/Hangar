@@ -329,11 +329,11 @@ const saveTunnel = (token: string | null) =>
             />
             <label for="set-expose">
               Make the {{ brand.dashboardName }} public{{
-                defaultDomain ? ` at tower.${defaultDomain}` : ''
+                defaultDomain ? ` at hangar.${defaultDomain}` : ''
               }}
               <span class="hg-muted hg-switch-help"
-                >Off is safer: the {{ brand.dashboardName }} controls the whole server. Keep it on
-                your network unless you need it elsewhere.</span
+                >Anyone on the internet can then reach its sign-in page, and it controls the whole
+                server, so use strong passwords.</span
               >
             </label>
           </div>

@@ -1,4 +1,4 @@
-import { defaultDomain, hooksHostname, towerHostname } from '@hangar/shared'
+import { defaultDomain, hooksHostname, publicTowerHostname, towerHostname } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
@@ -11,7 +11,7 @@ import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 export interface AccessPolicy {
   /** Hostnames (with port, if any) that serve the Control Tower on the LAN. */
   towerHosts: Set<string>
-  /** `tower.<default domain>` when the Control Tower is exposed publicly. */
+  /** `hangar.<default domain>` when the Control Tower is exposed publicly. */
   publicTowerHost: string | null
   /** `hooks.<default domain>`, which only serves webhooks. */
   hooksHost: string | null
@@ -41,7 +41,8 @@ export function createAccessPolicy(ctx: Ctx) {
       towerHosts.add(new URL(origin).host)
     }
     const domain = defaultDomain(settings)
-    const publicTowerHost = domain && settings.exposeTowerPublicly ? towerHostname(domain) : null
+    const publicTowerHost =
+      domain && settings.exposeTowerPublicly ? publicTowerHostname(domain) : null
     if (publicTowerHost) origins.add(`https://${publicTowerHost}`)
     const hooksHost = domain ? hooksHostname(domain) : null
     return { towerHosts, publicTowerHost, hooksHost, origins }
