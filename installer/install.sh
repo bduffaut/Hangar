@@ -77,6 +77,19 @@ docker compose version >/dev/null 2>&1 || fail "The Docker Compose plugin is mis
 
 step "Rolling open the hangar doors..." "Writing Hangar's files to $HANGAR_DIR."
 install -d -m 0755 "$HANGAR_DIR"
+# A re-run moves a live install forward, migrations included, so keep a way back.
+if [ "$(docker inspect -f '{{.State.Running}}' hangar-db 2>/dev/null)" = true ]; then
+  backups="$HANGAR_DIR/backups"
+  install -d -m 0700 "$backups"
+  backup="$backups/pre-install-$(date +%Y%m%d-%H%M%S).sql.gz"
+  docker exec hangar-db pg_dump -U hangar hangar | gzip >"$backup"
+  chmod 600 "$backup"
+  ok "Database backed up to $backup"
+fi
+proxy_config_changed=0
+if [ -f "$HANGAR_DIR/traefik.yml" ] && ! cmp -s "$SCRIPT_DIR/traefik.yml" "$HANGAR_DIR/traefik.yml"; then
+  proxy_config_changed=1
+fi
 install -m 0644 "$SCRIPT_DIR/docker-compose.yml" "$HANGAR_DIR/docker-compose.yml"
 install -m 0644 "$SCRIPT_DIR/traefik.yml" "$HANGAR_DIR/traefik.yml"
 install -m 0644 "$SCRIPT_DIR/lib.sh" "$HANGAR_DIR/lib.sh"
@@ -132,6 +145,10 @@ else
   compose pull --quiet
 fi
 compose up -d --remove-orphans
+# Traefik reads this file once, at start, and Compose does not notice a change inside a mount.
+if [ "$proxy_config_changed" = 1 ]; then
+  compose restart hangar-proxy
+fi
 wait_for_core || fail "Hangar did not become healthy within 3 minutes." "See what went wrong: docker logs hangar-core"
 ok "All systems running"
 
