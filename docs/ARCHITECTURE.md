@@ -517,14 +517,15 @@ Stop and remove the stack, managed app containers, and the tunnel. Ask separatel
 
 ## Development environment
 
-The host OS is Windows 11 with WSL2 (Ubuntu) and Docker Desktop using WSL integration.
+Development works on Windows 11 with WSL2 (Ubuntu) and on macOS (Apple Silicon), both with Docker Desktop. The two are interchangeable: everything committed is shared, and `node_modules` is installed separately on each machine.
 
-- Clone the repo inside the WSL filesystem (`~/code/hangar`), not under `/mnt/c`, for file-watching and I/O speed.
-- Host requirements inside WSL: Node 24 (via `fnm`), pnpm (via `corepack`), Docker.
+- **WSL:** clone the repo inside the WSL filesystem (`~/code/hangar`), not under `/mnt/c`, for file-watching and I/O speed. Docker Desktop uses WSL integration. `scripts/setup-wsl.sh` installs Node 24 (via `fnm`), pnpm (via `corepack`), and the dependencies.
+- **macOS:** `brew install --cask docker-desktop` (not the `docker` formula, which is only the client), and `brew install fnm pnpm`. Then `fnm install` (reads `.node-version`) and `pnpm install`. Keep the clone out of `~/Downloads`, which macOS restricts. Don't run `setup-wsl.sh`.
+- `hangar-core` runs on Linux with the host's `node_modules` bind-mounted, so `supportedArchitectures` in `pnpm-workspace.yaml` also installs the Linux binaries on a macOS host.
 - `pnpm dev` runs:
   - `docker compose -f docker/compose.dev.yml up`: `postgres`, `traefik`, and `core-dev` (built from the core Dockerfile's dev stage, source bind-mounted, `tsx watch`, Docker socket mounted, on the `hangar` network, port 3000 published).
   - the Vite dev server on the host at `http://localhost:5173`, proxying `/api` to `localhost:3000`.
-- Apps deployed in dev are reachable from the Windows browser at `http://<name>.127-0-0-1.sslip.io`.
+- Apps deployed in dev are reachable from the browser on the host at `http://<name>.127-0-0-1.sslip.io`.
 - `pnpm test` runs unit tests. `pnpm test:integration` needs the dev stack running. `pnpm test:e2e` runs Playwright against the dev stack.
 - `pnpm hangar <command>` runs the dev CLI inside `hangar-core` (add a project, set env vars, deploy, roll back, cancel, history, logs).
 - The dev image trusts every directory for git (`safe.directory '*'`), because bind-mounted files belong to the host user.

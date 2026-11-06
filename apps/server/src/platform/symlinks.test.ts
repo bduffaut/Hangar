@@ -34,7 +34,7 @@ describe('findEscapingSymlink', () => {
 
     const chained = repo()
     symlinkSync('/etc', path.join(chained, 'outside'))
-    symlinkSync('../outside/hostname', path.join(chained, 'app/inner'))
+    symlinkSync('../outside/hosts', path.join(chained, 'app/inner'))
     expect(await findEscapingSymlink(path.join(chained, 'app'), chained)).toBe('app/inner')
   })
 

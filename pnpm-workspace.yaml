@@ -5,3 +5,11 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+
+# The dev stack bind-mounts this checkout into a Linux container that uses the host's node_modules,
+# so a macOS install also needs the Linux binaries (esbuild, argon2). `current` keeps the host's own.
+# arm64 is what Docker Desktop runs on Apple Silicon. Linux and WSL hosts just gain an unused copy.
+supportedArchitectures:
+  os: [current, linux]
+  cpu: [current, arm64]
+  libc: [current, glibc]
