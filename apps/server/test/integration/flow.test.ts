@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { projects, sessions, users } from '../../src/db/schema.ts'
 import { csrfTokenFor } from '../../src/modules/auth/service.ts'
 import { getProject } from '../../src/modules/projects/repo.ts'
-import { createFixtureRepo, createHarness, eventually } from './harness.ts'
+import { createFixtureRepo, createHarness, eventually, removeOwnerBuilder } from './harness.ts'
 
 const h = createHarness()
 const repo = createFixtureRepo(h.runId)
@@ -145,6 +145,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await h.ctx.db.delete(projects).where(eq(projects.ownerId, userId))
   await h.ctx.db.delete(users).where(eq(users.id, userId))
+  removeOwnerBuilder(userId)
   await h.close()
   repo.remove()
 })

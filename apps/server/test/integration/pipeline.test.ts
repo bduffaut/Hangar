@@ -77,9 +77,13 @@ describe('a project through its lifecycle', () => {
     expect((await getProject(h.ctx.db, projectId))!.currentDeploymentId).toBe(
       before.currentDeploymentId,
     )
-    expect((await h.ctx.docker.listManagedApps(projectId)).map((c) => c.deploymentId)).toEqual([
-      before.currentDeploymentId,
-    ])
+    // The failure is recorded first and the container removed just after, so give it a moment.
+    await expect
+      .poll(
+        async () => (await h.ctx.docker.listManagedApps(projectId)).map((c) => c.deploymentId),
+        { timeout: 15_000 },
+      )
+      .toEqual([before.currentDeploymentId])
     expect((await h.fetchApp(name())).body).toContain('fixture: dockerfile-app greeting=hello')
   })
 

@@ -138,16 +138,20 @@ export function createHarness() {
       }
       if (ownerId) {
         await ctx.db.delete(users).where(eq(users.id, ownerId))
-        // Builders are recorded inside hangar-core, so only it can remove them.
-        const builder = ownerBuilderName(ownerId)
-        execFileSync('docker', ['exec', 'hangar-core', 'docker', 'buildx', 'rm', '-f', builder], {
-          stdio: 'ignore',
-        })
+        removeOwnerBuilder(ownerId)
       }
       await ctx.queue.send('reconcile', {})
       await close()
     },
   }
+}
+
+/** Builders are recorded inside hangar-core, so only it can remove them. */
+export function removeOwnerBuilder(ownerId: string): void {
+  const builder = ownerBuilderName(ownerId)
+  execFileSync('docker', ['exec', 'hangar-core', 'docker', 'buildx', 'rm', '-f', builder], {
+    stdio: 'ignore',
+  })
 }
 
 /**
