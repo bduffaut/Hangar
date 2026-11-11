@@ -14,7 +14,7 @@ import { ensureTunnel, syncRouting } from '../../worker/reconciler.ts'
 import { users } from '../../db/schema.ts'
 import { listProjects } from '../projects/repo.ts'
 import { getSettings, setSettings } from './repo.ts'
-import { disconnectGithub, githubAppView } from '../github/service.ts'
+import { disconnectGithub } from '../github/service.ts'
 import { GITHUB_TOKEN_AAD, getGithubToken, TUNNEL_TOKEN_AAD, userGithubAad } from './secrets.ts'
 
 /** First boot only: adopt the LAN IP the installer detected. Afterwards the database owns it. */
@@ -60,7 +60,6 @@ export async function settingsView(ctx: Ctx, userId: string): Promise<SettingsVi
     githubConnected: (await getGithubToken(ctx, userId)) !== null,
     tunnelConfigured: s.cloudflareTunnelToken !== null,
     towerUrl: s.lanDomain ? `http://${towerHostname(s.lanDomain)}` : null,
-    githubApp: await githubAppView(ctx),
   }
 }
 

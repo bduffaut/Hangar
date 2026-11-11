@@ -33,9 +33,24 @@ const CODE_GROUP = 4
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
+export interface SessionUser {
+  id: string
+  username: string
+  role: UserRole
+  localAccess: boolean
+}
+
+/** What a session knows about its account. */
+export const sessionUser = (user: SessionUser): SessionUser => ({
+  id: user.id,
+  username: user.username,
+  role: user.role,
+  localAccess: user.localAccess,
+})
+
 export interface AuthenticatedSession {
   sessionId: string
-  user: { id: string; username: string; role: UserRole }
+  user: SessionUser
   expiresAt: Date
   /** True when the expiry moved, so the cookie should be re-sent. */
   refreshed: boolean
@@ -114,6 +129,10 @@ export async function resolveSession(
 
 /** For long-lived streams: is this session still valid, with the same role as when it opened? */
 export async function isSessionCurrent(ctx: Ctx, session: AuthenticatedSession): Promise<boolean> {
+  if (session.sessionId.startsWith('relay:')) {
+    const user = await getUserById(ctx.db, session.user.id)
+    return user?.role === session.user.role
+  }
   const row = await getActiveSession(ctx.db, session.sessionId)
   return row?.user.role === session.user.role
 }
@@ -154,7 +173,7 @@ export async function login(ctx: Ctx, username: string, password: string) {
     await upgradePasswordHash(ctx.db, user.id, await hashPassword(password))
   }
   return {
-    user: { id: user.id, username: user.username, role: user.role },
+    user: sessionUser(user),
     ...(await createSession(ctx, user.id)),
   }
 }
@@ -178,7 +197,7 @@ export async function changePassword(
   failures.delete(user.username)
   await updatePassword(ctx.db, user.id, await hashPassword(input.newPassword))
   return {
-    user: { id: user.id, username: user.username, role: user.role },
+    user: sessionUser(user),
     ...(await createSession(ctx, user.id)),
   }
 }
@@ -199,7 +218,7 @@ export async function setFirstPassword(ctx: Ctx, userId: string, password: strin
   }
   await updatePassword(ctx.db, user.id, await hashPassword(password))
   return {
-    user: { id: user.id, username: user.username, role: user.role },
+    user: sessionUser(user),
     ...(await createSession(ctx, user.id)),
   }
 }
@@ -253,7 +272,7 @@ export async function completeSetup(
     )
   }
   return {
-    user: { id: user.id, username: user.username, role: user.role },
+    user: sessionUser(user),
     ...(await createSession(ctx, user.id)),
   }
 }

@@ -12,15 +12,16 @@ import {
   takeFlowCookie,
 } from '../../http/server.ts'
 import { GithubError } from '../../platform/github.ts'
-import { settingsView } from '../settings/service.ts'
 import { getGithubToken } from '../settings/secrets.ts'
 import {
+  accessView,
   accountView,
   completeGithubApp,
   finishGithubFlow,
   githubAppManifest,
   removeGithubApp,
   startGithubFlow,
+  updateAccess,
 } from './service.ts'
 
 // Per client address, per minute, like the other sign-in endpoints.
@@ -90,7 +91,8 @@ export function githubRoutes(http: Http) {
         currentUserId: async () => (await authenticate(ctx, request, reply)).user.id,
       })
       if (!result.session) return { ...result, session: null }
-      setSessionCookie(request, reply, result.session.token, result.session.expiresAt)
+      const { token, expiresAt } = result.session
+      setSessionCookie(request, reply, token, expiresAt)
       return { ...result, session: sessionView(ctx, result.session) }
     },
     { rateLimit: AUTH_RATE_LIMIT },
@@ -102,14 +104,17 @@ export function githubRoutes(http: Http) {
     githubAppManifest(ctx, auth.user.id, requestOrigin(request), (await access.get()).origins),
   )
 
+  route(http, contract.getAccess, () => accessView(ctx))
+  route(http, contract.updateAccess, ({ body }) => updateAccess(ctx, body))
+
   route(http, contract.githubAppComplete, async ({ auth, body }) => {
     await completeGithubApp(ctx, auth.user.id, body)
-    return settingsView(ctx, auth.user.id)
+    return accessView(ctx)
   })
 
-  route(http, contract.removeGithubApp, async ({ auth }) => {
+  route(http, contract.removeGithubApp, async () => {
     await removeGithubApp(ctx)
-    return settingsView(ctx, auth.user.id)
+    return accessView(ctx)
   })
 
   route(http, contract.githubRepos, async ({ auth }) => {

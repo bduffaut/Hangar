@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -64,11 +65,42 @@ export const users = pgTable('users', {
   /** The GitHub account this user signs in with (GitHub's numeric id, which never changes). */
   githubUserId: bigint({ mode: 'number' }).unique(),
   githubLogin: text(),
+  /**
+   * May deploy on this machine. True for the owner and invited people; false for people who signed
+   * up with GitHub, whose apps run only on servers of their own (D38).
+   */
+  localAccess: boolean().notNull().default(true),
   /** The home screen's widget layout, as the dashboard saved it. Null means the default. */
   dashboardLayout: jsonb(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 })
+
+/**
+ * A person's own machine, running Hangar and connected out to this one (D38). This server sends it
+ * their requests; it builds and runs their apps.
+ */
+export const servers = pgTable(
+  'servers',
+  {
+    id: id(),
+    ownerId: uuid()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    /** SHA-256 of the one-time code in the install command, until the server has used it. */
+    pairingCodeHash: text().unique(),
+    pairingExpiresAt: timestamp({ withTimezone: true }),
+    /** SHA-256 of the key the server connects with. Null until it has paired. */
+    credentialHash: text().unique(),
+    pairedAt: timestamp({ withTimezone: true }),
+    lastSeenAt: timestamp({ withTimezone: true }),
+    /** What the server last said about itself: Hangar version, machine, OS, CPUs, memory. */
+    info: jsonb(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.ownerId)],
+)
 
 export const sessions = pgTable(
   'sessions',

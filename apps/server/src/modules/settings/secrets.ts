@@ -61,6 +61,8 @@ const renewing = new Map<string, Promise<string | null>>()
  * A GitHub App token close to running out is renewed first.
  */
 export async function getGithubToken(ctx: Ctx, userId: string): Promise<string | null> {
+  // On a person's own server, their token lives with the Hangar they signed in to.
+  if (ctx.central?.isRelayUser(userId)) return ctx.central.githubToken()
   const [row] = await ctx.db
     .select({
       token: users.githubToken,

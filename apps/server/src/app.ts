@@ -7,6 +7,7 @@ import { envVarRoutes } from './modules/env-vars/routes.ts'
 import { githubRoutes } from './modules/github/routes.ts'
 import { metricsRoutes } from './modules/metrics/routes.ts'
 import { projectRoutes } from './modules/projects/routes.ts'
+import { serverRoutes } from './modules/servers/routes.ts'
 import { settingsRoutes } from './modules/settings/routes.ts'
 import { systemRoutes } from './modules/system/routes.ts'
 import { userRoutes } from './modules/users/routes.ts'
@@ -23,6 +24,7 @@ export function buildApp(ctx: Ctx) {
     userRoutes(scoped)
     settingsRoutes(scoped)
     githubRoutes(scoped)
+    serverRoutes(scoped)
     projectRoutes(scoped)
     deploymentRoutes(scoped)
     envVarRoutes(scoped)

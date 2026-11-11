@@ -21,6 +21,20 @@ export const settingsSchema = {
       htmlUrl: z.string(),
     })
     .nullable(),
+  /** Anyone may create an account with GitHub; such accounts deploy only to their own servers. */
+  openSignUp: z.boolean(),
+  /**
+   * On a person's own server: the Hangar it is connected to (D38). `credential` is encrypted;
+   * `localUserId` is the account here that requests from there run as.
+   */
+  central: z
+    .object({
+      url: z.string(),
+      serverId: z.string(),
+      credential: z.string(),
+      localUserId: z.string(),
+    })
+    .nullable(),
 }
 
 export type SettingKey = keyof typeof settingsSchema
@@ -35,6 +49,8 @@ export const SETTING_DEFAULTS: Settings = {
   cloudflareTunnelToken: null,
   setupCodeHash: null,
   githubApp: null,
+  openSignUp: false,
+  central: null,
 }
 
 export const SETTING_KEYS = Object.keys(settingsSchema) as SettingKey[]

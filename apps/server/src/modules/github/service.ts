@@ -2,14 +2,14 @@
 // GitHub's manifest flow. People authorize it to sign in, and the user token it gives them is
 // also their GitHub connection, limited to the repositories they shared with the app.
 import { createHash, randomBytes } from 'node:crypto'
-import { defaultDomain, type GithubPurpose, type UserRole, USERNAME_PATTERN } from '@hangar/shared'
+import { defaultDomain, type GithubPurpose, USERNAME_PATTERN } from '@hangar/shared'
 import { eq } from 'drizzle-orm'
 import type { Ctx } from '../../context.ts'
 import { users } from '../../db/schema.ts'
 import { UserError } from '../../errors.ts'
 import { GithubError } from '../../platform/github.ts'
 import type { User } from '../auth/repo.ts'
-import { createSession } from '../auth/service.ts'
+import { createSession, type SessionUser, sessionUser } from '../auth/service.ts'
 import { getSettings, setSettings } from '../settings/repo.ts'
 import {
   clearGithubToken,
@@ -178,9 +178,7 @@ export async function finishGithubFlow(
     .catch(githubTrouble)
   const github = await ctx.github.currentUser(tokens.accessToken).catch(githubTrouble)
 
-  let session: Awaited<ReturnType<typeof createSession>> & {
-    user: { id: string; username: string; role: UserRole }
-  }
+  let session: Awaited<ReturnType<typeof createSession>> & { user: SessionUser }
   let userId: string
   if (flow.purpose === 'link') {
     userId = await request.currentUserId()
@@ -198,7 +196,9 @@ export async function finishGithubFlow(
     }
   }
   if (flow.purpose === 'login') {
-    const user = await userByGithubId(ctx, github.id)
+    const user =
+      (await userByGithubId(ctx, github.id)) ??
+      ((await getSettings(ctx.db)).openSignUp ? await createSignedUpUser(ctx, github) : null)
     if (!user) {
       throw new UserError(
         403,
@@ -210,7 +210,7 @@ export async function finishGithubFlow(
     userId = user.id
     await linkIdentity(ctx, userId, github) // their GitHub name may have changed
     session = {
-      user: { id: user.id, username: user.username, role: user.role },
+      user: sessionUser(user),
       ...(await createSession(ctx, user.id)),
     }
     // Signing in keeps a token they pasted by hand: it may reach repositories the app was not
@@ -222,7 +222,7 @@ export async function finishGithubFlow(
   } else {
     const user = await createInvitedUser(ctx, flow, github)
     userId = user.id
-    session = { user, ...(await createSession(ctx, user.id)) }
+    session = { user: sessionUser(user), ...(await createSession(ctx, user.id)) }
   }
   await storeAppTokens(ctx, userId, tokens)
   return { purpose: flow.purpose, session, ...(await installState(ctx, tokens.accessToken)) }
@@ -271,7 +271,7 @@ async function createInvitedUser(ctx: Ctx, flow: Flow, github: { id: number; log
           githubUserId: github.id,
           githubLogin: github.login,
         })
-        .returning({ id: users.id, username: users.username, role: users.role })
+        .returning()
       return created!
     })
   } catch (error) {
@@ -289,6 +289,39 @@ async function createInvitedUser(ctx: Ctx, flow: Flow, github: { id: number; log
   }
 }
 
+/**
+ * Open sign-up (D38): anyone with a GitHub account gets one here. It deploys only to servers of
+ * its own, never to this machine. Its username is its GitHub name, made unique if needed.
+ */
+async function createSignedUpUser(ctx: Ctx, github: { id: number; login: string }) {
+  const base = github.login.toLowerCase().replace(/[^a-z0-9_.-]/g, '-')
+  const stem = (/^[a-z0-9]/.test(base) ? base : `gh-${base}`).padEnd(3, '0').slice(0, 28)
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const username = attempt === 0 ? stem : `${stem}-${randomBytes(2).toString('hex')}`
+    if (!USERNAME_PATTERN.test(username)) continue
+    try {
+      const [created] = await ctx.db
+        .insert(users)
+        .values({
+          username,
+          passwordHash: null,
+          role: 'member',
+          localAccess: false,
+          githubUserId: github.id,
+          githubLogin: github.login,
+        })
+        .returning()
+      ctx.log.info({ username }, 'Someone signed up with GitHub')
+      return created!
+    } catch (error) {
+      const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
+      if (cause?.code !== '23505') throw error
+      if (cause.constraint?.includes('github')) return userByGithubId(ctx, github.id)
+    }
+  }
+  throw new UserError(409, 'username_taken', 'Hangar could not find a free username. Try again.')
+}
+
 // The signed-in person's account
 
 export async function accountView(ctx: Ctx, userId: string) {
@@ -297,6 +330,7 @@ export async function accountView(ctx: Ctx, userId: string) {
   const token = await getGithubToken(ctx, userId)
   return {
     hasPassword: user.passwordHash !== null,
+    githubApp: await githubAppView(ctx),
     github: {
       connected: token !== null,
       kind:
@@ -348,7 +382,7 @@ export async function githubAppManifest(
     // Public, so invited people can share their own repositories with it. That alone gives
     // nobody an account here: sign-in still needs an account or an invite.
     public: true,
-    redirect_url: `${origin}/settings/github-app`,
+    redirect_url: `${origin}/people/github-app`,
     callback_urls: origins.slice(0, MAX_CALLBACK_URLS).map((o) => `${o}${CALLBACK_PATH}`),
     setup_url: `${origin}/account?github=installed`,
     setup_on_update: true,
@@ -395,7 +429,23 @@ export async function completeGithubApp(
 
 /** Stops GitHub sign-in here. The app itself stays on GitHub until its owner deletes it. */
 export async function removeGithubApp(ctx: Ctx) {
-  await setSettings(ctx.db, { githubApp: null })
+  await setSettings(ctx.db, { githubApp: null, openSignUp: false })
+}
+
+export async function accessView(ctx: Ctx) {
+  return {
+    githubApp: await githubAppView(ctx),
+    openSignUp: (await getSettings(ctx.db)).openSignUp,
+  }
+}
+
+/** Open sign-up needs GitHub sign-in: GitHub is the only way such an account gets in. */
+export async function updateAccess(ctx: Ctx, patch: { openSignUp: boolean }) {
+  if (patch.openSignUp && !(await getSettings(ctx.db)).githubApp) {
+    throw new UserError(400, 'github_sign_in_off', 'Set up Sign in with GitHub first.')
+  }
+  await setSettings(ctx.db, { openSignUp: patch.openSignUp })
+  return accessView(ctx)
 }
 
 /** What every signed-in page may know about the app. */

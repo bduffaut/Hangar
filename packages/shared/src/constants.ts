@@ -41,3 +41,6 @@ export const LINK_TTL_MS = 7 * 24 * 60 * 60_000
 
 /** Live streams one account may hold open at a time. */
 export const MAX_STREAMS_PER_USER = 30
+
+/** The published release servers install when the version running here is a development build. */
+export const RELEASE_VERSION = '0.2.0'

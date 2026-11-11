@@ -10,6 +10,7 @@ import { createGithub, type Github } from './platform/github.ts'
 import { createHostMetrics, type HostMetricsReader } from './platform/hostmetrics.ts'
 import { createProxy, type Proxy } from './platform/proxy.ts'
 import { createQueue, type Queue } from './platform/queue.ts'
+import type { CentralLink } from './relay/agent.ts'
 
 /** Everything a service needs from the outside world. Tests build one with fakes. */
 export interface Ctx {
@@ -25,6 +26,8 @@ export interface Ctx {
   crypto: Crypto
   github: Github
   hostMetrics: HostMetricsReader
+  /** On a person's own server: the link to the Hangar it is run from (D38). */
+  central: CentralLink | null
 }
 
 /** Builds the real context. Call `close` to release connections. */
@@ -51,8 +54,10 @@ export function createContext(config: Config, log: Logger = createLogger(config)
       rootDir: config.hostRootDir,
       sysDir: config.hostSysDir,
     }),
+    central: null,
   }
   const close = async () => {
+    ctx.central?.stop()
     await ctx.queue.stop()
     await ctx.events.close()
     await pool.end()

@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
@@ -11,13 +12,16 @@ import Fastify, {
 import { z } from 'zod'
 import type { Ctx } from '../context.ts'
 import { UserError } from '../errors.ts'
+import { getUserById } from '../modules/auth/repo.ts'
 import {
   type AuthenticatedSession,
   csrfTokenFor,
   isSessionCurrent,
   isValidCsrfToken,
   resolveSession,
+  sessionUser,
 } from '../modules/auth/service.ts'
+import { getSettings } from '../modules/settings/repo.ts'
 import { isPendingCheck } from '../modules/settings/reachability.ts'
 import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 import { type AccessPolicyCache, classifyRequest, createAccessPolicy } from './access.ts'
@@ -34,7 +38,27 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 declare module 'fastify' {
   interface FastifyRequest {
     auth: AuthenticatedSession | null
+    /** Sent by the Hangar this server is run from, on behalf of this account (D38). */
+    relayUserId: string | null
   }
+}
+
+/**
+ * Requests from the Hangar this server is run from arrive over its WebSocket, and the relay
+ * client (in this process) replays them to this server over loopback with this secret. It never
+ * leaves the process and changes on every start.
+ */
+export const RELAY_SECRET = randomBytes(32).toString('hex')
+export const RELAY_SECRET_HEADER = 'x-hangar-relay'
+export const RELAY_USER_HEADER = 'x-hangar-relay-user'
+
+function isRelayed(request: FastifyRequest): boolean {
+  const given = request.headers[RELAY_SECRET_HEADER]
+  if (typeof given !== 'string' || given.length !== RELAY_SECRET.length) return false
+  return (
+    isLoopback(request.socket.remoteAddress ?? '') &&
+    timingSafeEqual(Buffer.from(given), Buffer.from(RELAY_SECRET))
+  )
 }
 
 /** What route modules receive. */
@@ -44,6 +68,8 @@ export interface Http {
   access: AccessPolicyCache
   /** Unknown page paths get the dashboard's index.html (its router takes over) while `available`. */
   enableDashboardFallback(available: () => boolean): void
+  /** Whether a connection comes from Traefik, or from this machine itself. */
+  isTrustedPeer(address: string): Promise<boolean>
 }
 
 const APP_NOT_RUNNING_PAGE = `<!doctype html>
@@ -118,8 +144,19 @@ export function createHttpServer(ctx: Ctx): Http {
   app.register(cookie, { secret: ctx.config.sessionSecret })
   app.register(rateLimit, { global: false, keyGenerator: clientAddress })
   app.decorateRequest('auth', null)
+  app.decorateRequest('relayUserId', null)
 
   app.addHook('onRequest', async (request, reply) => {
+    if (isRelayed(request)) {
+      // Only this server's relay account, and only while this server is connected somewhere.
+      const { central } = await getSettings(ctx.db)
+      const userId = request.headers[RELAY_USER_HEADER]
+      if (!central || userId !== central.localUserId) {
+        return reply.code(403).send({ error: { code: 'forbidden', message: 'Not allowed' } })
+      }
+      request.relayUserId = userId
+      return
+    }
     // In production every request arrives through Traefik, except the container's own health
     // check. Anything else is an app on the shared app network calling core directly to skip the
     // proxy's checks, so it gets nothing.
@@ -194,6 +231,8 @@ export function createHttpServer(ctx: Ctx): Http {
     enableDashboardFallback: (available) => {
       dashboardFallback = available
     },
+    isTrustedPeer: async (address) =>
+      !ctx.config.isProduction || isLoopback(address) || (await isProxy.confirm(address)),
   }
 }
 
@@ -274,6 +313,19 @@ export async function authenticate(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<AuthenticatedSession> {
+  if (request.relayUserId) {
+    // The Hangar it came from signed the person in and checked their CSRF token already.
+    const user = await getUserById(ctx.db, request.relayUserId)
+    if (!user) throw new UserError(401, 'unauthenticated', 'Sign in to continue.')
+    const session: AuthenticatedSession = {
+      sessionId: `relay:${user.id}`,
+      user: sessionUser(user),
+      expiresAt: new Date(Date.now() + 60_000),
+      refreshed: false,
+    }
+    request.auth = session
+    return session
+  }
   const raw = request.cookies[sessionCookieName(request)]
   const unsigned = raw ? request.unsignCookie(raw) : null
   const session =
@@ -298,6 +350,21 @@ export async function authenticate(
 
 export function sessionView(ctx: Ctx, session: Pick<AuthenticatedSession, 'sessionId' | 'user'>) {
   return { user: session.user, csrfToken: csrfTokenFor(ctx, session.sessionId) }
+}
+
+/**
+ * Apps of people who signed up with GitHub run on their own servers (D38): this machine's
+ * projects, settings, and logs are not theirs to use.
+ */
+export function requireLocalAccess(session: AuthenticatedSession) {
+  if (!session.user.localAccess) {
+    throw new UserError(
+      403,
+      'own_server_only',
+      'Your apps run on your own server, not this one.',
+      'Choose your server at the top of the page, or add one under Servers.',
+    )
+  }
 }
 
 type Parsed<T> = T extends z.ZodType ? z.output<T> : undefined
@@ -351,6 +418,7 @@ export function route<E extends Endpoint>(
       if (endpoint.access === 'admin' && auth?.user.role !== 'admin') {
         throw new UserError(403, 'admin_only', 'Only an admin can do this.')
       }
+      if (endpoint.scope === 'server' && auth) requireLocalAccess(auth)
       const input = {
         params: endpoint.params && parseInput(endpoint.params, request.params),
         query: endpoint.query && parseInput(endpoint.query, request.query),
@@ -380,6 +448,7 @@ export function eventStream<P extends z.ZodType, T>(
 ) {
   app.get(path, async (request, reply) => {
     const session = await authenticate(ctx, request, reply)
+    requireLocalAccess(session)
     const prepared = await prepare(parseInput(params, request.params), request)
     const userId = session.user.id
     const open = openStreams.get(userId) ?? 0

@@ -57,6 +57,13 @@
       "when": 1794369080966,
       "tag": "0007_github_sign_in",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794372149981,
+      "tag": "0008_servers",
+      "breakpoints": true
     }
   ]
 }

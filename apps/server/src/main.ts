@@ -3,7 +3,9 @@ import { ConfigError, loadConfig } from './config.ts'
 import { createContext } from './context.ts'
 import { runMigrations } from './db/migrate.ts'
 import { createLogger } from './logger.ts'
+import { getSettings } from './modules/settings/repo.ts'
 import { seedSettings } from './modules/settings/service.ts'
+import { startAgent } from './relay/agent.ts'
 import { startWorker } from './worker/jobs.ts'
 
 async function main() {
@@ -21,6 +23,10 @@ async function main() {
   const worker = runsWorker ? await startWorker(ctx) : null
   const app = runsApi ? buildApp(ctx) : null
   await app?.listen({ host: '0.0.0.0', port: config.port })
+  // Run from another Hangar: connect out to it (D38).
+  if (app && (config.centralUrl || (await getSettings(ctx.db)).central)) {
+    ctx.central = startAgent(ctx, { port: config.port })
+  }
 
   const shutdown = async (signal: string) => {
     log.info({ signal }, 'Shutting down')

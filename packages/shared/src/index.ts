@@ -9,6 +9,7 @@ export * as schemas from './schemas.ts'
 export * from './validation.ts'
 export { GITHUB_PURPOSES } from './schemas.ts'
 export type {
+  AccessView,
   AccountView,
   AddressCheckResult,
   AddressEvent,
@@ -22,6 +23,9 @@ export type {
   LogLineView,
   MetricsSample,
   ProjectView,
+  ServerInfo,
+  ServerPairing,
+  ServerView,
   Session,
   SettingsView,
   SystemInfo,

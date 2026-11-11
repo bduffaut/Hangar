@@ -27,10 +27,16 @@ const AUTH_RATE_LIMIT = 10
 export function authRoutes(http: Http) {
   const { ctx } = http
 
-  route(http, contract.setupStatus, async () => ({
-    needsSetup: await needsSetup(ctx),
-    githubSignIn: (await getSettings(ctx.db)).githubApp !== null,
-  }))
+  route(http, contract.setupStatus, async () => {
+    const settings = await getSettings(ctx.db)
+    return {
+      // A server run from elsewhere never needs its own first account.
+      needsSetup: settings.central || ctx.config.centralUrl ? false : await needsSetup(ctx),
+      githubSignIn: settings.githubApp !== null,
+      openSignUp: settings.githubApp !== null && settings.openSignUp,
+      managedBy: settings.central?.url ?? ctx.config.centralUrl,
+    }
+  })
 
   route(
     http,

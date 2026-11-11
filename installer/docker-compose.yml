@@ -44,6 +44,9 @@ services:
       HANGAR_SESSION_SECRET: ${HANGAR_SESSION_SECRET}
       HANGAR_LAN_IP: ${HANGAR_LAN_IP}
       HANGAR_VERSION: ${HANGAR_VERSION}
+      # Set when this server is run from another Hangar (D38).
+      HANGAR_CENTRAL_URL: ${HANGAR_CENTRAL_URL:-}
+      HANGAR_PAIRING_CODE: ${HANGAR_PAIRING_CODE:-}
     # The Docker socket lets core build and run apps. /proc and / inside a container already show
     # the host's CPU, memory, and disk, so no host directories are mounted.
     volumes:

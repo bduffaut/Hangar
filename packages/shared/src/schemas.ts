@@ -59,6 +59,10 @@ export const setupStatus = z.object({
   needsSetup: z.boolean(),
   /** Whether the sign-in page offers "Sign in with GitHub". */
   githubSignIn: z.boolean(),
+  /** Whether a new GitHub account can sign up there, without an invite. */
+  openSignUp: z.boolean(),
+  /** This is someone's own server, run from another Hangar: its address. */
+  managedBy: z.string().nullable(),
 })
 export const setupComplete = z.object({
   setupCode: z
@@ -75,7 +79,13 @@ export const login = z.object({
   password: z.string().max(PASSWORD_MAX_LENGTH, { error: WRONG_LOGIN }),
 })
 export const session = z.object({
-  user: z.object({ id, username: z.string(), role: z.enum(USER_ROLES) }),
+  user: z.object({
+    id,
+    username: z.string(),
+    role: z.enum(USER_ROLES),
+    /** May use this machine itself; otherwise only their own connected servers (D38). */
+    localAccess: z.boolean(),
+  }),
   /** Send as X-CSRF-Token on every non-GET request. */
   csrfToken: z.string(),
 })
@@ -171,17 +181,6 @@ export const settingsView = z.object({
   githubConnected: z.boolean(),
   tunnelConfigured: z.boolean(),
   towerUrl: z.string().nullable(),
-  /** The GitHub App for "Sign in with GitHub", once an admin has created it. */
-  githubApp: z
-    .object({
-      slug: z.string(),
-      owner: z.string(),
-      /** The app's page on GitHub, where its owner manages it. */
-      settingsUrl: z.string(),
-      /** Where a person chooses which repositories Hangar may see. */
-      installUrl: z.string(),
-    })
-    .nullable(),
 })
 export type SettingsView = z.infer<typeof settingsView>
 
@@ -201,8 +200,21 @@ export const githubToken = z.object({
 export const githubAccount = z.object({ connected: z.boolean(), login: z.string().nullable() })
 
 /** The signed-in person's own sign-in methods and GitHub connection. */
+const githubAppView = z
+  .object({
+    slug: z.string(),
+    owner: z.string(),
+    /** The app's page on GitHub, where its owner manages it. */
+    settingsUrl: z.string(),
+    /** Where a person chooses which repositories Hangar may see. */
+    installUrl: z.string(),
+  })
+  .nullable()
+
 export const accountView = z.object({
   hasPassword: z.boolean(),
+  /** The GitHub App for "Sign in with GitHub", once an admin has created it. */
+  githubApp: githubAppView,
   github: z.object({
     /** Hangar holds a working token for this person's repositories. */
     connected: z.boolean(),
@@ -241,6 +253,49 @@ export const githubFinished = z.object({
 export type GithubFinished = z.infer<typeof githubFinished>
 /** A form the dashboard posts to GitHub, which creates the app and comes back with a code. */
 export const githubAppManifest = z.object({ action: z.string(), manifest: z.string() })
+
+/** Who can get in: the GitHub App, and whether anyone may sign up with GitHub. */
+export const accessView = z.object({ githubApp: githubAppView, openSignUp: z.boolean() })
+export type AccessView = z.infer<typeof accessView>
+export const accessPatch = z.object({ openSignUp: z.boolean() })
+
+// Servers: people's own machines, connected to this Hangar (D38)
+
+export const serverInput = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, { error: 'Give the server a name, like "Home laptop".' })
+    .max(60, { error: 'Keep the name under 60 characters.' }),
+})
+export const serverInfo = z.object({
+  version: z.string(),
+  hostname: z.string(),
+  os: z.string(),
+  arch: z.string(),
+  cpus: z.number(),
+  memoryBytes: z.number(),
+  lanIp: z.string().nullable(),
+})
+export type ServerInfo = z.infer<typeof serverInfo>
+export const serverView = z.object({
+  id,
+  name: z.string(),
+  /** Connected right now, so requests can reach it. */
+  online: z.boolean(),
+  paired: z.boolean(),
+  lastSeenAt: timestamp.nullable(),
+  info: serverInfo.nullable(),
+  createdAt: timestamp,
+})
+export type ServerView = z.infer<typeof serverView>
+export const serverPairing = z.object({
+  server: serverView,
+  /** Run on the server, as root. Shown once: it holds a one-time code. */
+  installCommand: z.string(),
+  expiresAt: timestamp,
+})
+export type ServerPairing = z.infer<typeof serverPairing>
 export const tunnelToken = z.object({
   token: z.string().trim().max(4000, { error: 'That tunnel token is too long.' }).nullable(),
 })

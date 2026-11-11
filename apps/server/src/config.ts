@@ -29,6 +29,9 @@ const envSchema = z.object({
   HANGAR_HOST_SYS: z.string().min(1).default('/sys'),
   // Extra browser origins allowed to call the API, comma-separated (development only).
   HANGAR_DEV_ORIGINS: z.string().default(''),
+  // A person's own server: the Hangar it is run from, and the one-time code to pair with it (D38).
+  HANGAR_CENTRAL_URL: z.union([z.literal(''), z.url()]).default(''),
+  HANGAR_PAIRING_CODE: z.string().default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.string().default('development'),
 })
@@ -72,6 +75,8 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
         : e.HANGAR_DEV_ORIGINS.split(',')
             .map((origin) => origin.trim())
             .filter(Boolean),
+    centralUrl: e.HANGAR_CENTRAL_URL.replace(/\/+$/, '') || null,
+    pairingCode: e.HANGAR_PAIRING_CODE || null,
     logLevel: e.LOG_LEVEL,
     isProduction: e.NODE_ENV === 'production',
   }

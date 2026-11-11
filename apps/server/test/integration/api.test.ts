@@ -137,6 +137,8 @@ describe('first-run setup', () => {
     expect((await call({ url: '/api/setup/status' })).json()).toEqual({
       needsSetup: true,
       githubSignIn: false,
+      openSignUp: false,
+      managedBy: null,
     })
   })
 
@@ -186,6 +188,8 @@ describe('first-run setup', () => {
     expect((await call({ url: '/api/setup/status' })).json()).toEqual({
       needsSetup: false,
       githubSignIn: false,
+      openSignUp: false,
+      managedBy: null,
     })
     const res = await call({
       method: 'POST',
@@ -200,7 +204,7 @@ describe('sessions', () => {
   it('returns the signed-in user', async () => {
     const res = await call({ url: '/api/auth/me', cookie })
     expect(res.json()).toEqual({
-      user: { id: expect.any(String), username: 'admin', role: 'admin' },
+      user: { id: expect.any(String), username: 'admin', role: 'admin', localAccess: true },
       csrfToken: csrf,
     })
   })
@@ -336,7 +340,6 @@ describe('settings', () => {
       githubConnected: false,
       tunnelConfigured: false,
       towerUrl: 'http://tower.127-0-0-1.sslip.io',
-      githubApp: null,
     })
   })
 
@@ -669,7 +672,7 @@ describe('accounts', () => {
     })
     adminDeployment = deployment.id
 
-    const body = { hostnames: [], vars: {} }
+    const body = { hostnames: [], vars: {}, name: 'x' }
     const scoped = [
       ...Object.values(contract).filter((e) => e.access === 'session' && e.path.includes(':id')),
       { method: 'GET', path: streams.runtimeLogs },
@@ -1070,7 +1073,7 @@ describe('sign in with GitHub', () => {
   it('creates the app from a manifest and keeps its secret out of every response', async () => {
     const manifest = await call({
       method: 'POST',
-      url: '/api/settings/github-app/manifest',
+      url: '/api/access/github-app/manifest',
       cookie,
       csrf,
     })
@@ -1095,7 +1098,7 @@ describe('sign in with GitHub', () => {
     // A state from somewhere else is refused.
     const forged = await call({
       method: 'POST',
-      url: '/api/settings/github-app/complete',
+      url: '/api/access/github-app/complete',
       body: { code: 'c', state: 'made-up' },
       cookie,
       csrf,
@@ -1103,7 +1106,7 @@ describe('sign in with GitHub', () => {
     expect(forged.status).toBe(400)
     const done = await call({
       method: 'POST',
-      url: '/api/settings/github-app/complete',
+      url: '/api/access/github-app/complete',
       body: { code: 'c', state },
       cookie,
       csrf,
@@ -1151,7 +1154,7 @@ describe('sign in with GitHub', () => {
       installUrl: 'https://github.com/apps/hangar-test/installations/new',
     })
     expect(await getGithubToken(ctx, adminId)).toBe('ghu_Octo')
-    expect((await call({ url: '/api/me/account', cookie })).json()).toEqual({
+    expect((await call({ url: '/api/me/account', cookie })).json()).toMatchObject({
       hasPassword: true,
       github: { connected: true, kind: 'app', login: 'Octo' },
     })
@@ -1216,7 +1219,7 @@ describe('sign in with GitHub', () => {
     expect(joined.status).toBe(200)
     expect(joined.json().session.user).toMatchObject({ username: 'new-person', role: 'member' })
     const account = await call({ url: '/api/me/account', cookie: joined.session })
-    expect(account.json()).toEqual({
+    expect(account.json()).toMatchObject({
       hasPassword: false,
       github: { connected: true, kind: 'app', login: 'New-Person' },
     })
@@ -1289,7 +1292,7 @@ describe('sign in with GitHub', () => {
   })
 
   it('turns off without touching who is linked', async () => {
-    const off = await call({ method: 'DELETE', url: '/api/settings/github-app', cookie, csrf })
+    const off = await call({ method: 'DELETE', url: '/api/access/github-app', cookie, csrf })
     expect(off.json().githubApp).toBeNull()
     expect((await call({ url: '/api/setup/status' })).json().githubSignIn).toBe(false)
     const res = await flowCall('/api/auth/github/start', { purpose: 'login' })

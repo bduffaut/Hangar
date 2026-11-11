@@ -94,7 +94,12 @@ export async function getActiveSession(db: Db, id: string) {
   const [row] = await db
     .select({
       session: sessions,
-      user: { id: users.id, username: users.username, role: users.role },
+      user: {
+        id: users.id,
+        username: users.username,
+        role: users.role,
+        localAccess: users.localAccess,
+      },
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))

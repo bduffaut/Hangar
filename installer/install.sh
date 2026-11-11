@@ -7,6 +7,8 @@
 #   HANGAR_BIND_IP     the address Hangar listens on (default 0.0.0.0, every network)
 #   HANGAR_LAN_IP      the address devices use to reach it (default: detected)
 #   HANGAR_ASSUME_YES=1  answer yes to questions (unattended installs)
+#   HANGAR_CENTRAL_URL   the Hangar this server is run from, e.g. https://hangar.example.com
+#   HANGAR_PAIRING_CODE  the one-time code from "Add a server" there (with HANGAR_CENTRAL_URL)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +20,16 @@ GIVEN_VERSION="${HANGAR_VERSION:-}"
 GIVEN_IMAGE="${HANGAR_IMAGE:-}"
 GIVEN_BIND_IP="${HANGAR_BIND_IP:-}"
 GIVEN_LAN_IP="${HANGAR_LAN_IP:-}"
-HANGAR_VERSION="${HANGAR_VERSION:-0.1.0}"
+GIVEN_CENTRAL_URL="${HANGAR_CENTRAL_URL:-}"
+GIVEN_PAIRING_CODE="${HANGAR_PAIRING_CODE:-}"
+case "$GIVEN_CENTRAL_URL" in
+  '' | https://* | http://*) ;;
+  *) fail "HANGAR_CENTRAL_URL must start with https://" ;;
+esac
+case "$GIVEN_PAIRING_CODE" in
+  '' | *[!A-Za-z0-9_-]*) [ -z "$GIVEN_PAIRING_CODE" ] || fail "That pairing code is not valid." ;;
+esac
+HANGAR_VERSION="${HANGAR_VERSION:-0.2.0}"
 HANGAR_IMAGE="${HANGAR_IMAGE:-ghcr.io/bduffaut/hangar-core:$HANGAR_VERSION}"
 HANGAR_BIND_IP="${HANGAR_BIND_IP:-0.0.0.0}"
 
@@ -112,6 +123,8 @@ HANGAR_LAN_IP=$lan_ip
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 HANGAR_SESSION_SECRET=$(openssl rand -hex 32)
 HANGAR_INSTANCE_KEY=$(openssl rand -base64 32)
+HANGAR_CENTRAL_URL=$GIVEN_CENTRAL_URL
+HANGAR_PAIRING_CODE=$GIVEN_PAIRING_CODE
 ENV
   umask 022
   ok "Generated secrets in $ENV_FILE"
@@ -123,6 +136,12 @@ else
   [ -z "$GIVEN_IMAGE" ] && [ -n "$GIVEN_VERSION" ] && set_env HANGAR_IMAGE "$HANGAR_IMAGE"
   [ -n "$GIVEN_BIND_IP" ] && set_env HANGAR_BIND_IP "$GIVEN_BIND_IP"
   [ -n "$GIVEN_LAN_IP" ] && set_env HANGAR_LAN_IP "$GIVEN_LAN_IP"
+  # Older installs have no such lines yet.
+  for key in HANGAR_CENTRAL_URL HANGAR_PAIRING_CODE; do
+    grep -q "^$key=" "$ENV_FILE" || echo "$key=" >>"$ENV_FILE"
+  done
+  [ -n "$GIVEN_CENTRAL_URL" ] && set_env HANGAR_CENTRAL_URL "$GIVEN_CENTRAL_URL"
+  [ -n "$GIVEN_PAIRING_CODE" ] && set_env HANGAR_PAIRING_CODE "$GIVEN_PAIRING_CODE"
   ok "Kept the existing secrets and settings in $ENV_FILE"
 fi
 # Use the saved values from here on (a re-run without arguments keeps the old bind address).
@@ -170,6 +189,14 @@ if [ -n "$GIVEN_LAN_IP" ]; then
 fi
 
 domain="$(echo "$lan_ip" | tr . -).sslip.io"
+central=$(awk -F= '/^HANGAR_CENTRAL_URL=/ {print $2}' "$ENV_FILE")
+if [ -n "$central" ]; then
+  printf '\n%s%sWheels up! This server is connecting to %s.%s\n\n' "$GREEN" "$BOLD" "$central" "$RESET"
+  printf '  Go back to your browser: the server shows up there within a few seconds.\n'
+  printf '  Your apps build and run here, on this machine.\n\n'
+  printf '  On this network, apps also answer at  http://<app>.%s\n\n' "$domain"
+  exit 0
+fi
 code=$(docker exec hangar-core hangar-admin issue-setup-code)
 
 printf '\n%s%sWheels up! Your hangar is ready.%s\n\n' "$GREEN" "$BOLD" "$RESET"

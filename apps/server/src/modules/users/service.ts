@@ -5,7 +5,7 @@ import { users } from '../../db/schema.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { ownerBuilderName, ownerNetworkName } from '../../platform/names.ts'
 import { deleteSessions, replacePassword } from '../auth/repo.ts'
-import { createSession, hashPassword } from '../auth/service.ts'
+import { createSession, hashPassword, sessionUser } from '../auth/service.ts'
 import { listProjectsOf } from '../projects/repo.ts'
 import { deleteProject } from '../projects/service.ts'
 import {
@@ -160,7 +160,7 @@ export async function redeemLink(
   }
   if (!user) throw BAD_LINK()
   return {
-    user: { id: user.id, username: user.username, role: user.role },
+    user: sessionUser(user),
     ...(await createSession(ctx, user.id)),
   }
 }
