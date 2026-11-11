@@ -273,7 +273,23 @@ export const accountCopy = {
   newPassword: 'New password',
   changePassword: 'Change password',
   githubDescription:
-    'Your own token, used only for your projects. Needed for private repositories and for picking repositories from a list.',
+    'Your own GitHub connection, used only for your projects. Needed for private repositories and for picking repositories from a list.',
+  githubAppDescription:
+    'Connect once, then sign in with GitHub and pick repositories from a list. Hangar sees only the repositories you choose, and can read them but not change them.',
+  connectGithub: 'Connect with GitHub',
+  reconnectGithub: 'Connect again',
+  connectedAs: (login: string) => `Connected as ${login}. You can sign in with GitHub.`,
+  connectedToken: 'Connected with a token.',
+  chooseRepos: 'Choose repositories',
+  chooseReposHelp:
+    'Pick which of your repositories, or your organizations’, Hangar can see. Include the repositories of projects you already have.',
+  useToken: 'Use a token instead',
+  installedToast: 'GitHub is updated. Your repositories are ready to pick.',
+  linkedToast: 'GitHub is connected.',
+  firstPasswordTitle: 'Password',
+  firstPasswordBody:
+    'You sign in with GitHub. Add a password to also sign in without it. This signs you out everywhere else.',
+  setPassword: 'Set password',
   sessionsTitle: 'Sessions',
   sessionsBody:
     'Lost a device or signed in somewhere shared? This ends every session, this one too.',
@@ -283,6 +299,28 @@ export const accountCopy = {
     body: 'Every browser signed in to this account, including this one, will need to sign in again.',
     action: 'Sign out everywhere',
   },
+} as const
+
+/** Settings: the GitHub App behind "Sign in with GitHub". */
+export const githubAppCopy = {
+  title: 'Sign in with GitHub',
+  description:
+    'Lets people sign in with their GitHub account and pick repositories without making tokens. Only people with an account or an invite can get in.',
+  setUp: 'Set up on GitHub',
+  setUpHelp:
+    'GitHub asks you to confirm a new app for your account. It can only read the repositories each person chooses, and add webhooks to them.',
+  connected: (slug: string, owner: string) => `Using the GitHub App ${slug}, owned by ${owner}.`,
+  manage: 'Manage on GitHub',
+  remove: 'Turn off',
+  removeConfirm: {
+    title: 'Turn off Sign in with GitHub?',
+    body: 'People who joined with GitHub need a password, or a reset link from you, to sign in. The app stays on GitHub until you delete it there.',
+    action: 'Turn off',
+  },
+  newAddressHint:
+    'Added a new address for the Control Tower later? Add it, ending in /auth/github, as a callback URL in the app on GitHub.',
+  created: 'Sign in with GitHub is ready.',
+  finishing: 'Finishing the setup with GitHub…',
 } as const
 
 export const usersCopy = {
@@ -325,6 +363,10 @@ export const linkCopy = {
   create: 'Create account',
   save: 'Set password',
   toSignIn: 'Go to sign in',
+  withGithub: 'Continue with GitHub',
+  githubBody: 'Your account is made from your GitHub account, and GitHub is connected for deploys.',
+  usernameOptional: 'Username (optional with GitHub)',
+  orPassword: 'or choose a password',
 } as const
 
 export const authCopy = {
@@ -333,6 +375,12 @@ export const authCopy = {
   password: 'Password',
   signIn: 'Sign in',
   sessionExpired: 'Your session ended. Sign in again.',
+  withGithub: 'Sign in with GitHub',
+  or: 'or',
+  githubWorking: 'Talking to GitHub…',
+  githubCancelled: 'GitHub sign-in was cancelled.',
+  backToSignIn: 'Back to sign in',
+  backToAccount: 'Back to Account',
   unreachableTitle: 'Hangar is not responding',
 } as const
 

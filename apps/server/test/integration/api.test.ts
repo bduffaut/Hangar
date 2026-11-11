@@ -19,6 +19,7 @@ import { issueSetupCode } from '../../src/modules/auth/service.ts'
 import { insertQueuedDeployment } from '../../src/modules/deployments/repo.ts'
 import { getSettings, setSettings } from '../../src/modules/settings/repo.ts'
 import { getGithubToken, TUNNEL_TOKEN_AAD } from '../../src/modules/settings/secrets.ts'
+import { GithubError } from '../../src/platform/github.ts'
 import { seedSettings } from '../../src/modules/settings/service.ts'
 import { redeemLink } from '../../src/modules/users/service.ts'
 import { DEV_DATABASE_URL, devCoreEnv, REPO_ROOT } from './harness.ts'
@@ -67,6 +68,8 @@ interface Call {
   origin?: string | null
   host?: string
   headers?: Record<string, string>
+  /** The client address; sign-in endpoints are rate limited per address. */
+  remoteAddress?: string
 }
 
 async function call({
@@ -78,11 +81,13 @@ async function call({
   origin = ORIGIN,
   host = HOST,
   headers,
+  remoteAddress,
 }: Call) {
   const response = await app.inject({
     method,
     url,
     payload: body as object | undefined,
+    ...(remoteAddress ? { remoteAddress } : {}),
     headers: {
       host,
       ...(origin ? { origin } : {}),
@@ -129,7 +134,10 @@ afterAll(async () => {
 
 describe('first-run setup', () => {
   it('reports that setup is needed', async () => {
-    expect((await call({ url: '/api/setup/status' })).json()).toEqual({ needsSetup: true })
+    expect((await call({ url: '/api/setup/status' })).json()).toEqual({
+      needsSetup: true,
+      githubSignIn: false,
+    })
   })
 
   it('rejects a wrong boarding pass', async () => {
@@ -175,7 +183,10 @@ describe('first-run setup', () => {
 
   it('cannot run twice', async () => {
     expect(await issueSetupCode(ctx)).toBeNull()
-    expect((await call({ url: '/api/setup/status' })).json()).toEqual({ needsSetup: false })
+    expect((await call({ url: '/api/setup/status' })).json()).toEqual({
+      needsSetup: false,
+      githubSignIn: false,
+    })
     const res = await call({
       method: 'POST',
       url: '/api/setup/complete',
@@ -325,6 +336,7 @@ describe('settings', () => {
       githubConnected: false,
       tunnelConfigured: false,
       towerUrl: 'http://tower.127-0-0-1.sslip.io',
+      githubApp: null,
     })
   })
 
@@ -977,6 +989,311 @@ describe('accounts', () => {
     })
     expect(planted.statusCode).toBe(401)
     await setSettings(ctx.db, { publicDomains: [], exposeTowerPublicly: false })
+  })
+})
+
+describe('sign in with GitHub', () => {
+  const GITHUB_ID = 4242
+  let adminId = ''
+  // Many sign-ins in a row: each comes from its own address, so the per-address limit stays out
+  // of the way.
+  let nextAddress = 0
+  const address = () => `10.9.${Math.floor(++nextAddress / 250)}.${nextAddress % 250}`
+
+  /** Like `call`, but keeps every cookie, since the flow state travels in one too. */
+  async function flowCall(url: string, body: object, cookies: string[] = [], auth?: string) {
+    const response = await app.inject({
+      method: 'POST',
+      url,
+      payload: body,
+      remoteAddress: address(),
+      headers: {
+        host: HOST,
+        origin: ORIGIN,
+        cookie: cookies.filter(Boolean).join('; '),
+        ...(auth ? { 'x-csrf-token': auth } : {}),
+      },
+    })
+    const set = [response.headers['set-cookie']].flat().filter((c): c is string => !!c)
+    const named = (name: string) => set.find((c) => c.startsWith(`${name}=`))?.split(';')[0] ?? ''
+    return {
+      status: response.statusCode,
+      json: () => response.json(),
+      flow: named('hangar_github_flow'),
+      session: named('hangar_session'),
+    }
+  }
+
+  function fakeGithub(user: { id: number; login: string }, installations = 1) {
+    vi.spyOn(ctx.github, 'exchangeCode').mockResolvedValue({
+      accessToken: `ghu_${user.login}`,
+      expiresAt: new Date(Date.now() + 8 * 3600_000),
+      refreshToken: `ghr_${user.login}`,
+    })
+    vi.spyOn(ctx.github, 'currentUser').mockResolvedValue(user)
+    vi.spyOn(ctx.github, 'countInstallations').mockResolvedValue(installations)
+  }
+
+  async function signInFlow(
+    purpose: 'login' | 'link' | 'invite',
+    extra: object = {},
+    session?: { cookie: string; csrf: string },
+  ) {
+    const start = await flowCall(
+      '/api/auth/github/start',
+      { purpose, ...extra },
+      [session?.cookie ?? ''],
+      session?.csrf,
+    )
+    expect(start.status).toBe(200)
+    const state = new URL(start.json().url).searchParams.get('state')!
+    return flowCall(
+      '/api/auth/github/finish',
+      { code: 'the-code', state },
+      [start.flow, session?.cookie ?? ''],
+      session?.csrf,
+    )
+  }
+
+  beforeAll(async () => {
+    const { rows } = await ctx.db.execute(`select id from users where username = 'admin'`)
+    adminId = String(rows[0]!.id)
+  })
+
+  afterAll(() => vi.restoreAllMocks())
+
+  it('is off until an admin creates the app', async () => {
+    const res = await flowCall('/api/auth/github/start', { purpose: 'login' })
+    expect(res.json().error.code).toBe('github_sign_in_off')
+  })
+
+  it('creates the app from a manifest and keeps its secret out of every response', async () => {
+    const manifest = await call({
+      method: 'POST',
+      url: '/api/settings/github-app/manifest',
+      cookie,
+      csrf,
+    })
+    const { action, manifest: raw } = manifest.json()
+    const state = new URL(action).searchParams.get('state')!
+    const body = JSON.parse(raw)
+    expect(body.callback_urls).toContain(`${ORIGIN}/auth/github`)
+    expect(body.default_permissions).toEqual({
+      contents: 'read',
+      metadata: 'read',
+      repository_hooks: 'write',
+    })
+
+    const convert = vi.spyOn(ctx.github, 'createAppFromManifest').mockResolvedValue({
+      id: 7,
+      slug: 'hangar-test',
+      clientId: 'Iv1.client',
+      clientSecret: 'very-secret-value',
+      owner: 'owner',
+      htmlUrl: 'https://github.com/apps/hangar-test',
+    })
+    // A state from somewhere else is refused.
+    const forged = await call({
+      method: 'POST',
+      url: '/api/settings/github-app/complete',
+      body: { code: 'c', state: 'made-up' },
+      cookie,
+      csrf,
+    })
+    expect(forged.status).toBe(400)
+    const done = await call({
+      method: 'POST',
+      url: '/api/settings/github-app/complete',
+      body: { code: 'c', state },
+      cookie,
+      csrf,
+    })
+    expect(done.status).toBe(200)
+    expect(convert).toHaveBeenCalledWith('c')
+    expect(done.json().githubApp).toEqual({
+      slug: 'hangar-test',
+      owner: 'owner',
+      settingsUrl: 'https://github.com/settings/apps/hangar-test',
+      installUrl: 'https://github.com/apps/hangar-test/installations/new',
+    })
+    expect(done.text).not.toContain('very-secret-value')
+    expect(JSON.stringify(await getSettings(ctx.db))).not.toContain('very-secret-value')
+    expect((await call({ url: '/api/setup/status' })).json().githubSignIn).toBe(true)
+  })
+
+  it('refuses to sign in a GitHub account no Hangar account uses', async () => {
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    const res = await signInFlow('login')
+    expect(res.status).toBe(403)
+    expect(res.json().error.code).toBe('github_not_linked')
+    expect(res.session).toBe('')
+  })
+
+  it('only finishes in the browser that started, and only once', async () => {
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    const start = await flowCall('/api/auth/github/start', { purpose: 'login' })
+    const state = new URL(start.json().url).searchParams.get('state')!
+    const elsewhere = await flowCall('/api/auth/github/finish', { code: 'c', state })
+    expect(elsewhere.json().error.code).toBe('github_flow_expired')
+    // That attempt used the state up, so the right browser cannot replay it either.
+    const replay = await flowCall('/api/auth/github/finish', { code: 'c', state }, [start.flow])
+    expect(replay.json().error.code).toBe('github_flow_expired')
+  })
+
+  it('connects GitHub to a signed-in account, which can then sign in with it', async () => {
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' }, 0)
+    const linked = await signInFlow('link', {}, { cookie, csrf })
+    expect(linked.status).toBe(200)
+    expect(linked.json()).toMatchObject({
+      purpose: 'link',
+      session: null,
+      needsInstall: true,
+      installUrl: 'https://github.com/apps/hangar-test/installations/new',
+    })
+    expect(await getGithubToken(ctx, adminId)).toBe('ghu_Octo')
+    expect((await call({ url: '/api/me/account', cookie })).json()).toEqual({
+      hasPassword: true,
+      github: { connected: true, kind: 'app', login: 'Octo' },
+    })
+
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    const signedIn = await signInFlow('login')
+    expect(signedIn.status).toBe(200)
+    expect(signedIn.json().session.user.username).toBe('admin')
+    expect(signedIn.session).not.toBe('')
+    const me = await call({ url: '/api/auth/me', cookie: signedIn.session })
+    expect(me.json().user.id).toBe(adminId)
+  })
+
+  it('keeps a token pasted by hand when signing in with GitHub', async () => {
+    await ctx.db.execute(
+      `update users set github_token = '${ctx.crypto.seal('github_pat_x', `user:${adminId}:githubToken`)}', github_token_expires_at = null, github_refresh_token = null where id = '${adminId}'`,
+    )
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    expect((await signInFlow('login')).status).toBe(200)
+    expect(await getGithubToken(ctx, adminId)).toBe('github_pat_x')
+    // Connecting explicitly switches to the app.
+    expect((await signInFlow('link', {}, { cookie, csrf })).status).toBe(200)
+    expect(await getGithubToken(ctx, adminId)).toBe('ghu_Octo')
+  })
+
+  it('needs a session to connect, and never moves one GitHub account to a second account', async () => {
+    const anonymous = await flowCall('/api/auth/github/start', { purpose: 'link' })
+    expect(anonymous.status).toBe(401)
+
+    const token = (
+      await call({ method: 'POST', url: '/api/invites', body: {}, cookie, csrf })
+    ).json().token as string
+    const joined = await call({
+      method: 'POST',
+      url: '/api/auth/link/redeem',
+      body: { token, username: 'gh-other', password: 'a long enough password' },
+      remoteAddress: address(),
+    })
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    const res = await signInFlow(
+      'link',
+      {},
+      { cookie: joined.cookie!, csrf: joined.json().csrfToken },
+    )
+    expect(res.status).toBe(409)
+    expect(res.json().error.code).toBe('github_in_use')
+  })
+
+  it('accepts an invite with GitHub, using it up only once the account exists', async () => {
+    const token = (
+      await call({ method: 'POST', url: '/api/invites', body: {}, cookie, csrf })
+    ).json().token as string
+    // Already used by the admin: refused, and the invite stays usable.
+    fakeGithub({ id: GITHUB_ID, login: 'Octo' })
+    expect((await signInFlow('invite', { token })).json().error.code).toBe('github_in_use')
+    // A GitHub name that does not fit the username rules needs a chosen one.
+    fakeGithub({ id: 99, login: 'Ab' })
+    expect((await signInFlow('invite', { token })).json().error.code).toBe('choose_username')
+
+    fakeGithub({ id: 100, login: 'New-Person' })
+    const joined = await signInFlow('invite', { token })
+    expect(joined.status).toBe(200)
+    expect(joined.json().session.user).toMatchObject({ username: 'new-person', role: 'member' })
+    const account = await call({ url: '/api/me/account', cookie: joined.session })
+    expect(account.json()).toEqual({
+      hasPassword: false,
+      github: { connected: true, kind: 'app', login: 'New-Person' },
+    })
+    // The invite is gone now: refused before anyone is sent to GitHub.
+    const used = await flowCall('/api/auth/github/start', { purpose: 'invite', token })
+    expect(used.json().error.code).toBe('invalid_link')
+
+    // No password: a password sign-in cannot work, disconnecting is refused, and a first one can
+    // be set without knowing a current one.
+    const csrfToken = joined.json().session.csrfToken
+    const login = await call({
+      method: 'POST',
+      url: '/api/auth/login',
+      body: { username: 'new-person', password: 'anything at all' },
+      remoteAddress: address(),
+    })
+    expect(login.status).toBe(401)
+    const disconnect = await call({
+      method: 'POST',
+      url: '/api/settings/github',
+      body: { token: null },
+      cookie: joined.session,
+      csrf: csrfToken,
+    })
+    expect(disconnect.json().error.code).toBe('needs_password')
+    const set = await call({
+      method: 'POST',
+      url: '/api/me/password/first',
+      body: { password: 'a long enough password' },
+      remoteAddress: address(),
+      cookie: joined.session,
+      csrf: csrfToken,
+    })
+    expect(set.status).toBe(200)
+    const again = await call({
+      method: 'POST',
+      url: '/api/me/password/first',
+      body: { password: 'another long password' },
+      remoteAddress: address(),
+      cookie: set.cookie,
+      csrf: set.json().csrfToken,
+    })
+    expect(again.json().error.code).toBe('has_password')
+  })
+
+  it('renews a GitHub App token that is about to run out', async () => {
+    await ctx.db.execute(
+      `update users set github_token_expires_at = now() + interval '1 minute' where id = '${adminId}'`,
+    )
+    const refresh = vi.spyOn(ctx.github, 'refreshToken').mockResolvedValue({
+      accessToken: 'ghu_renewed',
+      expiresAt: new Date(Date.now() + 8 * 3600_000),
+      refreshToken: 'ghr_next',
+    })
+    const [first, second] = await Promise.all([
+      getGithubToken(ctx, adminId),
+      getGithubToken(ctx, adminId),
+    ])
+    expect([first, second]).toEqual(['ghu_renewed', 'ghu_renewed'])
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh.mock.calls[0]![1]).toBe('ghr_Octo')
+    expect(await getGithubToken(ctx, adminId)).toBe('ghu_renewed')
+
+    // A refused renewal forgets the token, so Account offers to connect again.
+    await ctx.db.execute(
+      `update users set github_token_expires_at = now() - interval '1 minute' where id = '${adminId}'`,
+    )
+    refresh.mockRejectedValue(new GithubError(401, 'bad_refresh_token'))
+    expect(await getGithubToken(ctx, adminId)).toBeNull()
+  })
+
+  it('turns off without touching who is linked', async () => {
+    const off = await call({ method: 'DELETE', url: '/api/settings/github-app', cookie, csrf })
+    expect(off.json().githubApp).toBeNull()
+    expect((await call({ url: '/api/setup/status' })).json().githubSignIn).toBe(false)
+    const res = await flowCall('/api/auth/github/start', { purpose: 'login' })
+    expect(res.json().error.code).toBe('github_sign_in_off')
   })
 })
 

@@ -13,6 +13,7 @@ import {
 import { sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
+  bigint,
   index,
   integer,
   jsonb,
@@ -51,10 +52,18 @@ export const addressStatus = pgEnum('address_status', ADDRESS_STATUSES)
 export const users = pgTable('users', {
   id: id(),
   username: text().notNull().unique(),
-  passwordHash: text().notNull(),
+  /** Null for an account created through GitHub that has not set a password. */
+  passwordHash: text(),
   role: userRole().notNull().default('member'),
   /** The user's own GitHub token, for their own repositories. Encrypted. */
   githubToken: text(),
+  /** When a token from the GitHub App runs out; null for a token pasted by hand. */
+  githubTokenExpiresAt: timestamp({ withTimezone: true }),
+  /** Renews a GitHub App token. Encrypted. */
+  githubRefreshToken: text(),
+  /** The GitHub account this user signs in with (GitHub's numeric id, which never changes). */
+  githubUserId: bigint({ mode: 'number' }).unique(),
+  githubLogin: text(),
   /** The home screen's widget layout, as the dashboard saved it. Null means the default. */
   dashboardLayout: jsonb(),
   createdAt: createdAt(),

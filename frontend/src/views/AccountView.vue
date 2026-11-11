@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { accountCopy, navCopy, toastCopy } from '@hangar/shared'
+import {
+  type AccountView,
+  accountCopy,
+  navCopy,
+  type SettingsView,
+  toastCopy,
+} from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
+import { goToGithub } from '../lib/github.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
 import {
@@ -21,20 +28,35 @@ import {
 useDocumentTitle(navCopy.account)
 const session = useSessionStore()
 const router = useRouter()
+const route = useRoute()
 const notify = useNotify()
 const confirm = useConfirmAction()
 const theme = useTheme()
 
 const currentPassword = ref('')
 const newPassword = ref('')
+const firstPassword = ref('')
 const githubToken = ref('')
-const githubConnected = ref<boolean | null>(null)
-const githubLogin = ref<string | null>(null)
+const account = ref<AccountView | null>(null)
+const githubApp = ref<SettingsView['githubApp']>(null)
+const showToken = ref(false)
 const busy = ref<string | null>(null)
 const errors = ref<Record<string, string | null>>({})
 
+const githubConnected = computed(() => account.value?.github.connected ?? false)
+
+async function loadAccount() {
+  account.value = await api('getAccount').catch(() => null)
+}
+
 onMounted(async () => {
-  githubConnected.value = (await api('getSettings').catch(() => null))?.githubConnected ?? false
+  // GitHub brings people back here after they connect, or choose repositories.
+  const back = route.query.github
+  if (back === 'linked') notify.success(accountCopy.linkedToast)
+  if (back === 'installed') notify.success(accountCopy.installedToast)
+  if (back) void router.replace({ query: {} })
+  const [settings] = await Promise.all([api('getSettings').catch(() => null), loadAccount()])
+  githubApp.value = settings?.githubApp ?? null
 })
 
 async function act(key: string, action: () => Promise<void>) {
@@ -61,13 +83,33 @@ const changePassword = () =>
     newPassword.value = ''
   })
 
+const setPassword = () =>
+  act('first-password', async () => {
+    session.apply(await api('setFirstPassword', { body: { password: firstPassword.value } }))
+    firstPassword.value = ''
+    await loadAccount()
+  })
+
 const saveGithub = (token: string | null) =>
   act('github', async () => {
-    const account = await api('setGithubToken', { body: { token } })
-    githubLogin.value = account.login
-    githubConnected.value = account.connected
+    await api('setGithubToken', { body: { token } })
     githubToken.value = ''
+    showToken.value = false
+    await loadAccount()
   })
+
+async function connectWithGithub() {
+  busy.value = 'github-app'
+  errors.value = { ...errors.value, github: null }
+  try {
+    await goToGithub({ purpose: 'link' })
+  } catch (e) {
+    errors.value = { ...errors.value, github: messageOf(e) }
+    busy.value = null
+  }
+}
+
+const chooseRepos = () => window.open(githubApp.value!.installUrl, '_blank', 'noopener')
 
 async function signOutEverywhere() {
   if (!(await confirm({ ...accountCopy.signOutConfirm, danger: true }))) return
@@ -90,7 +132,35 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
 <template>
   <PageHeader :title="accountCopy.title" />
   <div class="hg-account">
-    <HgPanel :title="accountCopy.passwordTitle" :description="accountCopy.passwordBody">
+    <HgPanel
+      v-if="account && !account.hasPassword"
+      :title="accountCopy.firstPasswordTitle"
+      :description="accountCopy.firstPasswordBody"
+    >
+      <form class="hg-form" @submit.prevent="setPassword">
+        <BaseField :label="accountCopy.newPassword" for="acc-first" help="At least 10 characters.">
+          <BasePassword id="acc-first" v-model="firstPassword" autocomplete="new-password" />
+        </BaseField>
+        <BaseMessage v-if="errors['first-password']" tone="error">{{
+          errors['first-password']
+        }}</BaseMessage>
+        <div>
+          <BaseButton
+            type="submit"
+            variant="primary"
+            :label="accountCopy.setPassword"
+            :disabled="!firstPassword || busy !== null"
+            :loading="busy === 'first-password'"
+          />
+        </div>
+      </form>
+    </HgPanel>
+
+    <HgPanel
+      v-else-if="account"
+      :title="accountCopy.passwordTitle"
+      :description="accountCopy.passwordBody"
+    >
       <form class="hg-form" @submit.prevent="changePassword">
         <BaseField :label="accountCopy.currentPassword" for="acc-current">
           <BasePassword
@@ -115,30 +185,64 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
       </form>
     </HgPanel>
 
-    <HgPanel title="GitHub" :description="accountCopy.githubDescription">
+    <HgPanel
+      title="GitHub"
+      :description="githubApp ? accountCopy.githubAppDescription : accountCopy.githubDescription"
+    >
       <div class="hg-form">
-        <p v-if="githubConnected" class="hg-connected">
-          Connected{{ githubLogin ? ` as ${githubLogin}` : '' }}.
+        <p v-if="account?.github.login && githubConnected" class="hg-connected">
+          {{ accountCopy.connectedAs(account.github.login) }}
         </p>
-        <BaseField
-          :label="githubConnected ? 'Replace token' : 'Token'"
-          for="acc-github"
-          help="A fine-grained token with read access to Contents and Metadata."
-        >
-          <BasePassword id="acc-github" v-model="githubToken" autocomplete="off" />
-        </BaseField>
-        <BaseMessage v-if="errors.github" tone="error">{{ errors.github }}</BaseMessage>
-        <div class="hg-actions">
+        <p v-else-if="githubConnected" class="hg-connected">{{ accountCopy.connectedToken }}</p>
+
+        <div v-if="githubApp" class="hg-actions">
           <BaseButton
-            variant="primary"
+            :variant="githubConnected ? 'secondary' : 'primary'"
             icon="github"
-            label="Connect"
-            :disabled="!githubToken.trim() || busy !== null"
-            :loading="busy === 'github'"
-            @click="saveGithub(githubToken.trim())"
+            :label="githubConnected ? accountCopy.reconnectGithub : accountCopy.connectGithub"
+            :loading="busy === 'github-app'"
+            :disabled="busy !== null"
+            @click="connectWithGithub"
           />
           <BaseButton
-            v-if="githubConnected"
+            v-if="account?.github.kind === 'app'"
+            :label="accountCopy.chooseRepos"
+            :disabled="busy !== null"
+            @click="chooseRepos"
+          />
+          <BaseButton
+            v-if="!showToken"
+            variant="ghost"
+            :label="accountCopy.useToken"
+            @click="showToken = true"
+          />
+        </div>
+        <p v-if="githubApp && account?.github.kind === 'app'" class="hg-muted hg-note">
+          {{ accountCopy.chooseReposHelp }}
+        </p>
+
+        <template v-if="!githubApp || showToken">
+          <BaseField
+            :label="githubConnected ? 'Replace token' : 'Token'"
+            for="acc-github"
+            help="A fine-grained token with read access to Contents and Metadata."
+          >
+            <BasePassword id="acc-github" v-model="githubToken" autocomplete="off" />
+          </BaseField>
+          <div>
+            <BaseButton
+              :variant="githubApp ? 'secondary' : 'primary'"
+              icon="github"
+              label="Save token"
+              :disabled="!githubToken.trim() || busy !== null"
+              :loading="busy === 'github'"
+              @click="saveGithub(githubToken.trim())"
+            />
+          </div>
+        </template>
+        <BaseMessage v-if="errors.github" tone="error">{{ errors.github }}</BaseMessage>
+        <div v-if="githubConnected || account?.github.login">
+          <BaseButton
             variant="ghost"
             label="Disconnect"
             :disabled="busy !== null"
@@ -174,6 +278,9 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
   display: flex;
   flex-wrap: wrap;
   gap: var(--hg-space-2);
+}
+.hg-note {
+  font-size: var(--hg-size-sm);
 }
 .hg-connected {
   color: var(--hg-status-ready);

@@ -1,9 +1,30 @@
 import { contract } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
 import { UserError } from '../../errors.ts'
-import { type Http, route } from '../../http/server.ts'
+import {
+  authenticate,
+  type Http,
+  requestOrigin,
+  route,
+  sessionView,
+  setFlowCookie,
+  setSessionCookie,
+  takeFlowCookie,
+} from '../../http/server.ts'
 import { GithubError } from '../../platform/github.ts'
+import { settingsView } from '../settings/service.ts'
 import { getGithubToken } from '../settings/secrets.ts'
+import {
+  accountView,
+  completeGithubApp,
+  finishGithubFlow,
+  githubAppManifest,
+  removeGithubApp,
+  startGithubFlow,
+} from './service.ts'
+
+// Per client address, per minute, like the other sign-in endpoints.
+const AUTH_RATE_LIMIT = 10
 
 async function requireToken(ctx: Ctx, userId: string): Promise<string> {
   const token = await getGithubToken(ctx, userId)
@@ -11,7 +32,7 @@ async function requireToken(ctx: Ctx, userId: string): Promise<string> {
     throw new UserError(
       409,
       'github_not_connected',
-      'Connect your GitHub token under Account to list repositories.',
+      'Connect GitHub under Account to list repositories.',
     )
   }
   return token
@@ -23,7 +44,7 @@ function githubFailure(error: unknown): never {
       400,
       'github_rejected',
       'GitHub refused the request with the saved token.',
-      'The token may have expired. Connect a new one under Account.',
+      'The connection may have expired. Connect GitHub again under Account.',
     )
   }
   if (error instanceof GithubError && error.status === 404) {
@@ -41,7 +62,55 @@ function githubFailure(error: unknown): never {
 }
 
 export function githubRoutes(http: Http) {
-  const { ctx } = http
+  const { ctx, access } = http
+
+  route(
+    http,
+    contract.githubStart,
+    async ({ body, request, reply }) => {
+      const auth = body.purpose === 'link' ? await authenticate(ctx, request, reply) : null
+      const { state, url } = await startGithubFlow(
+        ctx,
+        body,
+        requestOrigin(request),
+        auth?.user.id ?? null,
+      )
+      setFlowCookie(request, reply, state)
+      return { url }
+    },
+    { rateLimit: AUTH_RATE_LIMIT },
+  )
+
+  route(
+    http,
+    contract.githubFinish,
+    async ({ body, request, reply }) => {
+      const result = await finishGithubFlow(ctx, body, {
+        cookieState: takeFlowCookie(request, reply),
+        currentUserId: async () => (await authenticate(ctx, request, reply)).user.id,
+      })
+      if (!result.session) return { ...result, session: null }
+      setSessionCookie(request, reply, result.session.token, result.session.expiresAt)
+      return { ...result, session: sessionView(ctx, result.session) }
+    },
+    { rateLimit: AUTH_RATE_LIMIT },
+  )
+
+  route(http, contract.getAccount, ({ auth }) => accountView(ctx, auth.user.id))
+
+  route(http, contract.githubAppManifest, async ({ auth, request }) =>
+    githubAppManifest(ctx, auth.user.id, requestOrigin(request), (await access.get()).origins),
+  )
+
+  route(http, contract.githubAppComplete, async ({ auth, body }) => {
+    await completeGithubApp(ctx, auth.user.id, body)
+    return settingsView(ctx, auth.user.id)
+  })
+
+  route(http, contract.removeGithubApp, async ({ auth }) => {
+    await removeGithubApp(ctx)
+    return settingsView(ctx, auth.user.id)
+  })
 
   route(http, contract.githubRepos, async ({ auth }) => {
     const token = await requireToken(ctx, auth.user.id)

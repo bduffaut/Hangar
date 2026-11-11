@@ -2,6 +2,7 @@
 import {
   type AddressCheckResult,
   brand,
+  githubAppCopy,
   navCopy,
   type SettingsView,
   type SystemInfo,
@@ -9,6 +10,7 @@ import {
   TUNNEL_SERVICE_URL,
 } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
@@ -23,11 +25,15 @@ import {
   BasePassword,
   BaseSkeleton,
   BaseSwitch,
+  useConfirmAction,
   useNotify,
 } from '../ui/index.ts'
 
 useDocumentTitle(navCopy.settings)
 const notify = useNotify()
+const confirm = useConfirmAction()
+const route = useRoute()
+const router = useRouter()
 
 const settings = ref<SettingsView | null>(null)
 const info = ref<SystemInfo | null>(null)
@@ -55,14 +61,33 @@ async function load() {
   }
   info.value = await api('systemInfo').catch(() => null)
 }
-onMounted(load)
+onMounted(async () => {
+  // GitHub comes back to /settings/github-app?code=…&state=… after creating the app.
+  const { code, state } = route.query
+  if (route.path === '/settings/github-app' && typeof code === 'string') {
+    await router.replace('/settings')
+    await act(
+      'github-app',
+      async () => {
+        apply(
+          await api('githubAppComplete', {
+            body: { code, state: typeof state === 'string' ? state : '' },
+          }),
+        )
+        notify.success(githubAppCopy.created)
+      },
+      false,
+    )
+  }
+  await load()
+})
 
-async function act(key: string, action: () => Promise<void>) {
+async function act(key: string, action: () => Promise<void>, toast = true) {
   busy.value = key
   errors.value = { ...errors.value, [key]: null }
   try {
     await action()
-    notify.success(toastCopy.saved)
+    if (toast) notify.success(toastCopy.saved)
   } catch (e) {
     errors.value = { ...errors.value, [key]: messageOf(e) }
   } finally {
@@ -124,6 +149,37 @@ async function checkDomain(domain: string) {
 const checkOf = (domain: string) => {
   const check = checks.value[domain]
   return check && check !== 'checking' ? check : null
+}
+
+/**
+ * GitHub's manifest flow: a form posted to github.com, where the admin confirms the new app.
+ * GitHub then sends the browser back to /settings/github-app with a code.
+ */
+const setUpGithubApp = () =>
+  act(
+    'github-app',
+    async () => {
+      const { action, manifest } = await api('githubAppManifest')
+      const form = document.createElement('form')
+      form.method = 'post'
+      form.action = action
+      const field = document.createElement('input')
+      field.type = 'hidden'
+      field.name = 'manifest'
+      field.value = manifest
+      form.append(field)
+      document.body.append(form)
+      form.submit()
+    },
+    false,
+  )
+
+const githubApp = computed(() => settings.value?.githubApp ?? null)
+const openGithub = (url: string) => window.open(url, '_blank', 'noopener')
+
+async function removeGithubApp() {
+  if (!(await confirm({ ...githubAppCopy.removeConfirm, danger: true }))) return
+  await act('github-app', async () => apply(await api('removeGithubApp')))
 }
 
 const saveTunnel = (token: string | null) =>
@@ -342,6 +398,52 @@ const saveTunnel = (token: string | null) =>
       </div>
     </HgPanel>
 
+    <HgPanel
+      id="github-sign-in"
+      :title="githubAppCopy.title"
+      :description="githubAppCopy.description"
+    >
+      <div class="hg-form">
+        <template v-if="githubApp">
+          <p class="hg-connected">
+            {{ githubAppCopy.connected(githubApp.slug, githubApp.owner) }}
+          </p>
+          <p class="hg-muted hg-note">{{ githubAppCopy.newAddressHint }}</p>
+        </template>
+        <p v-else class="hg-muted hg-note">{{ githubAppCopy.setUpHelp }}</p>
+        <BaseMessage v-if="busy === 'github-app' && !githubApp" tone="info">{{
+          githubAppCopy.finishing
+        }}</BaseMessage>
+        <BaseMessage v-if="errors['github-app']" tone="error">{{
+          errors['github-app']
+        }}</BaseMessage>
+        <div class="hg-actions">
+          <template v-if="githubApp">
+            <BaseButton
+              icon="github"
+              :label="githubAppCopy.manage"
+              @click="openGithub(githubApp.settingsUrl)"
+            />
+            <BaseButton
+              variant="ghost"
+              :label="githubAppCopy.remove"
+              :disabled="busy !== null"
+              @click="removeGithubApp"
+            />
+          </template>
+          <BaseButton
+            v-else
+            variant="primary"
+            icon="github"
+            :label="githubAppCopy.setUp"
+            :loading="busy === 'github-app'"
+            :disabled="busy !== null"
+            @click="setUpGithubApp"
+          />
+        </div>
+      </div>
+    </HgPanel>
+
     <HgPanel v-if="info" title="System">
       <dl class="hg-system">
         <div>
@@ -370,6 +472,9 @@ const saveTunnel = (token: string | null) =>
 }
 .hg-note {
   font-size: var(--hg-size-sm);
+}
+.hg-connected {
+  color: var(--hg-status-ready);
 }
 .hg-actions {
   display: flex;

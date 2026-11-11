@@ -55,7 +55,11 @@ const password = z
     error: `Passwords can be at most ${PASSWORD_MAX_LENGTH} characters.`,
   })
 
-export const setupStatus = z.object({ needsSetup: z.boolean() })
+export const setupStatus = z.object({
+  needsSetup: z.boolean(),
+  /** Whether the sign-in page offers "Sign in with GitHub". */
+  githubSignIn: z.boolean(),
+})
 export const setupComplete = z.object({
   setupCode: z
     .string()
@@ -167,6 +171,17 @@ export const settingsView = z.object({
   githubConnected: z.boolean(),
   tunnelConfigured: z.boolean(),
   towerUrl: z.string().nullable(),
+  /** The GitHub App for "Sign in with GitHub", once an admin has created it. */
+  githubApp: z
+    .object({
+      slug: z.string(),
+      owner: z.string(),
+      /** The app's page on GitHub, where its owner manages it. */
+      settingsUrl: z.string(),
+      /** Where a person chooses which repositories Hangar may see. */
+      installUrl: z.string(),
+    })
+    .nullable(),
 })
 export type SettingsView = z.infer<typeof settingsView>
 
@@ -184,6 +199,48 @@ export const githubToken = z.object({
   token: z.string().trim().max(500, { error: 'That GitHub token is too long.' }).nullable(),
 })
 export const githubAccount = z.object({ connected: z.boolean(), login: z.string().nullable() })
+
+/** The signed-in person's own sign-in methods and GitHub connection. */
+export const accountView = z.object({
+  hasPassword: z.boolean(),
+  github: z.object({
+    /** Hangar holds a working token for this person's repositories. */
+    connected: z.boolean(),
+    /** `app` came from Connect with GitHub; `token` was pasted by hand. */
+    kind: z.enum(['app', 'token']).nullable(),
+    /** The GitHub account they sign in with, if any. */
+    login: z.string().nullable(),
+  }),
+})
+export type AccountView = z.infer<typeof accountView>
+export const setFirstPassword = z.object({ password })
+
+// Sign in with GitHub (D37). GitHub sends the browser back to /auth/github with a code and the
+// state Hangar made, and the dashboard hands both to githubFinish.
+
+export const GITHUB_PURPOSES = ['login', 'link', 'invite'] as const
+export type GithubPurpose = (typeof GITHUB_PURPOSES)[number]
+export const githubStart = z.object({
+  purpose: z.enum(GITHUB_PURPOSES),
+  /** The invite being accepted, for `invite`. */
+  token: linkTokenValue.optional(),
+  /** For `invite`: a username of their choice, instead of their GitHub name. */
+  username: username.optional(),
+})
+export const githubRedirect = z.object({ url: z.string() })
+const oauthCode = z.string().trim().min(1).max(200)
+export const githubFinish = z.object({ code: oauthCode, state: z.string().min(1).max(100) })
+export const githubFinished = z.object({
+  purpose: z.enum(GITHUB_PURPOSES),
+  /** A new session, after signing in or creating an account. */
+  session: session.nullable(),
+  /** No repositories are shared with Hangar yet: send them to `installUrl`. */
+  needsInstall: z.boolean(),
+  installUrl: z.string().nullable(),
+})
+export type GithubFinished = z.infer<typeof githubFinished>
+/** A form the dashboard posts to GitHub, which creates the app and comes back with a code. */
+export const githubAppManifest = z.object({ action: z.string(), manifest: z.string() })
 export const tunnelToken = z.object({
   token: z.string().trim().max(4000, { error: 'That tunnel token is too long.' }).nullable(),
 })

@@ -14,6 +14,7 @@ import { ensureTunnel, syncRouting } from '../../worker/reconciler.ts'
 import { users } from '../../db/schema.ts'
 import { listProjects } from '../projects/repo.ts'
 import { getSettings, setSettings } from './repo.ts'
+import { disconnectGithub, githubAppView } from '../github/service.ts'
 import { GITHUB_TOKEN_AAD, getGithubToken, TUNNEL_TOKEN_AAD, userGithubAad } from './secrets.ts'
 
 /** First boot only: adopt the LAN IP the installer detected. Afterwards the database owns it. */
@@ -59,6 +60,7 @@ export async function settingsView(ctx: Ctx, userId: string): Promise<SettingsVi
     githubConnected: (await getGithubToken(ctx, userId)) !== null,
     tunnelConfigured: s.cloudflareTunnelToken !== null,
     towerUrl: s.lanDomain ? `http://${towerHostname(s.lanDomain)}` : null,
+    githubApp: await githubAppView(ctx),
   }
 }
 
@@ -135,12 +137,18 @@ async function cleanPublicDomains(ctx: Ctx, input: string[]): Promise<string[]> 
   return domains
 }
 
-/** Verifies a GitHub token by asking GitHub who it belongs to, then stores it encrypted. */
+/**
+ * Verifies a GitHub token by asking GitHub who it belongs to, then stores it encrypted. A pasted
+ * token never expires, so it replaces any GitHub App token. Null disconnects GitHub entirely.
+ */
 export async function connectGithub(ctx: Ctx, userId: string, token: string | null) {
-  const store = (githubToken: string | null) =>
-    ctx.db.update(users).set({ githubToken }).where(eq(users.id, userId))
+  const store = (githubToken: string) =>
+    ctx.db
+      .update(users)
+      .set({ githubToken, githubTokenExpiresAt: null, githubRefreshToken: null })
+      .where(eq(users.id, userId))
   if (!token) {
-    await store(null)
+    await disconnectGithub(ctx, userId)
     return { connected: false, login: null }
   }
   const user = await ctx.github.currentUser(token).catch((error: unknown) => {

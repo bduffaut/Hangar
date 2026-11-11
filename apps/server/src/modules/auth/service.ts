@@ -150,7 +150,7 @@ export async function login(ctx: Ctx, username: string, password: string) {
     throw new AuthError(401, 'invalid_credentials', 'The username or password is not correct.')
   }
   failures.delete(name)
-  if (!user.passwordHash.includes(CURRENT_HASH)) {
+  if (!user.passwordHash!.includes(CURRENT_HASH)) {
     await upgradePasswordHash(ctx.db, user.id, await hashPassword(password))
   }
   return {
@@ -167,6 +167,9 @@ export async function changePassword(
 ) {
   const user = await getUserById(ctx.db, userId)
   if (!user) throw new AuthError(401, 'unauthenticated', 'Sign in to continue.')
+  if (user.passwordHash === null) {
+    throw new AuthError(409, 'no_password', 'This account has no password yet. Set one instead.')
+  }
   checkLockout(user.username)
   if (!(await verify(user.passwordHash, input.currentPassword).catch(() => false))) {
     recordFailure(user.username)
@@ -174,6 +177,27 @@ export async function changePassword(
   }
   failures.delete(user.username)
   await updatePassword(ctx.db, user.id, await hashPassword(input.newPassword))
+  return {
+    user: { id: user.id, username: user.username, role: user.role },
+    ...(await createSession(ctx, user.id)),
+  }
+}
+
+/**
+ * For an account made with GitHub: its first password, so it can also sign in without GitHub.
+ * Like a change, it ends every other session.
+ */
+export async function setFirstPassword(ctx: Ctx, userId: string, password: string) {
+  const user = await getUserById(ctx.db, userId)
+  if (!user) throw new AuthError(401, 'unauthenticated', 'Sign in to continue.')
+  if (user.passwordHash !== null) {
+    throw new AuthError(
+      409,
+      'has_password',
+      'This account already has a password. Change it instead.',
+    )
+  }
+  await updatePassword(ctx.db, user.id, await hashPassword(password))
   return {
     user: { id: user.id, username: user.username, role: user.role },
     ...(await createSession(ctx, user.id)),

@@ -36,6 +36,13 @@ export const router = createRouter({
       meta: { public: true },
     },
     {
+      // GitHub sends people back here after they authorize the app, with a code and the state.
+      path: '/auth/github',
+      name: 'github-callback',
+      component: () => import('./views/GithubCallbackView.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('./views/HomeView.vue'),
@@ -61,6 +68,8 @@ export const router = createRouter({
     },
     {
       path: '/settings',
+      // GitHub comes back to the alias after creating the app (see SettingsView).
+      alias: '/settings/github-app',
       name: 'settings',
       component: () => import('./views/SettingsView.vue'),
       meta: { shell: true, admin: true },

@@ -7,10 +7,12 @@ import {
   sessionView,
   setSessionCookie,
 } from '../../http/server.ts'
+import { getSettings } from '../settings/repo.ts'
 import { linkInfo, redeemLink } from '../users/service.ts'
 import {
   changePassword,
   completeSetup,
+  setFirstPassword,
   dashboardLayout,
   endSession,
   login,
@@ -25,7 +27,10 @@ const AUTH_RATE_LIMIT = 10
 export function authRoutes(http: Http) {
   const { ctx } = http
 
-  route(http, contract.setupStatus, async () => ({ needsSetup: await needsSetup(ctx) }))
+  route(http, contract.setupStatus, async () => ({
+    needsSetup: await needsSetup(ctx),
+    githubSignIn: (await getSettings(ctx.db)).githubApp !== null,
+  }))
 
   route(
     http,
@@ -75,6 +80,17 @@ export function authRoutes(http: Http) {
     contract.changePassword,
     async ({ auth, body, request, reply }) => {
       const result = await changePassword(ctx, auth.user.id, body)
+      setSessionCookie(request, reply, result.token, result.expiresAt)
+      return sessionView(ctx, result)
+    },
+    { rateLimit: AUTH_RATE_LIMIT },
+  )
+
+  route(
+    http,
+    contract.setFirstPassword,
+    async ({ auth, body, request, reply }) => {
+      const result = await setFirstPassword(ctx, auth.user.id, body.password)
       setSessionCookie(request, reply, result.token, result.expiresAt)
       return sessionView(ctx, result)
     },

@@ -7,6 +7,8 @@ import { api, onUnauthorized, setCsrfToken } from '../api/client.ts'
 export const useSessionStore = defineStore('session', () => {
   const session = ref<Session | null>(null)
   const needsSetup = ref<boolean | null>(null)
+  /** The sign-in page offers "Sign in with GitHub". */
+  const githubSignIn = ref(false)
   const loaded = ref(false)
   /** True when the server could not be reached on first load. */
   const unreachable = ref(false)
@@ -26,7 +28,9 @@ export const useSessionStore = defineStore('session', () => {
   async function load() {
     if (loaded.value) return
     try {
-      needsSetup.value = (await api('setupStatus')).needsSetup
+      const status = await api('setupStatus')
+      needsSetup.value = status.needsSetup
+      githubSignIn.value = status.githubSignIn
     } catch {
       unreachable.value = true
       return
@@ -39,6 +43,7 @@ export const useSessionStore = defineStore('session', () => {
   return {
     session,
     needsSetup,
+    githubSignIn,
     unreachable,
     signedIn,
     username,

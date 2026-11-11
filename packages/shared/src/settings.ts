@@ -10,6 +10,17 @@ export const settingsSchema = {
   githubToken: z.string().nullable(), // encrypted
   cloudflareTunnelToken: z.string().nullable(), // encrypted
   setupCodeHash: z.string().nullable(),
+  /** The GitHub App people sign in with, created from the Control Tower (decision D37). */
+  githubApp: z
+    .object({
+      id: z.number(),
+      slug: z.string(),
+      clientId: z.string(),
+      clientSecret: z.string(), // encrypted
+      owner: z.string(),
+      htmlUrl: z.string(),
+    })
+    .nullable(),
 }
 
 export type SettingKey = keyof typeof settingsSchema
@@ -23,6 +34,7 @@ export const SETTING_DEFAULTS: Settings = {
   githubToken: null,
   cloudflareTunnelToken: null,
   setupCodeHash: null,
+  githubApp: null,
 }
 
 export const SETTING_KEYS = Object.keys(settingsSchema) as SettingKey[]

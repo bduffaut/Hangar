@@ -4,6 +4,8 @@ import { computed, onMounted, ref } from 'vue'
 import { api, messageOf } from '../api/client.ts'
 import BrandMark from '../brand/BrandMark.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
+import { goToGithub } from '../lib/github.ts'
+import { useSessionStore } from '../stores/session.ts'
 import { BaseButton, BaseField, BaseInput, BaseMessage, BasePassword } from '../ui/index.ts'
 
 // An invite or password reset link. The token sits in the address's #fragment, which is never sent
@@ -15,7 +17,24 @@ const password = ref('')
 const busy = ref(false)
 const error = ref<string | null>(null)
 
+const session = useSessionStore()
 const isInvite = computed(() => info.value?.kind === 'invite')
+const withGithub = computed(() => isInvite.value && session.githubSignIn)
+
+async function continueWithGithub() {
+  busy.value = true
+  error.value = null
+  try {
+    await goToGithub({
+      purpose: 'invite',
+      token,
+      username: username.value.trim() ? username.value.trim() : undefined,
+    })
+  } catch (e) {
+    error.value = messageOf(e)
+    busy.value = false
+  }
+}
 const title = computed(() => {
   if (!info.value) return ''
   if (!info.value.valid) return linkCopy.invalidTitle
@@ -68,16 +87,32 @@ async function submit() {
         </p>
       </div>
       <template v-if="info.valid">
-        <BaseField v-if="isInvite" label="Username" for="link-username">
+        <BaseField
+          v-if="isInvite"
+          :label="withGithub ? linkCopy.usernameOptional : 'Username'"
+          for="link-username"
+        >
           <BaseInput id="link-username" v-model="username" autocomplete="username" />
         </BaseField>
+        <template v-if="withGithub">
+          <p class="hg-muted hg-link-note">{{ linkCopy.githubBody }}</p>
+          <BaseButton
+            variant="primary"
+            icon="github"
+            :label="linkCopy.withGithub"
+            :disabled="busy"
+            fluid
+            @click="continueWithGithub"
+          />
+          <p class="hg-link-or" aria-hidden="true">{{ linkCopy.orPassword }}</p>
+        </template>
         <BaseField label="Password" for="link-password" help="At least 10 characters.">
           <BasePassword id="link-password" v-model="password" autocomplete="new-password" />
         </BaseField>
         <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
         <BaseButton
           type="submit"
-          variant="primary"
+          :variant="withGithub ? 'secondary' : 'primary'"
           :loading="busy"
           :label="isInvite ? linkCopy.create : linkCopy.save"
           fluid
@@ -103,6 +138,22 @@ async function submit() {
 .hg-link-heading {
   display: grid;
   gap: var(--hg-space-1);
+}
+.hg-link-note {
+  font-size: var(--hg-size-sm);
+}
+.hg-link-or {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--hg-space-3);
+  color: var(--hg-ink-muted);
+  font-size: var(--hg-size-sm);
+}
+.hg-link-or::before,
+.hg-link-or::after {
+  content: '';
+  border-top: 1px solid var(--hg-line);
 }
 .hg-link-heading h1 {
   font-size: var(--hg-size-lg);

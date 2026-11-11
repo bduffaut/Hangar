@@ -220,6 +220,54 @@ export function clearSessionCookie(request: FastifyRequest, reply: FastifyReply)
   reply.clearCookie(sessionCookieName(request), { path: '/', secure: isPublicRequest(request) })
 }
 
+// Ties a sign-in with GitHub to the browser that started it (the OAuth state).
+const FLOW_COOKIE = 'hangar_github_flow'
+const flowCookieName = (request: FastifyRequest) =>
+  isPublicRequest(request) ? `__Host-${FLOW_COOKIE}` : FLOW_COOKIE
+
+export function setFlowCookie(request: FastifyRequest, reply: FastifyReply, state: string) {
+  reply.setCookie(flowCookieName(request), state, {
+    signed: true,
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: isPublicRequest(request),
+    maxAge: 10 * 60,
+  })
+}
+
+/** The state this browser started with, if any, and clears it: a flow finishes once. */
+export function takeFlowCookie(request: FastifyRequest, reply: FastifyReply): string | undefined {
+  const raw = request.cookies[flowCookieName(request)]
+  if (raw === undefined) return undefined
+  reply.clearCookie(flowCookieName(request), { path: '/', secure: isPublicRequest(request) })
+  const unsigned = request.unsignCookie(raw)
+  return unsigned.valid && unsigned.value ? unsigned.value : undefined
+}
+
+/**
+ * The Control Tower origin a request came from. Only for state-changing requests, whose Origin
+ * the request gate has already checked against the tower's own addresses.
+ */
+export function requestOrigin(request: FastifyRequest): string {
+  const origin = request.headers.origin
+  if (!origin)
+    throw new UserError(403, 'bad_origin', 'This request did not come from the Control Tower.')
+  return origin
+}
+
+/** The signed-in user, when there is one; for public endpoints that behave differently. */
+export async function optionalSession(
+  ctx: Ctx,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<AuthenticatedSession | null> {
+  return authenticate(ctx, request, reply).catch((error: unknown) => {
+    if (error instanceof UserError && error.status === 401) return null
+    throw error
+  })
+}
+
 /** Loads the session from the cookie; for non-GET requests also checks the CSRF token. */
 export async function authenticate(
   ctx: Ctx,

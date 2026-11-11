@@ -7,7 +7,9 @@ export * from './statuses.ts'
 export * from './contract.ts'
 export * as schemas from './schemas.ts'
 export * from './validation.ts'
+export { GITHUB_PURPOSES } from './schemas.ts'
 export type {
+  AccountView,
   AddressCheckResult,
   AddressEvent,
   AddressView,
@@ -15,6 +17,8 @@ export type {
   InviteView,
   DeploymentView,
   ErrorBody,
+  GithubFinished,
+  GithubPurpose,
   LogLineView,
   MetricsSample,
   ProjectView,

@@ -19,7 +19,8 @@ const CONTENT_SECURITY_POLICY = [
   "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
-  "form-action 'self'",
+  // Creating the GitHub App posts its manifest to github.com (D37).
+  "form-action 'self' https://github.com",
   "frame-ancestors 'none'",
 ].join('; ')
 

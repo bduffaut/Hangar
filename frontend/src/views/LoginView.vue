@@ -3,6 +3,7 @@ import { authCopy, brand } from '@hangar/shared'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { messageOf } from '../api/client.ts'
+import { goToGithub } from '../lib/github.ts'
 import BrandMark from '../brand/BrandMark.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { useSessionStore } from '../stores/session.ts'
@@ -16,6 +17,17 @@ const username = ref('')
 const password = ref('')
 const busy = ref(false)
 const error = ref<string | null>(null)
+
+async function signInWithGithub() {
+  busy.value = true
+  error.value = null
+  try {
+    await goToGithub({ purpose: 'login' })
+  } catch (e) {
+    error.value = messageOf(e)
+    busy.value = false
+  }
+}
 
 async function signIn() {
   busy.value = true
@@ -54,6 +66,16 @@ async function signIn() {
       }}</BaseMessage>
       <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
       <BaseButton type="submit" variant="primary" :loading="busy" :label="authCopy.signIn" fluid />
+      <template v-if="session.githubSignIn">
+        <p class="hg-login-or" aria-hidden="true">{{ authCopy.or }}</p>
+        <BaseButton
+          icon="github"
+          :label="authCopy.withGithub"
+          :disabled="busy"
+          fluid
+          @click="signInWithGithub"
+        />
+      </template>
     </form>
   </main>
 </template>
@@ -85,6 +107,20 @@ async function signIn() {
 .hg-login-heading {
   display: grid;
   gap: var(--hg-space-2);
+}
+.hg-login-or {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--hg-space-3);
+  margin: calc(-1 * var(--hg-space-2)) 0;
+  color: var(--hg-ink-muted);
+  font-size: var(--hg-size-sm);
+}
+.hg-login-or::before,
+.hg-login-or::after {
+  content: '';
+  border-top: 1px solid var(--hg-line);
 }
 .hg-login-heading h1 {
   font-size: var(--hg-size-xl);

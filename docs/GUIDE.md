@@ -405,6 +405,19 @@ There is no public sign-up. Open **People**, create an invite link, and send it 
 
 Each account can run code on your server, so invite only people you trust. SECURITY.md lists what the separation does and does not cover.
 
+### Sign in with GitHub
+
+Optional, and set up once by an admin: **Settings → Sign in with GitHub → Set up on GitHub**. GitHub asks you to confirm a new app, then sends you back. After that:
+
+- The sign-in page has a **Sign in with GitHub** button. It only works for GitHub accounts already connected to a Hangar account; a stranger gets nothing.
+- An invite link offers **Continue with GitHub**: one click creates the account and connects GitHub for deploys.
+- Existing accounts connect once under **Account → Connect with GitHub**.
+- Each person chooses which repositories Hangar may see (**Choose repositories**). Hangar can read those and add a webhook, nothing more.
+
+People who joined with GitHub have no password until they set one under **Account**. The app's GitHub login renews itself every few hours; if it ever stops, **Connect again** fixes it. If you later give the Control Tower a new address, add `<address>/auth/github` as a callback URL in the app's settings on GitHub.
+
+Locked out? On the server, `sudo hangar-admin reset-password <username>` sets a new password.
+
 ### Putting apps on your own domain
 
 Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine. Everything below is in Settings, under **Public access**.
