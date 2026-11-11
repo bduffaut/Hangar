@@ -18,6 +18,7 @@ export type {
   InviteView,
   DeploymentView,
   ErrorBody,
+  FlightStats,
   GithubFinished,
   GithubPurpose,
   LogLineView,

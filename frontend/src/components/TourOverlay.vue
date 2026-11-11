@@ -16,12 +16,15 @@ const card = ref<HTMLElement | null>(null)
 const cardPosition = ref<{ top: number; left: number } | null>(null)
 
 /** Space kept between the highlight, the card, and the window edges. */
-const GAP = 12
-const PAD = 6
+const GAP = 14
+const PAD = 8
 
+/** The step's element, or the whole widget box around it, so the highlight covers its frame. */
 function target() {
   const step = tour.current.value
-  return step ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`) : null
+  const element = step ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`) : null
+  if (!element || element.getClientRects().length === 0) return null
+  return element.closest<HTMLElement>('.hg-widget') ?? element
 }
 
 // While the tour is open the highlight is re-measured every frame, so it stays on its target
@@ -48,7 +51,10 @@ function track() {
   frame = requestAnimationFrame(track)
 }
 
-/** Below the highlight if it fits, else above, else pinned to the bottom of the window. */
+/**
+ * Beside the highlight, never over it: below if it fits, then above, then to the right or left.
+ * Without a target, centered.
+ */
 function placeCard() {
   const el = card.value
   if (!el) return
@@ -63,13 +69,25 @@ function placeCard() {
     top = (vh - h) / 2
     left = (vw - w) / 2
   } else {
-    const below = b.top + b.height + GAP
-    const above = b.top - GAP - h
-    if (below + h <= vh - GAP) top = below
-    else if (above >= GAP) top = above
-    else top = vh - h - GAP
-    // Line up with the highlight's left edge, or its right edge when it sits on the right.
-    left = b.left + b.width / 2 > vw / 2 ? b.left + b.width - w : b.left
+    const alignX = b.left + b.width / 2 > vw / 2 ? b.left + b.width - w : b.left
+    const alignY = Math.min(Math.max(GAP, b.top), vh - h - GAP)
+    if (b.top + b.height + GAP + h <= vh - GAP) {
+      top = b.top + b.height + GAP
+      left = alignX
+    } else if (b.top - GAP - h >= GAP) {
+      top = b.top - GAP - h
+      left = alignX
+    } else if (b.left + b.width + GAP + w <= vw - GAP) {
+      top = alignY
+      left = b.left + b.width + GAP
+    } else if (b.left - GAP - w >= GAP) {
+      top = alignY
+      left = b.left - GAP - w
+    } else {
+      // A target bigger than the window: the card sits at its bottom edge, inside it.
+      top = vh - h - GAP
+      left = alignX
+    }
   }
   left = Math.min(Math.max(GAP, left), vw - w - GAP)
   top = Math.min(Math.max(GAP, top), vh - h - GAP)
@@ -98,6 +116,16 @@ watch(
     if (previous === null || previous === undefined)
       returnFocus = document.activeElement as HTMLElement | null
     await nextTick()
+    // A step whose element is not on this page (no server menu yet, a removed widget) is
+    // skipped, after giving the board a moment to render.
+    for (let tries = 0; !target() && tries < 20; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    if (tour.step.value !== step) return
+    if (!target()) {
+      tour.next()
+      return
+    }
     target()?.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' })
     if (!frame) frame = requestAnimationFrame(track)
     card.value?.focus({ preventScroll: true })
@@ -187,7 +215,7 @@ const cardStyle = () =>
 /* Positioned from the target every frame, so no transition: it would lag behind. */
 .hg-tour-spotlight {
   position: fixed;
-  border-radius: calc(var(--hg-radius-lg) + 4px);
+  border-radius: 0;
   box-shadow: 0 0 0 200vmax var(--hg-scrim);
   outline: 2px solid var(--hg-accent);
   outline-offset: 0;
@@ -204,7 +232,7 @@ const cardStyle = () =>
   display: grid;
   gap: var(--hg-space-2);
   padding: var(--hg-space-4);
-  border-radius: var(--hg-radius-lg);
+  border-radius: 0;
   background: var(--hg-panel);
   border: 1px solid var(--hg-line);
   border-top: 3px solid var(--hg-accent);

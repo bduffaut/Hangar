@@ -83,5 +83,7 @@ const serverPaths = [
 /** Whether a request (path with or without its query) may be relayed to a server. */
 export function isServerRequest(method: string, path: string): boolean {
   const bare = path.split('?')[0]!
+  // The server's fetch would resolve dot segments (also encoded ones) into another path.
+  if (/(^|\/)(\.|%2e){1,2}(\/|$)/i.test(bare) || /%2e%2e|%2f|%5c|\\/i.test(bare)) return false
   return serverPaths.some((p) => p.method === method && p.pattern.test(bare))
 }

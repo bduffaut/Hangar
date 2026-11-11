@@ -12,7 +12,7 @@ import {
   triggerModeCopy,
 } from '@hangar/shared'
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import HgPanel from '../components/HgPanel.vue'
 import AddressEditor from '../components/project/AddressEditor.vue'
@@ -32,6 +32,7 @@ import {
 
 useDocumentTitle(navCopy.newProject)
 const router = useRouter()
+const route = useRoute()
 const projects = useProjectsStore()
 
 interface Repo {
@@ -46,7 +47,8 @@ const repos = ref<Repo[]>([])
 const branches = ref<string[]>([])
 const loadingRepos = ref(false)
 
-const repoUrl = ref('')
+// Publish's "More options" arrives with the repository chosen.
+const repoUrl = ref(typeof route.query.repo === 'string' ? route.query.repo : '')
 const selectedRepo = ref<string | null>(null)
 const name = ref('')
 const nameTouched = ref(false)
@@ -106,20 +108,24 @@ watch(selectedRepo, async (fullName) => {
 })
 
 // Suggest a name from the repository until the person edits it themselves.
-watch(repoUrl, (url) => {
-  if (nameTouched.value) return
-  const last =
-    url
-      .replace(/\.git$/, '')
-      .split('/')
-      .filter(Boolean)
-      .at(-1) ?? ''
-  name.value = last
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-})
+watch(
+  repoUrl,
+  (url) => {
+    if (nameTouched.value) return
+    const last =
+      url
+        .replace(/\.git$/, '')
+        .split('/')
+        .filter(Boolean)
+        .at(-1) ?? ''
+    name.value = last
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40)
+  },
+  { immediate: true },
+)
 
 const address = computed(() =>
   settings.value?.lanDomain && name.value

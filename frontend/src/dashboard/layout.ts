@@ -29,17 +29,13 @@ export const rowsFor = (px: number) => Math.ceil((px + GRID.space) / GRID.rowHei
  * Where each widget sits on a fresh dashboard, top to bottom; the grid floats each one up as far
  * as it goes. Widget ids double as their type; sizes come from the registry unless given here.
  */
+// The server's readings sit above the board (FlightDeck), so the board starts with the traffic;
+// gauges like temperature and battery can be added while customizing.
 const DEFAULT_PLACEMENT: { id: string; x: number; y: number; w?: number }[] = [
   { id: 'hangar.departures', x: 0, y: 0 },
-  { id: 'hangar.cpu', x: 0, y: 20 },
-  { id: 'hangar.memory', x: 2, y: 20 },
-  { id: 'hangar.disk', x: 4, y: 20 },
-  { id: 'hangar.temperature', x: 6, y: 20 },
-  { id: 'hangar.battery', x: 8, y: 20 },
-  { id: 'hangar.uptime', x: 10, y: 20 },
-  { id: 'hangar.projects', x: 0, y: 60 },
-  { id: 'hangar.activity', x: 0, y: 100, w: 7 },
-  { id: 'hangar.outcomes', x: 7, y: 100, w: 5 },
+  { id: 'hangar.projects', x: 0, y: 20 },
+  { id: 'hangar.activity', x: 0, y: 60, w: 7 },
+  { id: 'hangar.outcomes', x: 7, y: 60, w: 5 },
 ]
 
 /** A grid entry for a registered widget, with its current size rules from the registry. */
@@ -72,8 +68,15 @@ export function defaultLayout(): GridWidget[] {
  * come from the registry, so a saved layout never keeps limits a widget no longer has. Anything
  * unreadable gives the default layout.
  */
+/** Widgets of layouts saved before the flight deck took over their readings. */
+const RETIRED = new Set(['hangar.cpu', 'hangar.memory', 'hangar.disk', 'hangar.uptime'])
+
 export function restoreLayout(saved: unknown): GridWidget[] {
   if (saved === null || saved === undefined) return defaultLayout()
+  // A layout from before the flight deck had its readings as widgets: start it afresh, once.
+  if (Array.isArray(saved) && saved.some((w) => RETIRED.has((w as { id?: string })?.id ?? ''))) {
+    return defaultLayout()
+  }
   const parsed = parseLayout<GridWidget>(saved, {
     version: LAYOUT_VERSION,
     fallback: defaultLayout,

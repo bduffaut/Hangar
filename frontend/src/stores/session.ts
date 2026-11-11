@@ -9,6 +9,10 @@ export const useSessionStore = defineStore('session', () => {
   const needsSetup = ref<boolean | null>(null)
   /** The sign-in page offers "Sign in with GitHub". */
   const githubSignIn = ref(false)
+  /** A new GitHub account can sign up without an invite. */
+  const openSignUp = ref(false)
+  /** This is someone's own server, run from that Hangar. */
+  const managedBy = ref<string | null>(null)
   const loaded = ref(false)
   /** True when the server could not be reached on first load. */
   const unreachable = ref(false)
@@ -16,6 +20,8 @@ export const useSessionStore = defineStore('session', () => {
   const signedIn = computed(() => session.value !== null)
   const username = computed(() => session.value?.user.username ?? null)
   const isAdmin = computed(() => session.value?.user.role === 'admin')
+  /** May use this machine; otherwise only servers of their own. */
+  const localAccess = computed(() => session.value?.user.localAccess ?? false)
 
   function apply(next: Session | null) {
     session.value = next
@@ -31,6 +37,8 @@ export const useSessionStore = defineStore('session', () => {
       const status = await api('setupStatus')
       needsSetup.value = status.needsSetup
       githubSignIn.value = status.githubSignIn
+      openSignUp.value = status.openSignUp
+      managedBy.value = status.managedBy
     } catch {
       unreachable.value = true
       return
@@ -44,10 +52,13 @@ export const useSessionStore = defineStore('session', () => {
     session,
     needsSetup,
     githubSignIn,
+    openSignUp,
+    managedBy,
     unreachable,
     signedIn,
     username,
     isAdmin,
+    localAccess,
     load,
     /** Signs in with a session the server just issued (a redeemed link, a changed password). */
     apply,

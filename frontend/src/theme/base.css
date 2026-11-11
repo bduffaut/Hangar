@@ -144,3 +144,98 @@ pre {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * The chart's graticule: a faint grid behind every page, like the lat/long lines of an
+ * aeronautical chart. Fixed, so it does not crawl while scrolling.
+ */
+body {
+  background-color: var(--hg-canvas);
+  background-image:
+    radial-gradient(
+      ellipse 80% 60% at 50% -10%,
+      color-mix(in srgb, var(--hg-accent) 7%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(color-mix(in srgb, var(--hg-line) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--hg-line) 38%, transparent) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    48px 48px,
+    48px 48px;
+  background-attachment: fixed;
+}
+
+/*
+ * The notch: one clipped corner, top right, like the tab of a chart folder. It marks the
+ * primary surfaces (panels, instruments, primary buttons); everything else stays square.
+ */
+.hg-notched {
+  --hg-notch: 12px;
+  position: relative;
+  clip-path: polygon(0 0, calc(100% - var(--hg-notch)) 0, 100% var(--hg-notch), 100% 100%, 0 100%);
+}
+.hg-notched::after {
+  content: '';
+  position: absolute;
+  top: -0.5px;
+  left: calc(100% - var(--hg-notch));
+  width: calc(var(--hg-notch) * 1.4142);
+  height: 1px;
+  background: var(--hg-notch-line, var(--hg-line));
+  transform: rotate(45deg);
+  transform-origin: left top;
+  pointer-events: none;
+}
+
+/* A live dot: something reporting right now. */
+.hg-live-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--hg-status-ready);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hg-status-ready) 20%, transparent);
+  flex: none;
+}
+.hg-live-dot.is-off {
+  background: var(--hg-ink-muted);
+  box-shadow: none;
+}
+.hg-live-dot.is-warn {
+  background: var(--hg-caution);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hg-caution) 20%, transparent);
+}
+
+/* A label and its reading, in rows: the readout of an instrument. */
+.hg-readout {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, max-content) 1fr;
+  margin: 0;
+}
+.hg-readout > dt,
+.hg-readout > dd {
+  margin: 0;
+  padding: var(--hg-space-2) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--hg-line) 60%, transparent);
+  font-size: var(--hg-size-sm);
+}
+.hg-readout > dt {
+  color: var(--hg-ink-muted);
+  padding-right: var(--hg-space-4);
+}
+.hg-readout > dd {
+  overflow-wrap: anywhere;
+}
+.hg-readout > :nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

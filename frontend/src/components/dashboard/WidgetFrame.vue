@@ -32,9 +32,9 @@ defineEmits<{ remove: [] }>()
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--hg-panel);
+  background: color-mix(in srgb, var(--hg-panel) 92%, transparent);
   border: 1px solid var(--hg-line);
-  border-radius: var(--hg-radius-lg);
+  border-radius: 0;
   transition: border-color var(--hg-motion-base) var(--hg-motion-easing);
 }
 .hg-widget.is-fit {
@@ -45,14 +45,17 @@ defineEmits<{ remove: [] }>()
   align-items: center;
   justify-content: space-between;
   gap: var(--hg-space-2);
-  min-height: 2.25rem;
-  padding: var(--hg-space-2) var(--hg-space-4) 0;
+  min-height: 2.5rem;
+  padding: var(--hg-space-2) var(--hg-space-4);
+  margin-bottom: var(--hg-space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--hg-line) 70%, transparent);
+  background: color-mix(in srgb, var(--hg-raised) 30%, transparent);
 }
 .hg-widget-title {
   font-size: var(--hg-size-sm);
-  font-weight: var(--hg-weight-regular);
+  font-weight: var(--hg-weight-bold);
   letter-spacing: 0;
-  color: var(--hg-ink-muted);
+  color: var(--hg-ink);
 }
 .hg-widget-body {
   flex: 1;

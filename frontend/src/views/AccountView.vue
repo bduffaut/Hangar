@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-  type AccountView,
-  accountCopy,
-  navCopy,
-  type SettingsView,
-  toastCopy,
-} from '@hangar/shared'
+import { type AccountView, accountCopy, navCopy, toastCopy } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
@@ -38,7 +32,7 @@ const newPassword = ref('')
 const firstPassword = ref('')
 const githubToken = ref('')
 const account = ref<AccountView | null>(null)
-const githubApp = ref<SettingsView['githubApp']>(null)
+const githubApp = computed(() => account.value?.githubApp ?? null)
 const showToken = ref(false)
 const busy = ref<string | null>(null)
 const errors = ref<Record<string, string | null>>({})
@@ -55,8 +49,7 @@ onMounted(async () => {
   if (back === 'linked') notify.success(accountCopy.linkedToast)
   if (back === 'installed') notify.success(accountCopy.installedToast)
   if (back) void router.replace({ query: {} })
-  const [settings] = await Promise.all([api('getSettings').catch(() => null), loadAccount()])
-  githubApp.value = settings?.githubApp ?? null
+  await loadAccount()
 })
 
 async function act(key: string, action: () => Promise<void>) {

@@ -9,7 +9,9 @@ import OutcomesWidget from './OutcomesWidget.vue'
 import ProjectsWidget from './ProjectsWidget.vue'
 
 const { widgets: copy, categories } = dashboardCopy
-const GAUGES: Reading[] = ['cpu', 'memory', 'disk', 'temperature', 'battery', 'uptime']
+// CPU, memory, disk, and uptime are always on the flight deck above the board; these are the
+// readings some machines have and others do not.
+const GAUGES: Reading[] = ['temperature', 'battery']
 
 /** The Control Tower's own widgets, registered the same way an external library would. */
 export const builtInWidgets = defineDashboardPlugin({
@@ -54,11 +56,7 @@ export const builtInWidgets = defineDashboardPlugin({
         adminOnly: true,
         component: GaugeWidget,
         props: { reading },
-        size: {
-          w: 2,
-          h: rowsFor(200),
-          minH: rowsFor(reading === 'uptime' ? 100 : 140),
-        },
+        size: { w: 3, h: rowsFor(150), minW: 2, minH: rowsFor(120) },
       })
     }
     registerWidget({

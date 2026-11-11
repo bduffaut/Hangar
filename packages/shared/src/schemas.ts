@@ -492,6 +492,19 @@ export const statusEvent = z.object({
 })
 export const addressEvent = z.object({ projectId: id, addresses: z.array(addressView) })
 export type AddressEvent = z.infer<typeof addressEvent>
+/** How one account's deployments on a server went lately: the numbers on the home screen. */
+export const flightStats = z.object({
+  /** The last 14 days, oldest first; `date` is YYYY-MM-DD in UTC. */
+  days: z.array(z.object({ date: z.string(), ready: z.number(), failed: z.number() })),
+  deploys7d: z.number(),
+  ready7d: z.number(),
+  failed7d: z.number(),
+  /** Median seconds from start to live, over the last 30 successful deployments. */
+  medianDeploySeconds: z.number().nullable(),
+  lastDeployAt: timestamp.nullable(),
+})
+export type FlightStats = z.infer<typeof flightStats>
+
 export const metricsSample = z.object({
   ts: timestamp,
   /** Readings of the whole server: admins only. */

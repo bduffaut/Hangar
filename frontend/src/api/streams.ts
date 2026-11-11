@@ -2,6 +2,7 @@
 // drop, but gives up for good when the server answers with an error (for example while Hangar
 // restarts during an update); this reopens the stream with a growing delay in that case too.
 import { type StreamName, streams } from '@hangar/shared'
+import { serverPath } from './client.ts'
 
 export interface Stream {
   close(): void
@@ -22,7 +23,8 @@ export function streamUrl(
   params: Record<string, string> = {},
   query: Record<string, string | number> = {},
 ): string {
-  const path = streams[name].replace(/:(\w+)/g, (_, key: string) =>
+  // Every stream is about one server.
+  const path = serverPath(streams[name], true).replace(/:(\w+)/g, (_, key: string) =>
     encodeURIComponent(params[key] ?? ''),
   )
   const search = new URLSearchParams(

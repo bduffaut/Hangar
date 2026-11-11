@@ -452,6 +452,13 @@ export const contract = {
     response: s.envList,
   }),
 
+  flightStats: endpoint({
+    method: 'GET',
+    path: '/api/stats',
+    access: 'session',
+    scope: 'server',
+    response: s.flightStats,
+  }),
   systemInfo: endpoint({
     method: 'GET',
     path: '/api/system/info',

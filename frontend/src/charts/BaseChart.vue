@@ -29,9 +29,11 @@ watch(isDark, () => {
 })
 
 let stop: (() => void) | null = null
+const fontsReady = ref(0)
 onMounted(() => {
   stop = watchEffect(() => {
     void themeVersion.value
+    void fontsReady.value
     if (!canvas.value) return
     const { data, options } = props.build()
     if (chart && (chart.config as { type?: string }).type === props.type) {
@@ -42,6 +44,14 @@ onMounted(() => {
     }
     chart?.destroy()
     chart = new Chart(canvas.value, { type: props.type, data, options })
+  })
+  // Labels are measured in whatever font is ready; once B612 has loaded, measure them again so
+  // none are clipped.
+  // Chart.js caches text widths, so the chart is rebuilt rather than updated.
+  void document.fonts?.ready.then(() => {
+    chart?.destroy()
+    chart = null
+    fontsReady.value++
   })
 })
 

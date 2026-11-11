@@ -328,6 +328,17 @@ describe('dashboard layout', () => {
   })
 })
 
+describe('flight stats', () => {
+  it('counts the account’s deployments, day by day for two weeks', async () => {
+    const res = await call({ url: '/api/stats', cookie })
+    expect(res.status).toBe(200)
+    const stats = res.json()
+    expect(stats.days).toHaveLength(14)
+    expect(stats.days.at(-1).date).toBe(new Date().toISOString().slice(0, 10))
+    expect(stats).toMatchObject({ deploys7d: expect.any(Number), ready7d: expect.any(Number) })
+  })
+})
+
 describe('settings', () => {
   it('never returns secrets', async () => {
     const res = await call({ url: '/api/settings', cookie })

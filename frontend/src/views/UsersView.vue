@@ -3,6 +3,7 @@ import { type InviteView, navCopy, type UserRole, type UserView, usersCopy } fro
 import { onMounted, ref } from 'vue'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
+import AccessPanel from '../components/AccessPanel.vue'
 import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
@@ -107,7 +108,13 @@ async function remove(user: UserView) {
       <CopyField :value="created.url" label="link" />
     </div>
 
-    <HgPanel :title="usersCopy.accounts" :description="usersCopy.roleHelp">
+    <AccessPanel class="hg-people-access" />
+
+    <HgPanel
+      class="hg-people-accounts"
+      :title="usersCopy.accounts"
+      :description="usersCopy.roleHelp"
+    >
       <BaseSkeleton v-if="!users" height="6rem" />
       <ul v-else class="hg-people-list">
         <li v-for="user in users" :key="user.id" :data-user="user.username">
@@ -146,7 +153,11 @@ async function remove(user: UserView) {
       </ul>
     </HgPanel>
 
-    <HgPanel :title="usersCopy.invites" :description="usersCopy.inviteDescription">
+    <HgPanel
+      class="hg-people-invite-panel"
+      :title="usersCopy.invites"
+      :description="usersCopy.inviteDescription"
+    >
       <div class="hg-people-invites">
         <ul v-if="invites.length" class="hg-people-list">
           <li v-for="invite in invites" :key="invite.id">
@@ -194,7 +205,30 @@ async function remove(user: UserView) {
 .hg-people {
   display: grid;
   gap: var(--hg-space-5);
-  max-width: 48rem;
+  align-items: start;
+}
+/* Wide screens: the accounts on the left, who can get in and invites on the right. */
+@media (min-width: 64rem) {
+  .hg-people {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-areas:
+      'message message'
+      'accounts access'
+      'accounts invites';
+  }
+  .hg-people > .hg-message,
+  .hg-people-link {
+    grid-area: message;
+  }
+  .hg-people-accounts {
+    grid-area: accounts;
+  }
+  .hg-people-access {
+    grid-area: access;
+  }
+  .hg-people-invite-panel {
+    grid-area: invites;
+  }
 }
 .hg-people-link,
 .hg-people-invites,

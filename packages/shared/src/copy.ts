@@ -103,6 +103,9 @@ export const triggerModeCopy = {
 } as const
 
 export const navCopy = {
+  overview: 'Overview',
+  publish: 'Publish',
+  servers: 'Servers',
   projects: 'Projects',
   projectCount: (n: number) => `${n} ${n === 1 ? 'app' : 'apps'} in the hangar`,
   settings: 'Settings',
@@ -111,6 +114,13 @@ export const navCopy = {
   guide: 'Guide',
   signOut: 'Sign out',
   newProject: 'New project',
+  thisServer: 'This server',
+  switchServer: 'Switch server',
+  addServer: 'Add a server',
+  offline: 'Offline',
+  online: 'Online',
+  notPaired: 'Waiting to connect',
+  noServer: 'No server yet',
 } as const
 
 export const instrumentsCopy = {
@@ -321,6 +331,9 @@ export const githubAppCopy = {
     'Added a new address for the Control Tower later? Add it, ending in /auth/github, as a callback URL in the app on GitHub.',
   created: 'Sign in with GitHub is ready.',
   finishing: 'Finishing the setup with GitHub…',
+  openTitle: 'Let anyone sign up with GitHub',
+  openBody:
+    'New accounts can only use servers of their own, never this one. Turn it off to go back to invites only.',
 } as const
 
 export const usersCopy = {
@@ -476,26 +489,36 @@ export const guideCopy = {
   ],
   tour: [
     {
+      target: 'server',
+      title: 'Your servers',
+      body: 'Everything on this page comes from the server chosen here. Switch to another one, or add a server, from this menu.',
+    },
+    {
+      target: 'deck',
+      title: 'The flight deck',
+      body: 'Live readings from that server, and how its deploys went over the last two weeks.',
+    },
+    {
       target: 'departures',
       title: 'Departures',
-      body: 'Deployments under way appear here as a route from holding to airborne, so you can see each one move through its stages.',
+      body: 'Deployments under way move along this route, from waiting to building to live.',
     },
     {
       target: 'projects',
-      title: 'Your projects',
-      body: 'One strip per app: its address, the last commit deployed, and its status. The lights are its recent deployments, newest on the right.',
+      title: 'Your apps',
+      body: 'One row per app: its address, the commit it runs, and its status. The lights are its latest deployments, newest on the right.',
+    },
+    {
+      target: 'new-project',
+      title: 'Publish a repository',
+      body: 'Pick any of your GitHub repositories and Hangar builds it on this server and gives it an address.',
     },
     {
       target: 'customize',
       title: 'Make it yours',
-      body: 'Drag, resize, and remove widgets, or add server readings like temperature and battery. Your layout is saved to your account.',
+      body: 'Move, resize, and remove the boxes below the deck, or add others like temperature and battery. Your layout is saved to your account.',
     },
-    {
-      target: 'new-project',
-      title: 'Add a project',
-      body: 'Connect a GitHub repository here. Hangar builds it and gives it its own address.',
-    },
-    { target: 'guide', title: 'Guide', body: 'How deploys work and what each status means.' },
+    { target: 'guide', title: 'Guide', body: 'How deploys work, and what each status means.' },
   ],
   tourNext: 'Next',
   tourDone: 'Done',
@@ -513,4 +536,202 @@ export const errorCopy = {
   memory: 'Enter a whole number of megabytes from 64 to 65536.',
   network: 'Hangar did not respond. Check that the server is running and reachable.',
   unexpected: 'Something went wrong. Try again.',
+} as const
+
+/** The front door: what a visitor sees before signing in. */
+export const landingCopy = {
+  title: 'Deploy from GitHub to a computer you own',
+  lede: 'Hangar turns a spare laptop or mini PC into your own deploy platform. Sign in with GitHub, run one command on your machine, and publish any repository to your own domain. Your code builds and runs at home, not on someone else’s cloud.',
+  signInGithub: 'Sign in with GitHub',
+  signIn: 'Sign in with a password',
+  inviteOnly: 'Accounts here are by invitation.',
+  flightPlan: 'flight-plan',
+  plan: [
+    { label: 'Repository', value: 'you/portfolio' },
+    { label: 'Server', value: 'home-laptop' },
+    { label: 'Build', value: 'Vite detected, built in 41 s' },
+    { label: 'Address', value: 'portfolio.yourdomain.com' },
+  ],
+  planStatus: 'Live',
+  stepsTitle: 'From sign-in to a live app',
+  steps: [
+    {
+      title: 'Sign in with GitHub',
+      body: 'Hangar sees only the repositories you choose, and can read them but not change them.',
+    },
+    {
+      title: 'Connect your server',
+      body: 'Copy one command and run it on your machine. It installs Hangar there and connects back here. No ports to open.',
+    },
+    {
+      title: 'Put it on the internet',
+      body: 'Paste a free Cloudflare Tunnel token and add your domain. Your home address stays private.',
+    },
+    {
+      title: 'Publish a repository',
+      body: 'Pick a repo and press Publish. Every push after that deploys by itself, with rollback one click away.',
+    },
+  ],
+  whereTitle: 'What runs where',
+  where: [
+    {
+      name: 'This site',
+      body: 'Your sign-in, your list of servers, and the dashboard. It passes your requests to your server.',
+    },
+    {
+      name: 'Your server',
+      body: 'Builds, apps, logs, environment variables, and the tunnel. It connects out to this site and to Cloudflare.',
+    },
+    {
+      name: 'Cloudflare',
+      body: 'Carries visitors to your apps through the tunnel, with HTTPS. Free.',
+    },
+  ],
+  needsTitle: 'What your server needs',
+  needs: [
+    'Ubuntu 22.04 or 24.04, or Debian 12',
+    '2 GB of memory and 10 GB of free disk',
+    'An internet connection. Docker is installed for you.',
+  ],
+  source: 'Hangar is open source',
+} as const
+
+/** This machine is someone's own server; its dashboard lives elsewhere. */
+export const managedCopy = {
+  title: 'This server is run from another Hangar',
+  body: (url: string) =>
+    `Open ${url} and sign in there. Your apps build and run on this machine; that site sends it your requests.`,
+  open: 'Open the dashboard',
+} as const
+
+/** First steps after signing in. */
+export const startCopy = {
+  title: 'Get set up',
+  subtitle: 'Five steps to your first app on your own server. Each one checks itself off.',
+  done: 'Done',
+  next: 'Up next',
+  optional: 'Optional',
+  steps: {
+    github: {
+      title: 'Connect GitHub',
+      body: 'Hangar uses your GitHub connection to list repositories and to download the ones you publish.',
+      action: 'Connect with GitHub',
+      tokenInstead: 'GitHub sign-in is not set up here. Add a token under Account instead.',
+      toAccount: 'Open Account',
+    },
+    server: {
+      title: 'Connect your server',
+      body: 'A computer that stays on: an old laptop, a mini PC, or a home server. Hangar installs itself there and connects back here.',
+      nameLabel: 'What do you call it?',
+      namePlaceholder: 'Home laptop',
+      create: 'Get the install command',
+      run: 'On that machine, open a terminal and run:',
+      waiting: 'Waiting for your server to connect…',
+      waitingHelp:
+        'Installing takes two to five minutes the first time. Leave this page open; it updates by itself.',
+      connected: (name: string) => `${name} is connected.`,
+      expires: 'The command works once, for an hour.',
+      trouble: 'Not showing up?',
+      troubleSteps: [
+        'Run it on the server itself, as written: it needs sudo.',
+        'Check the machine can reach the internet: curl -I https://github.com',
+        'See what Hangar is doing there: sudo docker logs hangar-core',
+      ],
+    },
+    repos: {
+      title: 'Choose repositories',
+      body: 'Pick which of your repositories Hangar may see. You can change this at any time on GitHub.',
+      action: 'Choose on GitHub',
+      check: 'Check again',
+      found: (n: number) => `${n} ${n === 1 ? 'repository' : 'repositories'} ready to publish.`,
+    },
+    internet: {
+      title: 'Put apps on the internet',
+      body: 'Apps already work on your home network. To reach them from anywhere, connect a free Cloudflare Tunnel and add a domain on your Cloudflare account.',
+      action: 'Open Public access',
+      skip: 'Apps still answer on your network without it.',
+    },
+    publish: {
+      title: 'Publish your first app',
+      body: 'Choose a repository and press Publish. Hangar detects the framework, builds it on your server, and gives it an address.',
+      action: 'Choose a repository',
+    },
+  },
+} as const
+
+export const serversCopy = {
+  title: 'Servers',
+  subtitle:
+    'The machines your apps run on. Each one connects out to this site, so it needs no open ports.',
+  here: 'This server',
+  hereBody: 'The machine this site runs on.',
+  add: 'Add a server',
+  addBody: 'Give it a name, then run the command it gives you on that machine.',
+  open: 'Show its apps',
+  showing: 'Showing',
+  rename: 'Rename',
+  newCommand: 'New install command',
+  newCommandBody:
+    'For a command that ran out, or to move this server to another machine. The old connection stops working.',
+  remove: 'Remove',
+  removeConfirm: (name: string) => ({
+    title: `Remove ${name}?`,
+    body: 'It stops connecting here. Its apps keep running on that machine until you remove them there with sudo hangar-uninstall.',
+    action: 'Remove server',
+  }),
+  lastSeen: 'Last seen',
+  never: 'Not connected yet',
+  empty: 'No servers yet. Add one to start publishing apps.',
+  fields: {
+    machine: 'Machine',
+    system: 'System',
+    cpu: 'Processor',
+    memory: 'Memory',
+    address: 'Network address',
+    version: 'Hangar',
+  },
+} as const
+
+export const publishCopy = {
+  title: 'Publish',
+  subtitle: (server: string) => `Pick a repository to build and run on ${server}.`,
+  search: 'Find a repository',
+  publish: 'Publish',
+  publishing: 'Publishing…',
+  open: 'Open',
+  private: 'Private',
+  updated: (when: string) => `Pushed ${when}`,
+  empty: 'No repositories yet. Choose which ones Hangar may see on GitHub.',
+  noMatch: 'No repository matches that.',
+  chooseRepos: 'Choose repositories on GitHub',
+  notConnected: 'Connect GitHub first to see your repositories.',
+  connect: 'Connect GitHub',
+  advanced: 'More options',
+  published: (name: string) => `Publishing ${name}. Watch it build.`,
+} as const
+
+export const settingsCopy = {
+  title: 'Settings',
+  subtitle: (server: string) =>
+    `For ${server}: its address, public access, and the machine itself.`,
+  sections: {
+    network: { label: 'Network', description: 'How devices at home reach this server.' },
+    public: { label: 'Public access', description: 'Your domains, through a Cloudflare Tunnel.' },
+    system: { label: 'System', description: 'The machine and the Hangar running on it.' },
+  },
+} as const
+
+/** The home screen's top: the chosen server's live readings and the week's numbers. */
+export const deckCopy = {
+  readings: { cpu: 'CPU', memory: 'Memory', disk: 'Disk', uptime: 'Up for' },
+  waiting: 'Reading…',
+  stats: {
+    live: 'Apps live',
+    deploys: 'Deploys, 7 days',
+    success: 'Success rate',
+    median: 'Typical deploy',
+    noData: 'No deploys yet',
+  },
+  history: 'Deploys per day, last 14 days',
+  offline: 'This server is offline. What you see may be out of date.',
 } as const

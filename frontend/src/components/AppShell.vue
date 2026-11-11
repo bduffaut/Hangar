@@ -4,12 +4,17 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BrandMark from '../brand/BrandMark.vue'
 import { useLiveStore } from '../stores/live.ts'
+import { useServersStore } from '../stores/servers.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
-import { BaseButton, type IconName } from '../ui/index.ts'
+import { BaseButton, BaseIcon, type IconName } from '../ui/index.ts'
+import ServerSwitcher from './ServerSwitcher.vue'
 import TourOverlay from './TourOverlay.vue'
 
 const session = useSessionStore()
+const servers = useServersStore()
+/** Settings belong to the chosen server: its owner manages them. */
+const showSettings = computed(() => servers.hasServer && (servers.isLocal ? session.isAdmin : true))
 const live = useLiveStore()
 const router = useRouter()
 const route = useRoute()
@@ -17,6 +22,7 @@ const route = useRoute()
 const inProjects = computed(() =>
   ['project', 'deployment', 'new-project'].includes(String(route.name)),
 )
+const inSettings = computed(() => route.name === 'settings')
 const theme = useTheme()
 
 const themes: { value: ThemePreference; icon: IconName; label: string }[] = [
@@ -34,6 +40,7 @@ function cycleTheme() {
 
 async function signOut() {
   live.disconnect()
+  servers.reset()
   await session.logout()
   await router.push({ name: 'login' })
 }
@@ -46,15 +53,25 @@ async function signOut() {
       <RouterLink :to="{ name: 'home' }" class="hg-shell-brand" aria-label="Hangar home">
         <BrandMark />
       </RouterLink>
+      <ServerSwitcher v-if="servers.hasServer || servers.servers.length" />
       <nav class="hg-shell-nav" aria-label="Main">
-        <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
-          navCopy.projects
-        }}</RouterLink>
+        <template v-if="servers.hasServer">
+          <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
+            navCopy.overview
+          }}</RouterLink>
+          <RouterLink :to="{ name: 'publish' }" data-tour="publish">{{
+            navCopy.publish
+          }}</RouterLink>
+        </template>
+        <RouterLink v-else :to="{ name: 'start' }">Get started</RouterLink>
+        <RouterLink :to="{ name: 'servers' }">{{ navCopy.servers }}</RouterLink>
         <RouterLink v-if="session.isAdmin" :to="{ name: 'users' }">{{ navCopy.users }}</RouterLink>
-        <RouterLink v-if="session.isAdmin" :to="{ name: 'settings' }">{{
-          navCopy.settings
-        }}</RouterLink>
-        <RouterLink :to="{ name: 'account' }">{{ navCopy.account }}</RouterLink>
+        <RouterLink
+          v-if="showSettings"
+          :to="{ name: 'settings' }"
+          :class="{ 'is-section': inSettings }"
+          >{{ navCopy.settings }}</RouterLink
+        >
         <RouterLink :to="{ name: 'guide' }" data-tour="guide">{{ navCopy.guide }}</RouterLink>
       </nav>
       <div class="hg-shell-tools">
@@ -73,7 +90,12 @@ async function signOut() {
           :aria-label="currentTheme.label"
           @click="cycleTheme"
         />
-        <span class="hg-shell-user hg-muted">{{ session.username }}</span>
+        <RouterLink
+          :to="{ name: 'account' }"
+          class="hg-shell-user"
+          :aria-label="`${navCopy.account}: ${session.username}`"
+          ><BaseIcon name="user" :size="15" /><span>{{ session.username }}</span></RouterLink
+        >
         <BaseButton
           v-hint.bottom="navCopy.signOut"
           variant="ghost"
@@ -120,7 +142,7 @@ async function signOut() {
   height: 3.5rem;
   display: flex;
   align-items: center;
-  gap: var(--hg-space-6);
+  gap: var(--hg-space-5);
 }
 .hg-shell-brand {
   text-decoration: none;
@@ -183,8 +205,17 @@ async function signOut() {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--hg-status-ready) 18%, transparent);
 }
 .hg-shell-user {
+  display: flex;
+  align-items: center;
+  gap: var(--hg-space-2);
   font-size: var(--hg-size-sm);
-  padding: 0 var(--hg-space-2);
+  padding: var(--hg-space-1) var(--hg-space-2);
+  color: var(--hg-ink-muted);
+  text-decoration: none;
+}
+.hg-shell-user:hover,
+.hg-shell-user.router-link-active {
+  color: var(--hg-ink);
 }
 .hg-shell-main {
   max-width: var(--hg-width-wide);
@@ -202,7 +233,7 @@ async function signOut() {
   .hg-shell-tools {
     margin-left: auto;
   }
-  .hg-shell-user {
+  .hg-shell-user span {
     display: none;
   }
   .hg-shell-nav {

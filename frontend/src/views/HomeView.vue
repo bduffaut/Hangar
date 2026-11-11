@@ -3,13 +3,14 @@ import { dashboardCopy, navCopy } from '@hangar/shared'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import DashboardBoard from '../components/dashboard/DashboardBoard.vue'
+import FlightDeck from '../components/FlightDeck.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { useTour } from '../composables/useTour.ts'
 import { useDashboardLayout } from '../dashboard/index.ts'
 import { useProjectsStore } from '../stores/projects.ts'
 import { BaseButton, BaseSkeleton, useConfirmAction, useNotify } from '../ui/index.ts'
 
-useDocumentTitle(navCopy.projects)
+useDocumentTitle(navCopy.overview)
 const projects = useProjectsStore()
 const tour = useTour()
 const notify = useNotify()
@@ -49,11 +50,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <FlightDeck />
   <header class="hg-home-head">
-    <div class="hg-home-title">
-      <h1>{{ navCopy.projects }}</h1>
-      <p class="hg-muted">{{ summary }}</p>
-    </div>
+    <p class="hg-muted hg-home-summary">{{ summary }}</p>
     <div v-if="!editing" class="hg-home-actions">
       <BaseButton
         variant="ghost"
@@ -64,10 +63,13 @@ onBeforeUnmount(() => {
         @click="editing = true"
       />
       <RouterLink v-slot="{ navigate }" :to="{ name: 'new-project' }" custom>
+        <BaseButton icon="plus" :label="navCopy.newProject" @click="navigate" />
+      </RouterLink>
+      <RouterLink v-slot="{ navigate }" :to="{ name: 'publish' }" custom>
         <BaseButton
           variant="primary"
-          icon="plus"
-          :label="navCopy.newProject"
+          icon="upload"
+          :label="navCopy.publish"
           data-tour="new-project"
           @click="navigate"
         />
@@ -114,19 +116,12 @@ onBeforeUnmount(() => {
 .hg-home-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--hg-space-4);
   margin-bottom: var(--hg-space-5);
 }
-.hg-home-title {
-  display: grid;
-  gap: var(--hg-space-1);
-}
-.hg-home-title h1 {
-  font-size: var(--hg-size-xl);
-}
-.hg-home-title p {
+.hg-home-summary {
   font-size: var(--hg-size-sm);
 }
 .hg-home-actions {

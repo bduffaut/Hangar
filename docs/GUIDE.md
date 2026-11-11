@@ -405,9 +405,20 @@ There is no public sign-up. Open **People**, create an invite link, and send it 
 
 Each account can run code on your server, so invite only people you trust. SECURITY.md lists what the separation does and does not cover.
 
+### Running apps on other people's servers (and your own)
+
+hangar.benduffaut.com is the **central site**: people sign in there, but their apps never run on your laptop. Each person connects a machine of their own:
+
+1. They sign in (with GitHub, if **People → Sign in with GitHub** is set up and **Let anyone sign up** is on).
+2. **Servers → Add a server** gives a one-line command. They run it on their machine; it installs Hangar there and connects back. No ports to open.
+3. The server menu at the top picks which machine the dashboard shows. Projects, logs, settings, and the Cloudflare tunnel all belong to that machine.
+4. **Publish** lists their GitHub repositories; one click builds and runs one on the chosen server.
+
+People who signed up on their own can never use your laptop itself; invited people and you can. **Get started** walks a new person through every step and checks each one off. A removed server stops connecting; `sudo hangar-uninstall` on it removes everything there.
+
 ### Sign in with GitHub
 
-Optional, and set up once by an admin: **Settings → Sign in with GitHub → Set up on GitHub**. GitHub asks you to confirm a new app, then sends you back. After that:
+Optional, and set up once by an admin: **People → Sign in with GitHub → Set up on GitHub**. GitHub asks you to confirm a new app, then sends you back. After that:
 
 - The sign-in page has a **Sign in with GitHub** button. It only works for GitHub accounts already connected to a Hangar account; a stranger gets nothing.
 - An invite link offers **Continue with GitHub**: one click creates the account and connects GitHub for deploys.

@@ -2,7 +2,7 @@
 import {
   type AddressCheckResult,
   brand,
-  githubAppCopy,
+  settingsCopy,
   navCopy,
   type SettingsView,
   type SystemInfo,
@@ -10,13 +10,14 @@ import {
   TUNNEL_SERVICE_URL,
 } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { useServersStore } from '../stores/servers.ts'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
-import { formatBytes } from '../lib/format.ts'
+import { cleanCpuModel, formatBytes } from '../lib/format.ts'
 import {
   BaseButton,
   BaseField,
@@ -25,15 +26,13 @@ import {
   BasePassword,
   BaseSkeleton,
   BaseSwitch,
-  useConfirmAction,
   useNotify,
 } from '../ui/index.ts'
 
 useDocumentTitle(navCopy.settings)
 const notify = useNotify()
-const confirm = useConfirmAction()
 const route = useRoute()
-const router = useRouter()
+const servers = useServersStore()
 
 const settings = ref<SettingsView | null>(null)
 const info = ref<SystemInfo | null>(null)
@@ -61,26 +60,18 @@ async function load() {
   }
   info.value = await api('systemInfo').catch(() => null)
 }
-onMounted(async () => {
-  // GitHub comes back to /settings/github-app?code=…&state=… after creating the app.
-  const { code, state } = route.query
-  if (route.path === '/settings/github-app' && typeof code === 'string') {
-    await router.replace('/settings')
-    await act(
-      'github-app',
-      async () => {
-        apply(
-          await api('githubAppComplete', {
-            body: { code, state: typeof state === 'string' ? state : '' },
-          }),
-        )
-        notify.success(githubAppCopy.created)
-      },
-      false,
-    )
-  }
-  await load()
+onMounted(load)
+
+// One section at a time, chosen in the side menu (and in the address, so links can open one).
+type Section = keyof typeof settingsCopy.sections
+const sectionKeys = Object.keys(settingsCopy.sections) as Section[]
+const section = computed<Section>(() => {
+  const wanted = route.params.section
+  return sectionKeys.includes(wanted as Section) ? (wanted as Section) : 'network'
 })
+const serverName = computed(() =>
+  servers.isLocal ? navCopy.thisServer.toLowerCase() : (servers.remote?.name ?? ''),
+)
 
 async function act(key: string, action: () => Promise<void>, toast = true) {
   busy.value = key
@@ -151,37 +142,6 @@ const checkOf = (domain: string) => {
   return check && check !== 'checking' ? check : null
 }
 
-/**
- * GitHub's manifest flow: a form posted to github.com, where the admin confirms the new app.
- * GitHub then sends the browser back to /settings/github-app with a code.
- */
-const setUpGithubApp = () =>
-  act(
-    'github-app',
-    async () => {
-      const { action, manifest } = await api('githubAppManifest')
-      const form = document.createElement('form')
-      form.method = 'post'
-      form.action = action
-      const field = document.createElement('input')
-      field.type = 'hidden'
-      field.name = 'manifest'
-      field.value = manifest
-      form.append(field)
-      document.body.append(form)
-      form.submit()
-    },
-    false,
-  )
-
-const githubApp = computed(() => settings.value?.githubApp ?? null)
-const openGithub = (url: string) => window.open(url, '_blank', 'noopener')
-
-async function removeGithubApp() {
-  if (!(await confirm({ ...githubAppCopy.removeConfirm, danger: true }))) return
-  await act('github-app', async () => apply(await api('removeGithubApp')))
-}
-
 const saveTunnel = (token: string | null) =>
   act('tunnel', async () => {
     apply(await api('setTunnelToken', { body: { token } }))
@@ -190,7 +150,7 @@ const saveTunnel = (token: string | null) =>
 </script>
 
 <template>
-  <PageHeader :title="navCopy.settings" />
+  <PageHeader :title="settingsCopy.title" :subtitle="settingsCopy.subtitle(serverName)" />
 
   <div v-if="loadError" class="hg-settings-loading">
     <BaseMessage tone="error">{{ loadError }}</BaseMessage>
@@ -202,269 +162,314 @@ const saveTunnel = (token: string | null) =>
     <BaseSkeleton height="10rem" />
   </div>
 
-  <div v-else class="hg-settings-page">
-    <HgPanel
-      title="Address"
-      description="Devices on your network reach Hangar and its apps through this address."
-    >
-      <form class="hg-form" @submit.prevent="saveAddress">
-        <BaseField
-          label="Server address"
-          for="set-ip"
-          help="Change this if the server's IP address changes. Every app address updates with it."
-        >
-          <BaseInput id="set-ip" v-model="lanIp" mono inputmode="numeric" />
-        </BaseField>
-        <p v-if="settings.towerUrl" class="hg-muted hg-note">
-          {{ brand.dashboardName }}: <a :href="settings.towerUrl">{{ settings.towerUrl }}</a>
-        </p>
-        <p class="hg-muted hg-note">
-          Lost access after changing it? On the server, run
-          <code class="hg-nowrap">sudo hangar-admin set-lan-ip &lt;address&gt;</code>.
-        </p>
-        <BaseMessage v-if="errors.address" tone="error">{{ errors.address }}</BaseMessage>
-        <div>
-          <BaseButton
-            type="submit"
-            variant="primary"
-            label="Save address"
-            :loading="busy === 'address'"
-            :disabled="busy !== null"
-          />
-        </div>
-      </form>
-    </HgPanel>
-
-    <HgPanel
-      id="public-access"
-      title="Public access"
-      description="Optional. Put apps on your own domains through a Cloudflare Tunnel: no open ports, and your home address stays hidden."
-    >
-      <div class="hg-public">
-        <section class="hg-public-step" aria-labelledby="pa-tunnel">
-          <h3 id="pa-tunnel">
-            1. Connect a tunnel
-            <span class="hg-pill" :class="settings.tunnelConfigured ? 'is-on' : 'is-off'">{{
-              settings.tunnelConfigured ? 'Connected' : 'Not set up'
-            }}</span>
-          </h3>
-          <ol v-if="!settings.tunnelConfigured" class="hg-steps">
-            <li>
-              In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create
-              a tunnel of type Cloudflared. Name it something like <code>hangar</code>.
-            </li>
-            <li>
-              Copy the token from the install command Cloudflare shows (the long text after
-              <code>--token</code>). You do not need to install anything: Hangar runs the tunnel.
-            </li>
-          </ol>
-          <p v-else class="hg-muted hg-note">
-            Hangar runs the tunnel for you. It is separate from any other tunnel on this machine.
-          </p>
+  <div v-else class="hg-settings-layout">
+    <nav class="hg-settings-nav" aria-label="Settings sections">
+      <RouterLink
+        v-for="key in sectionKeys"
+        :key="key"
+        :to="{ name: 'settings', params: { section: key } }"
+        :class="{ 'is-active': section === key }"
+        :aria-current="section === key ? 'page' : undefined"
+      >
+        <strong>{{ settingsCopy.sections[key].label }}</strong>
+        <span>{{ settingsCopy.sections[key].description }}</span>
+      </RouterLink>
+    </nav>
+    <div class="hg-settings-page">
+      <HgPanel
+        v-if="section === 'network'"
+        title="Address"
+        description="Devices on your network reach Hangar and its apps through this address."
+      >
+        <form class="hg-form" @submit.prevent="saveAddress">
           <BaseField
-            :label="settings.tunnelConfigured ? 'Replace tunnel token' : 'Tunnel token'"
-            for="set-tunnel"
+            label="Server address"
+            for="set-ip"
+            help="Change this if the server's IP address changes. Every app address updates with it."
           >
-            <BasePassword id="set-tunnel" v-model="tunnelToken" autocomplete="off" />
+            <BaseInput id="set-ip" v-model="lanIp" mono inputmode="numeric" />
           </BaseField>
-          <BaseMessage v-if="errors.tunnel" tone="error">{{ errors.tunnel }}</BaseMessage>
-          <div class="hg-actions">
+          <p v-if="settings.towerUrl" class="hg-muted hg-note">
+            {{ brand.dashboardName }}: <a :href="settings.towerUrl">{{ settings.towerUrl }}</a>
+          </p>
+          <p class="hg-muted hg-note">
+            Lost access after changing it? On the server, run
+            <code class="hg-nowrap">sudo hangar-admin set-lan-ip &lt;address&gt;</code>.
+          </p>
+          <BaseMessage v-if="errors.address" tone="error">{{ errors.address }}</BaseMessage>
+          <div>
             <BaseButton
-              :variant="settings.tunnelConfigured ? 'secondary' : 'primary'"
-              label="Save token"
-              :disabled="!tunnelToken.trim() || busy !== null"
-              :loading="busy === 'tunnel'"
-              @click="saveTunnel(tunnelToken.trim())"
-            />
-            <BaseButton
-              v-if="settings.tunnelConfigured"
-              variant="ghost"
-              label="Remove tunnel"
+              type="submit"
+              variant="primary"
+              label="Save address"
+              :loading="busy === 'address'"
               :disabled="busy !== null"
-              @click="saveTunnel(null)"
             />
           </div>
-        </section>
+        </form>
+      </HgPanel>
 
-        <section class="hg-public-step" aria-labelledby="pa-domains">
-          <h3 id="pa-domains">2. Add your domains</h3>
-          <p class="hg-muted hg-note">
-            Any domain on your Cloudflare account. The default is suggested for new projects; each
-            project chooses its own addresses on any of them.
-          </p>
-          <ul v-if="settings.publicDomains.length" class="hg-domain-list">
-            <li v-for="domain in settings.publicDomains" :key="domain" class="hg-domain">
-              <div class="hg-domain-head">
-                <code class="hg-domain-name">{{ domain }}</code>
-                <span v-if="domain === settings.defaultDomain" class="hg-pill is-on">Default</span>
-                <span class="hg-domain-actions">
-                  <BaseButton
-                    v-hint.top="'Check that names under this domain reach Hangar'"
-                    size="sm"
-                    variant="ghost"
-                    icon="globe"
-                    label="Check"
-                    :loading="checks[domain] === 'checking'"
-                    :disabled="busy !== null"
-                    @click="checkDomain(domain)"
-                  />
-                  <BaseButton
-                    v-if="domain !== settings.defaultDomain"
-                    size="sm"
-                    variant="ghost"
-                    label="Make default"
-                    :disabled="busy !== null"
-                    @click="makeDefault(domain)"
-                  />
-                  <BaseButton
-                    size="sm"
-                    variant="ghost"
-                    icon="x"
-                    :aria-label="`Remove ${domain}`"
-                    :disabled="busy !== null"
-                    @click="removeDomain(domain)"
-                  />
-                </span>
-              </div>
-              <div class="hg-domain-how">
-                <p>
-                  In Hangar's tunnel, add a public hostname with subdomain <code>*</code>, domain
-                  <code>{{ domain }}</code
-                  >, and this service:
-                </p>
-                <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
-              </div>
-              <p
-                v-if="checkOf(domain)"
-                class="hg-domain-check"
-                :class="`is-${checkOf(domain)!.status}`"
-                role="status"
-              >
-                {{ checkOf(domain)!.message }}
-              </p>
-              <BaseMessage v-if="errors[`domain:${domain}`]" tone="error">{{
-                errors[`domain:${domain}`]
-              }}</BaseMessage>
-            </li>
-          </ul>
-          <form class="hg-domain-add" @submit.prevent="addDomain">
+      <HgPanel
+        v-if="section === 'public'"
+        id="public-access"
+        title="Public access"
+        description="Optional. Put apps on your own domains through a Cloudflare Tunnel: no open ports, and your home address stays hidden."
+      >
+        <div class="hg-public">
+          <section class="hg-public-step" aria-labelledby="pa-tunnel">
+            <h3 id="pa-tunnel">
+              1. Connect a tunnel
+              <span class="hg-pill" :class="settings.tunnelConfigured ? 'is-on' : 'is-off'">{{
+                settings.tunnelConfigured ? 'Connected' : 'Not set up'
+              }}</span>
+            </h3>
+            <ol v-if="!settings.tunnelConfigured" class="hg-steps">
+              <li>
+                In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and
+                create a tunnel of type Cloudflared. Name it something like <code>hangar</code>.
+              </li>
+              <li>
+                Copy the token from the install command Cloudflare shows (the long text after
+                <code>--token</code>). You do not need to install anything: Hangar runs the tunnel.
+              </li>
+            </ol>
+            <p v-else class="hg-muted hg-note">
+              Hangar runs the tunnel for you. It is separate from any other tunnel on this machine.
+            </p>
             <BaseField
-              label="Add a domain"
-              for="set-domain"
-              help="Like example.com, without https:// or a name in front."
+              :label="settings.tunnelConfigured ? 'Replace tunnel token' : 'Tunnel token'"
+              for="set-tunnel"
             >
-              <BaseInput id="set-domain" v-model="newDomain" mono placeholder="example.com" />
+              <BasePassword id="set-tunnel" v-model="tunnelToken" autocomplete="off" />
             </BaseField>
-            <div>
+            <BaseMessage v-if="errors.tunnel" tone="error">{{ errors.tunnel }}</BaseMessage>
+            <div class="hg-actions">
               <BaseButton
-                type="submit"
-                icon="plus"
-                label="Add domain"
-                :disabled="!newDomain.trim() || busy !== null"
-                :loading="busy === 'add-domain'"
+                :variant="settings.tunnelConfigured ? 'secondary' : 'primary'"
+                label="Save token"
+                :disabled="!tunnelToken.trim() || busy !== null"
+                :loading="busy === 'tunnel'"
+                @click="saveTunnel(tunnelToken.trim())"
+              />
+              <BaseButton
+                v-if="settings.tunnelConfigured"
+                variant="ghost"
+                label="Remove tunnel"
+                :disabled="busy !== null"
+                @click="saveTunnel(null)"
               />
             </div>
-          </form>
-          <BaseMessage v-if="errors['add-domain']" tone="error">{{
-            errors['add-domain']
-          }}</BaseMessage>
-        </section>
+          </section>
 
-        <section class="hg-public-step" aria-labelledby="pa-options">
-          <h3 id="pa-options">3. Options</h3>
-          <p v-if="defaultDomain" class="hg-muted hg-note">
-            GitHub webhooks arrive at <code>hooks.{{ defaultDomain }}</code
-            >, so pushes deploy instantly instead of within a minute.
-          </p>
-          <div class="hg-switch-row">
-            <BaseSwitch
-              id="set-expose"
-              v-model="exposeTower"
-              :disabled="!defaultDomain || busy !== null"
-              @update:model-value="saveExposeTower"
-            />
-            <label for="set-expose">
-              Make the {{ brand.dashboardName }} public{{
-                defaultDomain ? ` at hangar.${defaultDomain}` : ''
-              }}
-              <span class="hg-muted hg-switch-help"
-                >Anyone on the internet can then reach its sign-in page, and it controls the whole
-                server, so use strong passwords.</span
+          <section class="hg-public-step" aria-labelledby="pa-domains">
+            <h3 id="pa-domains">2. Add your domains</h3>
+            <p class="hg-muted hg-note">
+              Any domain on your Cloudflare account. The default is suggested for new projects; each
+              project chooses its own addresses on any of them.
+            </p>
+            <ul v-if="settings.publicDomains.length" class="hg-domain-list">
+              <li v-for="domain in settings.publicDomains" :key="domain" class="hg-domain">
+                <div class="hg-domain-head">
+                  <code class="hg-domain-name">{{ domain }}</code>
+                  <span v-if="domain === settings.defaultDomain" class="hg-pill is-on"
+                    >Default</span
+                  >
+                  <span class="hg-domain-actions">
+                    <BaseButton
+                      v-hint.top="'Check that names under this domain reach Hangar'"
+                      size="sm"
+                      variant="ghost"
+                      icon="globe"
+                      label="Check"
+                      :loading="checks[domain] === 'checking'"
+                      :disabled="busy !== null"
+                      @click="checkDomain(domain)"
+                    />
+                    <BaseButton
+                      v-if="domain !== settings.defaultDomain"
+                      size="sm"
+                      variant="ghost"
+                      label="Make default"
+                      :disabled="busy !== null"
+                      @click="makeDefault(domain)"
+                    />
+                    <BaseButton
+                      size="sm"
+                      variant="ghost"
+                      icon="x"
+                      :aria-label="`Remove ${domain}`"
+                      :disabled="busy !== null"
+                      @click="removeDomain(domain)"
+                    />
+                  </span>
+                </div>
+                <div class="hg-domain-how">
+                  <p>
+                    In Hangar's tunnel, add a public hostname with subdomain <code>*</code>, domain
+                    <code>{{ domain }}</code
+                    >, and this service:
+                  </p>
+                  <CopyField :value="TUNNEL_SERVICE_URL" label="service" />
+                </div>
+                <p
+                  v-if="checkOf(domain)"
+                  class="hg-domain-check"
+                  :class="`is-${checkOf(domain)!.status}`"
+                  role="status"
+                >
+                  {{ checkOf(domain)!.message }}
+                </p>
+                <BaseMessage v-if="errors[`domain:${domain}`]" tone="error">{{
+                  errors[`domain:${domain}`]
+                }}</BaseMessage>
+              </li>
+            </ul>
+            <form class="hg-domain-add" @submit.prevent="addDomain">
+              <BaseField
+                label="Add a domain"
+                for="set-domain"
+                help="Like example.com, without https:// or a name in front."
               >
-            </label>
-          </div>
-          <BaseMessage v-if="errors.expose" tone="error">{{ errors.expose }}</BaseMessage>
-        </section>
-      </div>
-    </HgPanel>
+                <BaseInput id="set-domain" v-model="newDomain" mono placeholder="example.com" />
+              </BaseField>
+              <div>
+                <BaseButton
+                  type="submit"
+                  icon="plus"
+                  label="Add domain"
+                  :disabled="!newDomain.trim() || busy !== null"
+                  :loading="busy === 'add-domain'"
+                />
+              </div>
+            </form>
+            <BaseMessage v-if="errors['add-domain']" tone="error">{{
+              errors['add-domain']
+            }}</BaseMessage>
+          </section>
 
-    <HgPanel
-      id="github-sign-in"
-      :title="githubAppCopy.title"
-      :description="githubAppCopy.description"
-    >
-      <div class="hg-form">
-        <template v-if="githubApp">
-          <p class="hg-connected">
-            {{ githubAppCopy.connected(githubApp.slug, githubApp.owner) }}
-          </p>
-          <p class="hg-muted hg-note">{{ githubAppCopy.newAddressHint }}</p>
-        </template>
-        <p v-else class="hg-muted hg-note">{{ githubAppCopy.setUpHelp }}</p>
-        <BaseMessage v-if="busy === 'github-app' && !githubApp" tone="info">{{
-          githubAppCopy.finishing
-        }}</BaseMessage>
-        <BaseMessage v-if="errors['github-app']" tone="error">{{
-          errors['github-app']
-        }}</BaseMessage>
-        <div class="hg-actions">
-          <template v-if="githubApp">
-            <BaseButton
-              icon="github"
-              :label="githubAppCopy.manage"
-              @click="openGithub(githubApp.settingsUrl)"
-            />
-            <BaseButton
-              variant="ghost"
-              :label="githubAppCopy.remove"
-              :disabled="busy !== null"
-              @click="removeGithubApp"
-            />
-          </template>
-          <BaseButton
-            v-else
-            variant="primary"
-            icon="github"
-            :label="githubAppCopy.setUp"
-            :loading="busy === 'github-app'"
-            :disabled="busy !== null"
-            @click="setUpGithubApp"
-          />
+          <section class="hg-public-step" aria-labelledby="pa-options">
+            <h3 id="pa-options">3. Options</h3>
+            <p v-if="defaultDomain" class="hg-muted hg-note">
+              GitHub webhooks arrive at <code>hooks.{{ defaultDomain }}</code
+              >, so pushes deploy instantly instead of within a minute.
+            </p>
+            <div class="hg-switch-row">
+              <BaseSwitch
+                id="set-expose"
+                v-model="exposeTower"
+                :disabled="!defaultDomain || busy !== null"
+                @update:model-value="saveExposeTower"
+              />
+              <label for="set-expose">
+                Make the {{ brand.dashboardName }} public{{
+                  defaultDomain ? ` at hangar.${defaultDomain}` : ''
+                }}
+                <span class="hg-muted hg-switch-help"
+                  >Anyone on the internet can then reach its sign-in page, and it controls the whole
+                  server, so use strong passwords.</span
+                >
+              </label>
+            </div>
+            <BaseMessage v-if="errors.expose" tone="error">{{ errors.expose }}</BaseMessage>
+          </section>
         </div>
-      </div>
-    </HgPanel>
+      </HgPanel>
 
-    <HgPanel v-if="info" title="System">
-      <dl class="hg-system">
-        <div>
-          <dt>Version</dt>
-          <dd>{{ info.version }}</dd>
-        </div>
-        <div>
-          <dt>App images on disk</dt>
-          <dd>{{ formatBytes(info.imageDiskBytes) }}</dd>
-        </div>
-      </dl>
-    </HgPanel>
+      <template v-if="section === 'system'">
+        <HgPanel title="This machine" :live="info ? 'on' : 'off'">
+          <dl v-if="info" class="hg-readout">
+            <dt>Hangar</dt>
+            <dd>{{ info.version }}</dd>
+            <dt>Processor</dt>
+            <dd>{{ info.cpuModel ? cleanCpuModel(info.cpuModel) : 'Unknown' }}</dd>
+            <dt>Threads</dt>
+            <dd>{{ info.cpuThreads }}</dd>
+            <dt>Kernel</dt>
+            <dd>{{ info.kernel ?? 'Unknown' }}</dd>
+            <dt>App images</dt>
+            <dd>{{ formatBytes(info.imageDiskBytes) }} on disk</dd>
+          </dl>
+          <BaseSkeleton v-else height="8rem" />
+        </HgPanel>
+        <HgPanel title="On the command line" description="Run these on the server itself.">
+          <dl class="hg-readout">
+            <dt>Update Hangar</dt>
+            <dd><code>sudo hangar-update</code></dd>
+            <dt>Reset a password</dt>
+            <dd><code>sudo hangar-admin reset-password &lt;name&gt;</code></dd>
+            <dt>See what it is doing</dt>
+            <dd><code>sudo docker logs hangar-core</code></dd>
+            <dt>Remove Hangar</dt>
+            <dd><code>sudo hangar-uninstall</code></dd>
+          </dl>
+        </HgPanel>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.hg-settings-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--hg-space-6);
+}
+.hg-settings-nav {
+  position: sticky;
+  top: 5rem;
+  display: grid;
+  gap: var(--hg-space-1);
+}
+.hg-settings-nav a {
+  display: grid;
+  gap: 0.1rem;
+  padding: var(--hg-space-3) var(--hg-space-4);
+  color: var(--hg-ink-muted);
+  text-decoration: none;
+  border-left: 2px solid var(--hg-line);
+}
+.hg-settings-nav a strong {
+  font-size: var(--hg-size-sm);
+  color: var(--hg-ink);
+}
+.hg-settings-nav a span {
+  font-size: var(--hg-size-xs);
+}
+.hg-settings-nav a:hover {
+  background: color-mix(in srgb, var(--hg-panel) 60%, transparent);
+}
+.hg-settings-nav a.is-active {
+  border-left-color: var(--hg-accent);
+  background: var(--hg-panel);
+}
 .hg-settings-page,
 .hg-settings-loading {
   display: grid;
   gap: var(--hg-space-5);
-  max-width: 48rem;
+  max-width: 50rem;
+}
+@media (max-width: 52rem) {
+  .hg-settings-layout {
+    grid-template-columns: 1fr;
+    gap: var(--hg-space-4);
+  }
+  .hg-settings-nav {
+    position: static;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    overflow-x: auto;
+  }
+  .hg-settings-nav a {
+    border-left: 0;
+    border-bottom: 2px solid var(--hg-line);
+  }
+  .hg-settings-nav a span {
+    display: none;
+  }
+  .hg-settings-nav a.is-active {
+    border-bottom-color: var(--hg-accent);
+  }
 }
 .hg-form {
   display: grid;
