@@ -43,3 +43,7 @@ pnpm test              # unit tests
 pnpm test:integration  # needs `pnpm dev` running
 pnpm test:e2e          # browser tests
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
