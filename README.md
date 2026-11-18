@@ -92,6 +92,7 @@ job queue, and live events), Traefik for routing, and BuildKit for builds, all i
 - [Guides: install, Tailscale, going public, GitHub, sharing, troubleshooting](docs/guides)
 - [How the code works, in plain language](docs/GUIDE.md)
 - [Architecture and decisions](docs/ARCHITECTURE.md)
+- [Roadmap: the home server dashboard](docs/ROADMAP.md)
 - [Security model and known limits](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
