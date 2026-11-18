@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# The one-line install, served at https://hangar.benduffaut.com/install.sh:
+# The one-line install, attached to each GitHub release as install.sh (the Release workflow fills
+# in the version):
 #
-#   curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash
+#   curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash
 #
 # Downloads the Hangar release this script names from GitHub, checks its checksum, and runs its
 # installer. Set HANGAR_VERSION to install another release. Everything else (HANGAR_TAILSCALE=0,
@@ -16,7 +17,7 @@ main() {
 
   if [ "$(id -u)" -ne 0 ]; then
     echo "Run this as root: put sudo in front of bash, as in" >&2
-    echo "  curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash" >&2
+    echo "  curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash" >&2
     exit 1
   fi
   command -v curl >/dev/null || { apt-get update -qq && apt-get install -y -qq curl; }

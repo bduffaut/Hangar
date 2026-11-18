@@ -46,7 +46,7 @@ On a spare computer with Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13 (64-bi
 10 GB of free disk):
 
 ```sh
-curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash
+curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash
 ```
 
 It installs Docker and Tailscale, asks you to sign the computer in to your Tailscale account, and
@@ -61,7 +61,7 @@ and checks its checksum before running it. To install by hand instead, download
 ```sh
 sha256sum -c hangar-installer.tar.gz.sha256
 tar -xzf hangar-installer.tar.gz
-sudo HANGAR_VERSION=0.3.0 bash installer/install.sh
+sudo HANGAR_VERSION=0.3.1 bash installer/install.sh
 ```
 
 | To                     | Run                                           |

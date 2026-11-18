@@ -8,7 +8,11 @@ test('the front page leads to the install guide and the tour', async ({ page }) 
     page.getByRole('heading', { name: 'Deploy from GitHub to a computer you own' }),
   ).toBeVisible()
   await expect(
-    page.getByText('curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash').first(),
+    page
+      .getByText(
+        'curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash',
+      )
+      .first(),
   ).toBeVisible()
 
   await page.getByRole('button', { name: 'Install Hangar' }).first().click()
@@ -40,11 +44,4 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
   ).toBeVisible()
   await prompt.getByRole('button', { name: 'Read the install guide' }).click()
   await expect(page).toHaveURL(/\/docs\/install$/)
-})
-
-test('serves an install script pinned to this release', async ({ request }) => {
-  const script = await (await request.get('/install.sh')).text()
-  expect(script).toContain('sha256sum --check')
-  expect(script).not.toContain('__HANGAR_VERSION__')
-  expect(script).toMatch(/HANGAR_VERSION:-\d+\.\d+\.\d+/)
 })

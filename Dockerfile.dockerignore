@@ -1,0 +1,17 @@
+# What the site build (Dockerfile) sees. It needs the guides in docs/guides, which the core
+# image's .dockerignore leaves out.
+**/node_modules
+**/dist
+**/dist-site
+.git
+.cache
+**/.cache
+e2e
+fixtures
+apps
+installer
+docs/images
+.github
+.claude
+.env
+.env.*

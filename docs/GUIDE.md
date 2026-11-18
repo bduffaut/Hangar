@@ -422,9 +422,10 @@ their username. The last admin cannot.
 
 ### The public site
 
-hangar.benduffaut.com is a static site built from this repository (`pnpm build:site`, published by
-the Site workflow on each release): the front page, the guides in `docs/guides/`, the tour, and
-`install.sh`. The tour is the real dashboard under `/tour`, answering every request from sample
+hangar.benduffaut.com is a static site built from this repository by the root `Dockerfile`
+(`pnpm build:site`, served by nginx) and deployed by Hangar itself, like any app: the front page,
+the guides in `docs/guides/`, and the tour. It serves no scripts: the install command downloads
+`install.sh` from the newest GitHub release. The tour is the real dashboard under `/tour`, answering every request from sample
 data in the browser (`frontend/src/demo/`). The site has no accounts and never talks to anyone's
 Hangar.
 

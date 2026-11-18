@@ -4,7 +4,19 @@ All notable changes to Hangar. The format follows [Keep a Changelog](https://kee
 and versions follow [Semantic Versioning](https://semver.org). Each version is a git tag (`vX.Y.Z`)
 with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 
-## [0.3.0] - Unreleased
+## [0.3.1] - 2026-11-18
+
+### Changed
+
+- **The install command downloads from the GitHub release:**
+  `curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash`.
+  Each release carries an `install.sh` pinned to it, so the site serves nothing you run.
+- **hangar.benduffaut.com runs on Hangar**, deployed from this repository like any app (the root
+  `Dockerfile`), instead of on GitHub Pages.
+- An admin can give an app the address `hangar.<domain>`, which was reserved for the public Control
+  Tower before 0.3.0.
+
+## [0.3.0] - 2026-11-18
 
 Hangar is now one private Hangar per person. The central Control Tower is gone: everything,
 including the dashboard, runs on your own computer, and the dashboard is private to your Tailscale
@@ -16,7 +28,7 @@ network.
   Hangar listen on its Tailscale address only. With HTTPS certificates on for your tailnet, the
   Control Tower is at `https://<machine>.<tailnet>.ts.net`. The installer prints the address and a
   QR code for your phone.
-- **One-line install:** `curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash`. It
+- **One-line install** (see 0.3.1 for its address). It
   downloads the release from GitHub and checks its checksum.
 - `hangar-doctor` checks Docker, Hangar, Tailscale, HTTPS, the tunnel and disk, and explains what
   to fix. `hangar-tailscale` runs the Tailscale step again.
@@ -59,5 +71,6 @@ The first public release.
 - An installer for Ubuntu 22.04/24.04 and Debian 12 (amd64 and arm64), with `hangar-update`,
   `hangar-uninstall`, and `hangar-admin`.
 
-[0.3.0]: https://github.com/bduffaut/Hangar/compare/v0.2.0...HEAD
+[0.3.1]: https://github.com/bduffaut/Hangar/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/bduffaut/Hangar/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bduffaut/Hangar/releases/tag/v0.2.0

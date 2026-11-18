@@ -793,7 +793,7 @@ export const legalCopy = {
     sections: [
       {
         heading: 'This site',
-        body: 'hangar.benduffaut.com is a static website: the guides, the tour, and the install script. It has no accounts, no cookies, no analytics, and no database. The tour runs entirely in your browser with sample data.',
+        body: 'hangar.benduffaut.com is a static website: the guides and the tour. It is hosted with Hangar itself. It has no accounts, no cookies, no analytics, and no database. The tour runs entirely in your browser with sample data.',
       },
       {
         heading: 'Your Hangar',
@@ -801,7 +801,7 @@ export const legalCopy = {
       },
       {
         heading: 'Other services',
-        body: 'Pages are hosted by GitHub Pages, which keeps its own access logs. The installer downloads Hangar from GitHub, Docker from Docker, and Tailscale from Tailscale. GitHub, Tailscale, and Cloudflare handle what you connect to them under their own privacy policies.',
+        body: 'Cloudflare carries traffic to this site and keeps its own logs. The install command and the installer download Hangar from GitHub, Docker from Docker, and Tailscale from Tailscale. GitHub, Tailscale, and Cloudflare handle what you connect to them under their own privacy policies.',
       },
       {
         heading: 'Questions',

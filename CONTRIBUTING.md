@@ -52,8 +52,9 @@ A few house rules, which keep the codebase easy to work in:
 
 1. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under the new version and date.
 2. Set the version in `package.json` and the default `HANGAR_VERSION` in `installer/install.sh`.
-3. Commit, then tag and push: `git tag v0.3.0 && git push origin v0.3.0`. The Release workflow
-   builds the multi-arch image, packages the installer, and creates the GitHub release; the Site
-   workflow publishes hangar.benduffaut.com with an `install.sh` for that release.
+3. Commit, then tag and push: `git tag v0.3.1 && git push origin v0.3.1`. The Release workflow
+   builds the multi-arch image, packages the installer, and creates the GitHub release with an
+   `install.sh` pinned to it, which the one-line install downloads. The site
+   (hangar.benduffaut.com) redeploys itself from `main` on its Hangar.
 
 By contributing you agree that your work is released under the [MIT license](LICENSE).

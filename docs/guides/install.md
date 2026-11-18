@@ -35,7 +35,7 @@ is still encrypted by Tailscale.
 On the Hangar computer, open a terminal (or connect with `ssh you@computer`) and run:
 
 ```sh
-curl -fsSL https://hangar.benduffaut.com/install.sh | sudo bash
+curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo bash
 ```
 
 It checks the computer, installs Docker and Tailscale, and starts Hangar. Along the way it
@@ -49,7 +49,7 @@ At the end it prints:
 - a one-time **setup code** (the boarding pass)
 
 > Prefer to check what you run first? Download the script, read it, then run it:
-> `curl -fsSLO https://hangar.benduffaut.com/install.sh && less install.sh && sudo bash install.sh`.
+> `curl -fsSLO https://github.com/bduffaut/Hangar/releases/latest/download/install.sh && less install.sh && sudo bash install.sh`.
 > It downloads Hangar from the [GitHub release](https://github.com/bduffaut/Hangar/releases) and
 > checks its checksum before running anything.
 
@@ -81,7 +81,7 @@ your Tailscale network. To put it on the internet at your own domain, follow
 If you only want Hangar on your home network, install with `HANGAR_TAILSCALE=0`:
 
 ```sh
-curl -fsSL https://hangar.benduffaut.com/install.sh | sudo HANGAR_TAILSCALE=0 bash
+curl -fsSL https://github.com/bduffaut/Hangar/releases/latest/download/install.sh | sudo HANGAR_TAILSCALE=0 bash
 ```
 
 The Control Tower then answers at `http://tower.<ip>.sslip.io` to every device on your network.

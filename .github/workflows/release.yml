@@ -38,12 +38,17 @@ jobs:
           build-args: HANGAR_VERSION=${{ steps.version.outputs.number }}
           tags: ghcr.io/bduffaut/hangar-core:${{ steps.version.outputs.number }}
       - name: Package the installer
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
         run: |
           tar -czf hangar-installer.tar.gz installer
           sha256sum hangar-installer.tar.gz > hangar-installer.tar.gz.sha256
+          # The one-line install, pinned to this release (releases/latest/download/install.sh).
+          sed "s/__HANGAR_VERSION__/$VERSION/g" installer/bootstrap.sh > install.sh
+          if grep -q __HANGAR_VERSION__ install.sh; then exit 1; fi
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
-            hangar-installer.tar.gz hangar-installer.tar.gz.sha256
+            hangar-installer.tar.gz hangar-installer.tar.gz.sha256 install.sh

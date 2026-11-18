@@ -50,7 +50,7 @@ const tour = { name: 'home' }
           <p class="hg-muted hg-hero-note">{{ landingCopy.tourNote }}</p>
           <div class="hg-hero-command">
             <p class="hg-muted hg-hero-note">{{ landingCopy.commandLabel }}</p>
-            <CopyField :value="INSTALL_COMMAND" label="install command" />
+            <CopyField :value="INSTALL_COMMAND" label="install command" wrap />
           </div>
         </div>
 

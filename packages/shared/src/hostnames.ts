@@ -89,7 +89,8 @@ export function checkMemberHostname(
 /**
  * Whether `hostname` can be a project's public address: the root of one of the owner's domains or
  * one name directly under it. Deeper names are refused because Cloudflare's free certificate only
- * covers one level, and tower., hangar., and hooks. belong to Hangar.
+ * covers one level, and tower. and hooks. belong to Hangar. (hangar. was the public Control Tower
+ * before D40; an admin may now give it to an app.)
  */
 export function checkPublicHostname(
   hostname: string,
@@ -102,11 +103,7 @@ export function checkPublicHostname(
   const address = splitPublicHostname(hostname, domains)
   if (!address) return 'not_your_domain'
   if (address.subdomain.includes('.')) return 'too_deep'
-  if (
-    address.subdomain === TOWER_SUBDOMAIN ||
-    address.subdomain === 'hangar' ||
-    address.subdomain === HOOKS_SUBDOMAIN
-  ) {
+  if (address.subdomain === TOWER_SUBDOMAIN || address.subdomain === HOOKS_SUBDOMAIN) {
     return 'reserved'
   }
   return null

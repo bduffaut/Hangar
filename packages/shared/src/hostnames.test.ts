@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appHostname,
+  checkMemberHostname,
   checkProjectName,
   checkPublicHostname,
   isIpv4,
@@ -84,7 +85,9 @@ describe('public addresses', () => {
     expect(checkPublicHostname('example.net', domains)).toBe('not_your_domain')
     expect(checkPublicHostname('a.b.example.com', domains)).toBe('too_deep')
     expect(checkPublicHostname('tower.example.com', domains)).toBe('reserved')
-    expect(checkPublicHostname('hangar.example.com', domains)).toBe('reserved')
+    // hangar. was the public Control Tower before D40; now an admin may give it to an app.
+    expect(checkPublicHostname('hangar.example.com', domains)).toBeNull()
+    expect(checkMemberHostname('hangar.example.com', domains)).toBe('admin_only')
     expect(checkPublicHostname('hooks.other.dev', domains)).toBe('reserved')
   })
 })
