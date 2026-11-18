@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Hangar version
+      description: From Settings, or `curl <your tower>/api/health`.
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How you use Hangar
+      options:
+        - A hosted Control Tower, with my own server connected
+        - Hangar installed on my own server
+        - Development (pnpm dev)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Server OS and architecture
+      placeholder: Ubuntu 24.04, amd64
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: From `sudo docker logs hangar-core --tail 200`, or the build log. Remove anything secret.
+      render: text

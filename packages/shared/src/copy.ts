@@ -309,6 +309,17 @@ export const accountCopy = {
     body: 'Every browser signed in to this account, including this one, will need to sign in again.',
     action: 'Sign out everywhere',
   },
+  deleteTitle: 'Delete account',
+  deleteBody:
+    'Deletes your account and everything this site keeps about you. Your servers are disconnected and forget this site; the apps on them keep running until you remove Hangar there with sudo hangar-uninstall.',
+  deleteLabel: (username: string) => `Type ${username} to confirm`,
+  deleteMismatch: 'Type your username exactly as shown to confirm.',
+  deleteAction: 'Delete my account',
+  deleteConfirm: {
+    title: 'Delete your account?',
+    body: 'This cannot be undone. You will be signed out, and your servers will stop taking requests from this site.',
+    action: 'Delete my account',
+  },
 } as const
 
 /** Settings: the GitHub App behind "Sign in with GitHub". */
@@ -541,10 +552,17 @@ export const errorCopy = {
 /** The front door: what a visitor sees before signing in. */
 export const landingCopy = {
   title: 'Deploy from GitHub to a computer you own',
-  lede: 'Hangar turns a spare laptop or mini PC into your own deploy platform. Sign in with GitHub, run one command on your machine, and publish any repository to your own domain. Your code builds and runs at home, not on someone else’s cloud.',
+  lede: 'Hangar turns a spare laptop or mini PC into your own deploy platform. Sign up with GitHub, run one command on your machine, and publish any repository to your own domain. Your code builds and runs at home, not on someone else’s cloud.',
+  signUpGithub: 'Sign up with GitHub',
   signInGithub: 'Sign in with GitHub',
-  signIn: 'Sign in with a password',
-  inviteOnly: 'Accounts here are by invitation.',
+  signIn: 'Sign in',
+  tour: 'Take the tour',
+  tourNote: 'See the whole dashboard with sample apps. No account needed.',
+  free: 'Free and open source. Your server, your apps, your data.',
+  agree: 'By signing up you agree to the',
+  and: 'and',
+  inviteOnly:
+    'Accounts on this site are by invitation for now. Take the tour, or run Hangar yourself.',
   flightPlan: 'flight-plan',
   plan: [
     { label: 'Repository', value: 'you/portfolio' },
@@ -553,10 +571,10 @@ export const landingCopy = {
     { label: 'Address', value: 'portfolio.yourdomain.com' },
   ],
   planStatus: 'Live',
-  stepsTitle: 'From sign-in to a live app',
+  stepsTitle: 'From sign-up to a live app',
   steps: [
     {
-      title: 'Sign in with GitHub',
+      title: 'Sign up with GitHub',
       body: 'Hangar sees only the repositories you choose, and can read them but not change them.',
     },
     {
@@ -593,7 +611,37 @@ export const landingCopy = {
     '2 GB of memory and 10 GB of free disk',
     'An internet connection. Docker is installed for you.',
   ],
-  source: 'Hangar is open source',
+  source: 'Source on GitHub',
+  selfHost: 'Run Hangar yourself',
+  terms: 'Terms',
+  privacy: 'Privacy',
+  faqTitle: 'Questions',
+  faq: [
+    {
+      q: 'What does it cost?',
+      a: 'Nothing. Hangar is free and open source under the MIT license. You bring the computer, and Cloudflare Tunnel is free too.',
+    },
+    {
+      q: 'What can this site see and do?',
+      a: 'It keeps your account, your list of servers, and your GitHub connection, and passes the requests you make in the dashboard to your server. Your code, builds, apps, logs and environment variables stay on your server. Because it can send your server requests, a connected server trusts this site: if that is not for you, run Hangar yourself.',
+    },
+    {
+      q: 'What if this site goes down?',
+      a: 'Your apps keep running and stay online: they run on your server and reach the internet through your own tunnel. You just cannot use the dashboard, or deploy new pushes, until it is back.',
+    },
+    {
+      q: 'Do I need to open ports on my router?',
+      a: 'No. Your server connects out to this site, and visitors reach your apps through Cloudflare. Nothing on your home network is opened.',
+    },
+    {
+      q: 'What can I deploy?',
+      a: 'Any repository with a Dockerfile, or a common framework Hangar can detect: Node.js, Vite, Next.js, Astro, Python, Go, static sites and more. One server can run many apps.',
+    },
+    {
+      q: 'Can I leave?',
+      a: 'Any time. Remove a server and it forgets this site; run sudo hangar-uninstall on it to remove Hangar. Deleting your account removes everything this site holds about you.',
+    },
+  ],
 } as const
 
 /** This machine is someone's own server; its dashboard lives elsewhere. */
@@ -602,6 +650,56 @@ export const managedCopy = {
   body: (url: string) =>
     `Open ${url} and sign in there. Your apps build and run on this machine; that site sends it your requests.`,
   open: 'Open the dashboard',
+} as const
+
+/** The guided tour without an account: a sample hangar that lives only in the browser. */
+export const demoCopy = {
+  start: 'Take the tour',
+  startHint: 'No account needed',
+  banner: 'You are exploring a sample hangar. Nothing here is real, and nothing you do is saved.',
+  bannerShort: 'Sample hangar',
+  bannerAction: 'Create your account',
+  bannerLeave: 'Leave the tour',
+  promptTitle: 'Ready to fly your own?',
+  promptAction: (what: string) => `To ${what}, create a free account. It takes about a minute.`,
+  promptTourDone:
+    'That is the whole tour. Create a free account to connect your own server and publish your first app.',
+  promptSteps: [
+    'Sign up with GitHub. Hangar only sees the repositories you pick.',
+    'Copy one command and run it on your own computer.',
+    'Publish a repository. It builds and runs on your machine.',
+  ],
+  promptGithub: 'Sign up with GitHub',
+  promptSignIn: 'I already have an account',
+  promptKeepLooking: 'Keep exploring',
+  promptInviteOnly:
+    'Accounts on this site are by invitation right now. You can still run Hangar yourself on your own server, for free.',
+  promptSelfHost: 'Run Hangar yourself',
+  /** What a visitor tried to do, by endpoint; anything else is "do that". */
+  actions: {
+    createProject: 'publish an app',
+    deployProject: 'deploy',
+    rollbackDeployment: 'roll back',
+    cancelDeployment: 'cancel a deploy',
+    startProject: 'start an app',
+    stopProject: 'stop an app',
+    restartProject: 'restart an app',
+    deleteProject: 'delete an app',
+    updateProject: 'change an app',
+    replaceEnv: 'save environment variables',
+    addServer: 'connect your server',
+    newPairingCode: 'connect your server',
+    renameServer: 'rename a server',
+    removeServer: 'remove a server',
+    updateSettings: 'change settings',
+    setTunnelToken: 'put your apps on the internet',
+    setGithubToken: 'connect GitHub',
+    githubStart: 'connect GitHub',
+    changePassword: 'change your password',
+    setFirstPassword: 'set a password',
+    signOutEverywhere: 'manage your sessions',
+  } as Record<string, string>,
+  fallbackAction: 'do that',
 } as const
 
 /** First steps after signing in. */
@@ -734,4 +832,66 @@ export const deckCopy = {
   },
   history: 'Deploys per day, last 14 days',
   offline: 'This server is offline. What you see may be out of date.',
+} as const
+
+/** The terms and privacy pages of a hosted Hangar. Plain words, no puns. */
+export const legalCopy = {
+  updated: 'Last updated November 17, 2026',
+  back: 'Back to Hangar',
+  contact:
+    'Questions or requests: open an issue at github.com/bduffaut/Hangar, or use the contact details on the operator’s GitHub profile.',
+  terms: {
+    title: 'Terms of use',
+    sections: [
+      {
+        heading: 'What this is',
+        body: 'This site runs Hangar, free and open-source software, as a free service: it lets you manage apps that build and run on servers you own. It is a personal project offered as is, without any warranty, uptime promise, or support agreement.',
+      },
+      {
+        heading: 'Your servers and your apps',
+        body: 'You are responsible for the servers you connect and for everything you build, run and publish on them, including following the law and the terms of GitHub and Cloudflare. Do not use Hangar to host malware, phishing, spam, or content you do not have the right to publish.',
+      },
+      {
+        heading: 'What this site can do on your server',
+        body: 'When you connect a server, it takes requests from this site: the ones you make in the dashboard, carried out on your server as your account there. Connecting a server means you accept that. You can disconnect it at any time from Servers, or remove Hangar from it with sudo hangar-uninstall.',
+      },
+      {
+        heading: 'Accounts',
+        body: 'Keep your sign-in safe. Accounts that abuse the service or other people may be suspended or removed. You can delete your account at any time from Account.',
+      },
+      {
+        heading: 'Changes',
+        body: 'These terms may change as the project grows. The date at the top shows the latest version. The service may also change or stop; your apps keep running on your own servers either way.',
+      },
+      {
+        heading: 'Liability',
+        body: 'To the extent the law allows, the operator of this site is not liable for any loss or damage from using it, including downtime, lost data, or problems with apps on your servers.',
+      },
+    ],
+  },
+  privacy: {
+    title: 'Privacy',
+    sections: [
+      {
+        heading: 'What this site keeps',
+        body: 'Your username and role; your GitHub account name and id if you sign in with GitHub; your GitHub access tokens, encrypted; a password hash if you set a password; your sessions (stored only as hashes); your dashboard layout; and, for each server you connect, its name, when it was last seen, and basic facts it reports (version, hostname, operating system, processor, memory, local IP address).',
+      },
+      {
+        heading: 'What stays on your server',
+        body: 'Your projects, source code, builds, images, apps, logs, environment variables, and Cloudflare tunnel token live on your own server. Requests you make in the dashboard pass through this site to your server and back; they are not stored here.',
+      },
+      {
+        heading: 'What this site does not do',
+        body: 'No ads, no analytics, no tracking cookies, and nothing is sold or shared. The only cookie is the one that keeps you signed in. There is no email address on file.',
+      },
+      {
+        heading: 'Other services',
+        body: 'Signing in with GitHub goes through GitHub. Traffic to this site passes through Cloudflare, which handles it under its own privacy policy. Your server downloads Hangar from GitHub.',
+      },
+      {
+        heading: 'Deleting your data',
+        body: 'Delete your account from Account and everything this site keeps about you is removed, and your servers are disconnected.',
+      },
+    ],
+  },
 } as const

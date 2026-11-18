@@ -45,6 +45,12 @@ export async function setRole(db: Db, id: string, role: UserRole): Promise<boole
   })
 }
 
+/** The account is the last admin, so deleting it would leave nobody to run this Hangar. */
+export async function isOnlyAdmin(db: Db, id: string): Promise<boolean> {
+  const admins = await db.select({ id: users.id }).from(users).where(eq(users.role, 'admin'))
+  return admins.length === 1 && admins[0]!.id === id
+}
+
 export async function deleteUser(db: Db, id: string): Promise<void> {
   await db.delete(users).where(eq(users.id, id))
 }

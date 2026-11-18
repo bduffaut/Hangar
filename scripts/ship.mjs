@@ -14,7 +14,7 @@ const bindIp = process.env.HANGAR_BIND_IP
 const lanIp = process.env.HANGAR_LAN_IP ?? bindIp
 if (!bindIp || !/^\d{1,3}(\.\d{1,3}){3}$/.test(bindIp)) {
   console.error(
-    'Set HANGAR_BIND_IP to the address Hangar should listen on, e.g. HANGAR_BIND_IP=100.113.190.111 pnpm ship',
+    'Set HANGAR_BIND_IP to the address Hangar should listen on, e.g. HANGAR_BIND_IP=100.64.0.10 pnpm ship',
   )
   process.exit(1)
 }

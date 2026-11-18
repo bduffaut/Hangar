@@ -1,5 +1,7 @@
 import { type Contract, contract, type EndpointName, errorCopy } from '@hangar/shared'
 import type { z } from 'zod'
+import { demoCall } from '../demo/api.ts'
+import { isDemo } from '../demo/mode.ts'
 
 type Schema<N extends EndpointName, K extends 'params' | 'query' | 'body'> = Contract[N] extends {
   [P in K]: infer S extends z.ZodType
@@ -78,6 +80,16 @@ export async function api<N extends EndpointName>(
     params?: Record<string, unknown>
     query?: Record<string, unknown>
     body?: unknown
+  }
+  // The tour without an account: answered from the sample hangar, except what the visitor needs
+  // to know about this site itself (whether sign-up is open).
+  if (isDemo() && name !== 'setupStatus') {
+    try {
+      return (await demoCall(name, { params, query })) as CallResult<N>
+    } catch (e) {
+      const { status = 0, code = 'tour', message = errorCopy.unexpected } = e as Partial<ApiError>
+      throw new ApiError(status, code, message)
+    }
   }
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'

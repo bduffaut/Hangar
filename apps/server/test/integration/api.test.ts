@@ -920,6 +920,44 @@ describe('accounts', () => {
     expect(demote.json().error.code).toBe('last_admin')
     const self = await call({ method: 'DELETE', url: `/api/users/${adminId}`, cookie, csrf })
     expect(self.json().error.code).toBe('cannot_delete_self')
+    const own = await call({
+      method: 'POST',
+      url: '/api/me/delete',
+      body: { confirm: 'admin' },
+      cookie,
+      csrf,
+    })
+    expect(own.json().error.code).toBe('last_admin')
+  })
+
+  it('lets people delete their own account, with its servers', async () => {
+    const token = await invite()
+    // From its own address: this suite has used up the sign-in limit for the default one.
+    const joined = await call({
+      method: 'POST',
+      url: '/api/auth/link/redeem',
+      body: { token, username: 'leaving', password: PASSWORD },
+      remoteAddress: '10.9.9.9',
+    })
+    const leaving = { cookie: joined.cookie!, csrf: joined.json().csrfToken as string }
+    const added = await call({
+      method: 'POST',
+      url: '/api/servers',
+      body: { name: 'Old laptop' },
+      ...leaving,
+    })
+    expect(added.status).toBe(200)
+    const remove = (confirm: string) =>
+      call({ method: 'POST', url: '/api/me/delete', body: { confirm }, ...leaving })
+
+    expect((await remove('leavin')).json().error.code).toBe('confirm_mismatch')
+    expect((await remove('leaving')).status).toBe(200)
+    expect((await call({ url: '/api/auth/me', cookie: leaving.cookie })).status).toBe(401)
+    const { rows } = await ctx.db.execute(
+      `select (select count(*) from users where username = 'leaving') as users,
+              (select count(*) from servers where name = 'Old laptop') as servers`,
+    )
+    expect(rows[0]).toEqual({ users: '0', servers: '0' })
   })
 
   it('cancels the links of a demoted admin, so they cannot buy their way back', async () => {

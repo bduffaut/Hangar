@@ -35,7 +35,7 @@ export default defineConfig({
     },
     {
       name: 'accounts',
-      testMatch: /(accounts|servers)\.spec\.ts/,
+      testMatch: /(accounts|servers|tour)\.spec\.ts/,
       dependencies: ['setup'],
       use: { viewport: { width: 1366, height: 900 }, storageState: SESSION },
     },

@@ -24,7 +24,7 @@ This guide explains what Hangar is, what every part of the project does, and how
 
 Hangar turns a spare computer into a place where your web apps run. You install it once on a Linux server. Then, in its web dashboard (the **Control Tower**), you connect a code repository. Hangar downloads the code, turns it into a runnable package, starts it, and gives it its own web address. Every time you push new code, it does that again, swaps the new version in without downtime, and keeps the old ones so you can go back.
 
-Your own setup: Hangar runs on your laptop server (`homeserver`) and is reachable only through Tailscale, at `http://tower.100-113-190-111.sslip.io`. Your other site, benduffaut.com, runs separately on the same laptop and Hangar does not touch it.
+An example setup used throughout this guide: Hangar runs on a laptop at home and is reachable only through Tailscale, at `http://tower.100-64-0-10.sslip.io`.
 
 ---
 
@@ -46,9 +46,9 @@ Your own setup: Hangar runs on your laptop server (`homeserver`) and is reachabl
 | **Port**                           | A numbered door on a computer that a program listens on. Web traffic uses port 80; apps inside containers often use 3000.                                                         |
 | **Docker network**                 | A private network that lets containers talk to each other by name.                                                                                                                |
 | **Reverse proxy**                  | A program that receives every web request and forwards it to the right app based on the address. Hangar uses **Traefik**.                                                         |
-| **Hostname / domain**              | The name in a web address, like `blog.100-113-190-111.sslip.io`.                                                                                                                  |
+| **Hostname / domain**              | The name in a web address, like `blog.100-64-0-10.sslip.io`.                                                                                                                      |
 | **sslip.io**                       | A free public service: any name ending in `<ip-with-dashes>.sslip.io` points to that IP address. It gives every app a real address without configuring anything.                  |
-| **Tailscale**                      | Software that puts your devices on a private network with each other. Your laptop's Tailscale address is `100.113.190.111`.                                                       |
+| **Tailscale**                      | Software that puts your devices on a private network with each other. Your laptop's Tailscale address is `100.64.0.10`.                                                           |
 | **Database**                       | Where Hangar stores its records (projects, deployments, settings). Hangar uses **PostgreSQL** ("Postgres").                                                                       |
 | **Migration**                      | A versioned change to the database's structure, applied automatically when Hangar starts.                                                                                         |
 | **API**                            | The list of requests the server answers (like "list projects" or "deploy this project"). Each one is an **endpoint**.                                                             |
@@ -80,7 +80,7 @@ Hangar is three containers, plus one container per app you deploy:
 
 ```
                        your devices (over Tailscale)
-                                  │  port 80 on 100.113.190.111 only
+                                  │  port 80 on 100.64.0.10 only
                                   ▼
                         ┌───────────────────┐
                         │  hangar-proxy     │  Traefik: reads the address of each
@@ -125,10 +125,10 @@ Everything Hangar needs is in `/opt/hangar` on the server: `docker-compose.yml` 
 
 ## 4. What happens when a request arrives
 
-1. Your browser asks for `http://blog.100-113-190-111.sslip.io`. sslip.io answers that this name means `100.113.190.111`, so the browser connects to your laptop over Tailscale.
+1. Your browser asks for `http://blog.100-64-0-10.sslip.io`. sslip.io answers that this name means `100.64.0.10`, so the browser connects to your laptop over Tailscale.
 2. **Traefik** receives the request. It looks at the name and checks its routing file, which Hangar writes from the database.
 3. If `blog` has a running version, Traefik forwards the request to that app's container. If not, it sends it to core, which shows a page saying the app is not running.
-4. For `tower.100-113-190-111.sslip.io`, Traefik forwards to **core**, which serves the dashboard and its API.
+4. For `tower.100-64-0-10.sslip.io`, Traefik forwards to **core**, which serves the dashboard and its API.
 
 Hangar never edits Traefik's routes by hand. The **database is the source of truth**. Whenever something changes (a deploy goes live, an app stops, the address changes), core rewrites the routing file from the database, and Traefik picks it up about two seconds later.
 
@@ -170,7 +170,7 @@ hangar/
 ├── e2e/                  Browser tests
 ├── scripts/              Helper scripts for development and shipping
 ├── docs/                 This guide and the architecture reference
-├── Spec.md               What Hangar should do (the product description)
+├── docs/SPEC.md          The original MVP specification
 └── package.json          The commands you run (pnpm dev, pnpm test, …)
 ```
 
@@ -358,7 +358,7 @@ Run the installer as root. It prints the Control Tower address and the boarding 
 ### On your laptop, from this PC
 
 ```
-HANGAR_BIND_IP=100.113.190.111 pnpm ship
+HANGAR_BIND_IP=100.64.0.10 pnpm ship
 ```
 
 This builds Hangar's image on this PC, copies it to the laptop over your SSH connection, copies the installer, and runs it with Hangar bound to the Tailscale address. Nothing is published anywhere. Running it again updates Hangar and keeps all your data and secrets.
@@ -397,17 +397,17 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 | Deploy from the command line (development) | `pnpm hangar help` lists the commands.                                                                                                                                                    |
 | Change the database structure              | Edit `apps/server/src/db/schema.ts`, then run `pnpm db:generate --name <change>`.                                                                                                         |
 | Add an API endpoint                        | Add it to `packages/shared/src/contract.ts` (and its shapes in `schemas.ts`), then register it with `route()` in the feature's `routes.ts`. The dashboard can call it by name right away. |
-| Ship to the laptop                         | `HANGAR_BIND_IP=100.113.190.111 pnpm ship`.                                                                                                                                               |
+| Ship to the laptop                         | `HANGAR_BIND_IP=100.64.0.10 pnpm ship`.                                                                                                                                                   |
 
 ### Sharing Hangar with other people
 
-There is no public sign-up. Open **People**, create an invite link, and send it to the person; it works once, for 7 days. They choose a username and password. Everyone sees only their own projects, logs, and settings, and connects their own GitHub token under **Account**. Admins also manage accounts and server settings, but they do not see other people's projects either. Forgotten password? An admin creates a reset link on **People**.
+Unless you turn on open sign-up (below), there is no public sign-up. Open **People**, create an invite link, and send it to the person; it works once, for 7 days. They choose a username and password. Everyone sees only their own projects, logs, and settings, and connects their own GitHub token under **Account**. Admins also manage accounts and server settings, but they do not see other people's projects either. Forgotten password? An admin creates a reset link on **People**.
 
 Each account can run code on your server, so invite only people you trust. SECURITY.md lists what the separation does and does not cover.
 
 ### Running apps on other people's servers (and your own)
 
-hangar.benduffaut.com is the **central site**: people sign in there, but their apps never run on your laptop. Each person connects a machine of their own:
+A Hangar that others sign in to (such as hangar.benduffaut.com) is a **central site**: people sign in there, but their apps never run on your laptop. Each person connects a machine of their own:
 
 1. They sign in (with GitHub, if **People → Sign in with GitHub** is set up and **Let anyone sign up** is on).
 2. **Servers → Add a server** gives a one-line command. They run it on their machine; it installs Hangar there and connects back. No ports to open.
@@ -415,6 +415,12 @@ hangar.benduffaut.com is the **central site**: people sign in there, but their a
 4. **Publish** lists their GitHub repositories; one click builds and runs one on the chosen server.
 
 People who signed up on their own can never use your laptop itself; invited people and you can. **Get started** walks a new person through every step and checks each one off. A removed server stops connecting; `sudo hangar-uninstall` on it removes everything there.
+
+**The tour.** Visitors can press **Take the tour** on the front page (or open `/tour`) to see the whole dashboard filled with a sample hangar: two servers, a few apps, two weeks of deployments, and a deploy that runs while they watch. It lives only in their browser and never touches this server. Anything that would change something (deploy, publish, connect a server) opens a **Create your account** prompt instead.
+
+**Leaving.** Anyone can delete their own account under **Account → Delete account** by typing their username. Their servers are disconnected and forget this site; the apps on them keep running until `sudo hangar-uninstall` is run there. The last admin cannot delete their account.
+
+**Before opening sign-up to strangers**, check the **Terms** and **Privacy** pages (`/terms`, `/privacy`, wording in `packages/shared/src/copy.ts`, `legalCopy`) say what you want them to say. Each account can connect at most 10 servers.
 
 ### Sign in with GitHub
 
@@ -434,14 +440,14 @@ Locked out? On the server, `sudo hangar-admin reset-password <username>` sets a 
 Apps reach the internet through a **Cloudflare Tunnel**: the server makes an outgoing connection to Cloudflare, so no router ports are opened and your home address stays hidden. Hangar runs its own tunnel, separate from any other one on the machine. Everything below is in Settings, under **Public access**.
 
 1. **Connect a tunnel.** In the Cloudflare dashboard, open Zero Trust, then Networks, then Tunnels, and create a tunnel of type Cloudflared. Copy the token from the install command it shows (you do not install anything; Hangar runs the tunnel) and save it in Hangar.
-2. **Add your domains**, for example `benduffaut.com` and `joshduffaut.com`. Any domain on your Cloudflare account works. For each one, add a public hostname to the tunnel with subdomain `*`, that domain, and service `http://hangar-proxy:8081`. Exact records you already have, like the root domain and `www`, keep working; the `*` only covers names that have no record of their own. Press **Check** to confirm names under the domain reach Hangar.
+2. **Add your domains**, for example `example.com` and `example.org`. Any domain on your Cloudflare account works. For each one, add a public hostname to the tunnel with subdomain `*`, that domain, and service `http://hangar-proxy:8081`. Exact records you already have, like the root domain and `www`, keep working; the `*` only covers names that have no record of their own. Press **Check** to confirm names under the domain reach Hangar.
 3. **Pick a default domain.** New projects are suggested `name.<default domain>`, and GitHub webhooks use `hooks.<default domain>`.
 
 **Is it working?** Each address on a project page shows what Hangar actually found. Every minute, and after anything that could change it, Hangar requests the address over the internet and reports the result: Live, App not answering, Points elsewhere, Not reachable, No tunnel, or Not running, with what to do about it. Results appear on their own; **Check now** runs one immediately.
 
-**Choosing where a project lives.** When you create a project, and later on its Settings tab, **Public addresses** lists where it answers on the internet. Each address is a name plus one of your domains, so a project can be `test.benduffaut.com` and `test.joshduffaut.com` at once, or the domain itself (leave the name empty), or nothing at all (remove every address to keep it on your network). Changes apply right away.
+**Choosing where a project lives.** When you create a project, and later on its Settings tab, **Public addresses** lists where it answers on the internet. Each address is a name plus one of your domains, so a project can be `test.example.com` and `test.joshduffaut.com` at once, or the domain itself (leave the name empty), or nothing at all (remove every address to keep it on your network). Changes apply right away.
 
-A project on a root domain, like `benduffaut.com` itself, also needs that exact hostname added to the tunnel with the same service. If it already points somewhere else (another tunnel, or a server), Cloudflare asks to replace that record; replacing it moves the address to the app. To move back, point the hostname at the old place again. Use **Check** on the address to confirm what answers it.
+A project on a root domain, like `example.com` itself, also needs that exact hostname added to the tunnel with the same service. If it already points somewhere else (another tunnel, or a server), Cloudflare asks to replace that record; replacing it moves the address to the app. To move back, point the hostname at the old place again. Use **Check** on the address to confirm what answers it.
 
 ---
 

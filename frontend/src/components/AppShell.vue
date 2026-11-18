@@ -8,6 +8,7 @@ import { useServersStore } from '../stores/servers.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
 import { BaseButton, BaseIcon, type IconName } from '../ui/index.ts'
+import DemoSignUp from './DemoSignUp.vue'
 import ServerSwitcher from './ServerSwitcher.vue'
 import TourOverlay from './TourOverlay.vue'
 
@@ -106,6 +107,7 @@ async function signOut() {
         />
       </div>
     </div>
+    <DemoSignUp v-if="session.demo" />
   </header>
   <main id="main" class="hg-shell-main" tabindex="-1">
     <slot />

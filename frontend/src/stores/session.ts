@@ -2,6 +2,7 @@ import type { Session } from '@hangar/shared'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, onUnauthorized, setCsrfToken } from '../api/client.ts'
+import { isDemo } from '../demo/mode.ts'
 
 /** Who is signed in, and whether the server still needs its first-run setup. */
 export const useSessionStore = defineStore('session', () => {
@@ -40,8 +41,15 @@ export const useSessionStore = defineStore('session', () => {
       openSignUp.value = status.openSignUp
       managedBy.value = status.managedBy
     } catch {
-      unreachable.value = true
-      return
+      if (!isDemo()) {
+        unreachable.value = true
+        return
+      }
+    }
+    if (isDemo()) {
+      // The tour: signed in as the sample account, whatever this site's own state is.
+      needsSetup.value = false
+      managedBy.value = null
     }
     unreachable.value = false
     if (!needsSetup.value) apply(await api('me').catch(() => null))
@@ -56,6 +64,8 @@ export const useSessionStore = defineStore('session', () => {
     managedBy,
     unreachable,
     signedIn,
+    /** On the tour without an account (demo/mode.ts). */
+    demo: computed(() => signedIn.value && isDemo()),
     username,
     isAdmin,
     localAccess,

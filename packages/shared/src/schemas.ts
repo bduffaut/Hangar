@@ -226,6 +226,8 @@ export const accountView = z.object({
 })
 export type AccountView = z.infer<typeof accountView>
 export const setFirstPassword = z.object({ password })
+/** The account's username, typed again, so an account is never deleted by a stray click. */
+export const deleteAccount = z.object({ confirm: z.string().trim().max(64) })
 
 // Sign in with GitHub (D37). GitHub sends the browser back to /auth/github with a code and the
 // state Hangar made, and the dashboard hands both to githubFinish.

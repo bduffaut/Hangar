@@ -8,7 +8,7 @@ public issue.
 
 ## What Hangar protects
 
-- **Accounts.** Invite-only, with one-time links. Passwords are hashed with argon2id, sessions are
+- **Accounts.** Invite-only with one-time links, unless an admin opens sign-up with GitHub. Passwords are hashed with argon2id, sessions are
   stored as hashes, and every change needs a CSRF token and a known origin. Failed sign-ins are
   limited per address and per account.
 - **Separation between accounts.** Projects, deployments, logs, env vars, metrics, and live events
@@ -20,10 +20,30 @@ public issue.
 - **Exposure.** The Control Tower stays private unless an admin makes it public. Public traffic
   arrives only through the Cloudflare Tunnel, with no open ports.
 
+## Using a hosted Hangar, such as hangar.benduffaut.com
+
+A hosted Hangar is a central site: it holds sign-in, your list of servers, and your GitHub
+connection, and your own servers keep one outbound connection to it. Your code, builds, apps,
+logs, environment variables and tunnel token stay on your server.
+
+- **The central site can act on your server.** It relays the requests you make in the
+  dashboard, and your server carries them out as your account there. Whoever controls the central
+  site, including an attacker who takes it over, can do the same: deploy code, read environment
+  variables, or stop apps on every connected server. Connect a server only to a central site you
+  trust, or run Hangar yourself.
+- **What it never gets.** Your server never accepts incoming connections, and its tunnel token
+  and the Docker socket stay on it. The GitHub App's secret and refresh tokens stay on the central
+  site; your server asks it for a short-lived token when it needs one.
+- **Leaving.** Removing a server, or deleting your account, closes the connection and the server
+  forgets the central site. `sudo hangar-uninstall` removes Hangar from the server.
+- **Strangers stay off the central machine.** Accounts made through open sign-up can use only
+  servers of their own, never the machine the central site runs on.
+
 ## Known limits
 
-Hangar is built for people who trust each other, such as a household, friends, or a small team. It
-is not a hosting service for strangers.
+On one server, Hangar is built for people who trust each other, such as a household, friends, or a
+small team. It is not a hosting service for strangers: on a hosted Hangar, each person brings
+their own server.
 
 - **Every account runs code on the server.** Apps and builds are ordinary containers, sharing the
   host's kernel. A container escape, which is a Docker or Linux vulnerability rather than a Hangar

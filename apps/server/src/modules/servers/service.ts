@@ -1,9 +1,14 @@
 // People's own servers (D38): adding one gives a one-time install command; the server pairs with
 // it and stays connected. Each server belongs to one account, and only that account sees it.
 import { createHash, randomBytes } from 'node:crypto'
-import { INSTALL_SCRIPT_PATH, RELEASE_VERSION, type ServerView } from '@hangar/shared'
+import {
+  INSTALL_SCRIPT_PATH,
+  MAX_SERVERS_PER_ACCOUNT,
+  RELEASE_VERSION,
+  type ServerView,
+} from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
-import { notFound } from '../../errors.ts'
+import { notFound, UserError } from '../../errors.ts'
 import type { Hub } from '../../relay/hub.ts'
 import {
   deleteServer,
@@ -41,6 +46,14 @@ function pairingFor(origin: string) {
 }
 
 export async function addServer(ctx: Ctx, hub: Hub, ownerId: string, name: string, origin: string) {
+  if ((await listServersOf(ctx.db, ownerId)).length >= MAX_SERVERS_PER_ACCOUNT) {
+    throw new UserError(
+      409,
+      'too_many_servers',
+      `An account can connect at most ${MAX_SERVERS_PER_ACCOUNT} servers.`,
+      'Remove one you no longer use first.',
+    )
+  }
   const pairing = pairingFor(origin)
   const server = await insertServer(ctx.db, {
     ownerId,

@@ -110,6 +110,14 @@ export const contract = {
     access: 'session',
     response: s.ok,
   }),
+  /** Deletes the signed-in account, its projects here, and its servers' connections (D39). */
+  deleteAccount: endpoint({
+    method: 'POST',
+    path: '/api/me/delete',
+    access: 'session',
+    body: s.deleteAccount,
+    response: s.ok,
+  }),
   getDashboardLayout: endpoint({
     method: 'GET',
     path: '/api/me/dashboard',

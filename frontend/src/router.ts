@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { enterDemo } from './demo/mode.ts'
 import { useServersStore } from './stores/servers.ts'
 import { useSessionStore } from './stores/session.ts'
 
@@ -32,6 +33,28 @@ export const router = createRouter({
       path: '/welcome',
       name: 'welcome',
       component: () => import('./views/LandingView.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('./views/LegalView.vue'),
+      props: { page: 'terms' },
+      meta: { public: true },
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('./views/LegalView.vue'),
+      props: { page: 'privacy' },
+      meta: { public: true },
+    },
+    {
+      // The tour without an account: the real dashboard, filled with a sample hangar. A full
+      // load, so every store starts from the sample rather than from this site.
+      path: '/tour',
+      name: 'tour',
+      component: { render: () => null },
       meta: { public: true },
     },
     {
@@ -153,6 +176,11 @@ router.onError((error, to) => {
 
 // Until the first account exists every page leads to setup; after that, pages need a session.
 router.beforeEach(async (to) => {
+  if (to.name === 'tour') {
+    enterDemo()
+    window.location.replace('/')
+    return false
+  }
   const session = useSessionStore()
   await session.load()
   // App.vue shows a retry screen; let the navigation finish so the address bar is right.

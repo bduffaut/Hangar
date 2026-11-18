@@ -2,6 +2,8 @@
 // drop, but gives up for good when the server answers with an error (for example while Hangar
 // restarts during an update); this reopens the stream with a growing delay in that case too.
 import { type StreamName, streams } from '@hangar/shared'
+import { demoStream } from '../demo/streams.ts'
+import { isDemo } from '../demo/mode.ts'
 import { serverPath } from './client.ts'
 
 export interface Stream {
@@ -42,6 +44,7 @@ export function openStream(
   handlers: Record<string, (data: never) => void>,
   options: StreamOptions = {},
 ): Stream {
+  if (isDemo()) return demoStream(typeof url === 'function' ? url() : url, handlers, options)
   let source: EventSource | null = null
   let closed = false
   let retryTimer: ReturnType<typeof setTimeout> | null = null

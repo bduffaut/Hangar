@@ -17,7 +17,8 @@ test('visitors get the front door, and signed-in people can add a server', async
   await expect(
     front.getByRole('heading', { name: 'Deploy from GitHub to a computer you own' }),
   ).toBeVisible()
-  await expect(front.getByRole('heading', { name: 'From sign-in to a live app' })).toBeVisible()
+  await expect(front.getByRole('heading', { name: 'From sign-up to a live app' })).toBeVisible()
+  await expect(front.getByRole('button', { name: 'Take the tour' }).first()).toBeVisible()
   await shot(front, 'landing')
   await visitor.close()
 

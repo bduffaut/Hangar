@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { authCopy, landingCopy } from '@hangar/shared'
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { messageOf } from '../api/client.ts'
 import BrandMark from '../brand/BrandMark.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
@@ -9,9 +10,10 @@ import { useSessionStore } from '../stores/session.ts'
 import { BaseButton, BaseIcon, BaseMessage } from '../ui/index.ts'
 
 // The front door for visitors: what Hangar does, how to get going, and what runs where. Signing in
-// with GitHub creates an account when sign-up is open.
+// with GitHub creates an account when sign-up is open. The tour shows the dashboard without one.
 useDocumentTitle('Hangar')
 const session = useSessionStore()
+const route = useRoute()
 const busy = ref(false)
 const error = ref<string | null>(null)
 
@@ -25,6 +27,11 @@ async function signInWithGithub() {
     busy.value = false
   }
 }
+
+// "Sign up with GitHub" on the tour leaves it and comes here to start for real.
+onMounted(() => {
+  if (route.query.signup === 'github' && session.githubSignIn) void signInWithGithub()
+})
 </script>
 
 <template>
@@ -46,22 +53,33 @@ async function signInWithGithub() {
               v-if="session.githubSignIn"
               variant="primary"
               icon="github"
-              :label="landingCopy.signInGithub"
+              :label="session.openSignUp ? landingCopy.signUpGithub : landingCopy.signInGithub"
               :loading="busy"
               class="hg-hero-cta"
               @click="signInWithGithub"
             />
-            <RouterLink v-slot="{ navigate }" :to="{ name: 'login' }" custom>
+            <RouterLink v-slot="{ navigate }" :to="{ name: 'tour' }" custom>
               <BaseButton
                 :variant="session.githubSignIn ? 'secondary' : 'primary'"
-                :label="landingCopy.signIn"
+                icon="play"
+                :label="landingCopy.tour"
+                class="hg-hero-cta"
                 @click="navigate"
               />
             </RouterLink>
           </div>
           <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
-          <p v-if="!session.openSignUp" class="hg-muted hg-hero-note">
-            {{ landingCopy.inviteOnly }}
+          <p class="hg-muted hg-hero-note">
+            {{ session.openSignUp ? landingCopy.tourNote : landingCopy.inviteOnly }}
+          </p>
+          <p v-if="session.openSignUp" class="hg-muted hg-hero-note">
+            {{ landingCopy.agree }}
+            <RouterLink :to="{ name: 'terms' }">{{ landingCopy.terms.toLowerCase() }}</RouterLink>
+            {{ landingCopy.and }}
+            <RouterLink :to="{ name: 'privacy' }">{{
+              landingCopy.privacy.toLowerCase()
+            }}</RouterLink
+            >.
           </p>
         </div>
 
@@ -120,12 +138,46 @@ async function signInWithGithub() {
           </ul>
         </div>
       </section>
+
+      <section class="hg-faq" aria-labelledby="faq-title">
+        <h2 id="faq-title">{{ landingCopy.faqTitle }}</h2>
+        <div class="hg-faq-list">
+          <details v-for="item in landingCopy.faq" :key="item.q" class="hg-faq-item">
+            <summary>{{ item.q }}</summary>
+            <p class="hg-muted">{{ item.a }}</p>
+          </details>
+        </div>
+      </section>
+
+      <section class="hg-closer" aria-label="Get started">
+        <p class="hg-closer-line">{{ landingCopy.free }}</p>
+        <div class="hg-hero-actions">
+          <BaseButton
+            v-if="session.githubSignIn && session.openSignUp"
+            variant="primary"
+            icon="github"
+            :label="landingCopy.signUpGithub"
+            :loading="busy"
+            @click="signInWithGithub"
+          />
+          <RouterLink v-slot="{ navigate }" :to="{ name: 'tour' }" custom>
+            <BaseButton icon="play" :label="landingCopy.tour" @click="navigate" />
+          </RouterLink>
+        </div>
+      </section>
     </main>
 
     <footer class="hg-landing-foot">
       <a href="https://github.com/bduffaut/Hangar" rel="noopener"
         ><BaseIcon name="github" :size="16" /> {{ landingCopy.source }}</a
       >
+      <nav class="hg-landing-links" aria-label="About this site">
+        <a href="https://github.com/bduffaut/Hangar#run-hangar-yourself" rel="noopener">{{
+          landingCopy.selfHost
+        }}</a>
+        <RouterLink :to="{ name: 'terms' }">{{ landingCopy.terms }}</RouterLink>
+        <RouterLink :to="{ name: 'privacy' }">{{ landingCopy.privacy }}</RouterLink>
+      </nav>
     </footer>
   </div>
 </template>
@@ -399,6 +451,9 @@ async function signInWithGithub() {
   border-top: 1px solid var(--hg-line);
   font-size: var(--hg-size-sm);
 }
+.hg-landing-foot a:hover {
+  color: var(--hg-ink);
+}
 .hg-landing-foot a {
   display: inline-flex;
   align-items: center;
@@ -407,7 +462,91 @@ async function signInWithGithub() {
   text-decoration: none;
 }
 
+/* Questions */
+.hg-faq {
+  display: grid;
+  gap: var(--hg-space-5);
+}
+.hg-faq h2 {
+  font-size: var(--hg-size-xl);
+  letter-spacing: -0.02em;
+}
+.hg-faq-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--hg-space-6);
+}
+.hg-faq-item {
+  border-top: 1px solid var(--hg-line);
+  padding: var(--hg-space-4) 0;
+}
+.hg-faq-item summary {
+  cursor: pointer;
+  font-weight: var(--hg-weight-bold);
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--hg-space-3);
+}
+.hg-faq-item summary::-webkit-details-marker {
+  display: none;
+}
+.hg-faq-item summary::after {
+  content: '+';
+  color: var(--hg-accent);
+  font-family: var(--hg-mono);
+  transition: transform var(--hg-motion-fast, 0.15s) var(--hg-motion-easing);
+}
+.hg-faq-item[open] summary::after {
+  transform: rotate(45deg);
+}
+.hg-faq-item p {
+  margin: var(--hg-space-3) 0 0;
+  font-size: var(--hg-size-sm);
+  line-height: 1.6;
+}
+
+/* The last word */
+.hg-closer {
+  display: grid;
+  justify-items: center;
+  gap: var(--hg-space-4);
+  padding: var(--hg-space-6) var(--hg-space-5);
+  text-align: center;
+  border: 1px solid var(--hg-line);
+  background:
+    radial-gradient(
+      ellipse at top,
+      color-mix(in srgb, var(--hg-accent) 12%, transparent),
+      transparent 70%
+    ),
+    var(--hg-panel);
+}
+.hg-closer-line {
+  margin: 0;
+  font-size: var(--hg-size-lg, 1.25rem);
+  font-weight: var(--hg-weight-bold);
+  letter-spacing: -0.01em;
+}
+.hg-closer .hg-hero-actions {
+  justify-content: center;
+}
+.hg-landing-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--hg-space-3);
+}
+.hg-landing-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hg-space-4);
+}
+
 @media (max-width: 60rem) {
+  .hg-faq-list {
+    grid-template-columns: 1fr;
+  }
   .hg-hero {
     grid-template-columns: 1fr;
     gap: 3rem;

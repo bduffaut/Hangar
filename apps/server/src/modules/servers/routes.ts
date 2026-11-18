@@ -1,11 +1,20 @@
 import { contract, INSTALL_SCRIPT_PATH, SERVER_PREFIX } from '@hangar/shared'
 import { z } from 'zod'
 import { UserError } from '../../errors.ts'
-import { authenticate, type Http, OK, parseInput, requestOrigin, route } from '../../http/server.ts'
+import {
+  authenticate,
+  clearSessionCookie,
+  type Http,
+  OK,
+  parseInput,
+  requestOrigin,
+  route,
+} from '../../http/server.ts'
 import { ENTRYPOINT_HEADER } from '../../platform/proxy.ts'
 import { createHub } from '../../relay/hub.ts'
 import { FORWARDED_REQUEST_HEADERS, isServerRequest } from '../../relay/protocol.ts'
-import { getServerOf } from './repo.ts'
+import { removeOwnAccount } from '../users/service.ts'
+import { getServerOf, listServersOf } from './repo.ts'
 import {
   addServer,
   installScript,
@@ -59,6 +68,16 @@ export function serverRoutes(http: Http) {
 
   route(http, contract.removeServer, async ({ auth, params }) => {
     await removeServer(ctx, hub, auth.user.id, params.id)
+    return OK
+  })
+
+  // Here rather than with the other account routes because it needs the hub: every server of
+  // the account is told to forget this Hangar before the account goes.
+  route(http, contract.deleteAccount, async ({ auth, body, request, reply }) => {
+    await removeOwnAccount(ctx, auth.user.id, body.confirm, async (userId) => {
+      for (const server of await listServersOf(ctx.db, userId)) hub.disconnect(server.id)
+    })
+    clearSessionCookie(request, reply)
     return OK
   })
 

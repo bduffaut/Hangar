@@ -29,7 +29,7 @@ esac
 case "$GIVEN_PAIRING_CODE" in
   '' | *[!A-Za-z0-9_-]*) [ -z "$GIVEN_PAIRING_CODE" ] || fail "That pairing code is not valid." ;;
 esac
-HANGAR_VERSION="${HANGAR_VERSION:-0.2.0}"
+HANGAR_VERSION="${HANGAR_VERSION:-0.3.0}"
 HANGAR_IMAGE="${HANGAR_IMAGE:-ghcr.io/bduffaut/hangar-core:$HANGAR_VERSION}"
 HANGAR_BIND_IP="${HANGAR_BIND_IP:-0.0.0.0}"
 

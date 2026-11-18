@@ -1,5 +1,5 @@
 pnpm-lock.yaml
 .pnpm-store/
 apps/server/drizzle/
-Spec.md
+docs/SPEC.md
 .cache/

@@ -15,6 +15,7 @@ import {
   findLink,
   getUser,
   insertLink,
+  isOnlyAdmin,
   listOpenInvites,
   listUsersWithCounts,
   setRole,
@@ -50,8 +51,37 @@ export async function removeUser(ctx: Ctx, adminId: string, id: string): Promise
     throw new UserError(409, 'cannot_delete_self', 'You cannot delete your own account.')
   }
   if (!(await getUser(ctx.db, id))) throw notFound('Account')
+  await eraseUser(ctx, id)
+}
+
+/**
+ * Someone deleting their own account, after typing its username again. Their connected servers
+ * are told to forget this Hangar first (`disconnect`); the apps on them keep running there.
+ */
+export async function removeOwnAccount(
+  ctx: Ctx,
+  id: string,
+  confirm: string,
+  disconnect: (userId: string) => Promise<void>,
+): Promise<void> {
+  const user = await getUser(ctx.db, id)
+  if (!user) throw notFound('Account')
+  if (confirm !== user.username) {
+    throw new UserError(
+      400,
+      'confirm_mismatch',
+      'Type your username exactly to delete the account.',
+    )
+  }
+  if (await isOnlyAdmin(ctx.db, id)) throw new UserError(409, 'last_admin', LAST_ADMIN)
+  await disconnect(id)
+  await eraseUser(ctx, id)
+}
+
+async function eraseUser(ctx: Ctx, id: string) {
   await deleteSessions(ctx.db, id)
   for (const project of await listProjectsOf(ctx.db, id)) await deleteProject(ctx, project)
+  // Servers, sessions, links, and address checks go with the account (foreign keys cascade).
   await deleteUserRow(ctx.db, id)
   await ctx.builder.removeBuilder(ownerBuilderName(id))
   await ctx.docker.removeAppNetwork(ownerNetworkName(id))

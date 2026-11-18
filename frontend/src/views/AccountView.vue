@@ -12,6 +12,7 @@ import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
 import {
   BaseButton,
   BaseField,
+  BaseInput,
   BaseMessage,
   BasePassword,
   BaseSegmented,
@@ -109,6 +110,26 @@ async function signOutEverywhere() {
   await api('signOutEverywhere')
   session.apply(null)
   await router.push({ name: 'login' })
+}
+
+const deleteConfirm = ref('')
+async function deleteAccount() {
+  const username = session.username ?? ''
+  if (deleteConfirm.value.trim() !== username) {
+    errors.value = { ...errors.value, delete: accountCopy.deleteMismatch }
+    return
+  }
+  if (!(await confirm({ ...accountCopy.deleteConfirm, danger: true }))) return
+  busy.value = 'delete'
+  errors.value = { ...errors.value, delete: null }
+  try {
+    await api('deleteAccount', { body: { confirm: deleteConfirm.value.trim() } })
+    // A full load, so nothing of the account stays in memory.
+    window.location.assign('/welcome')
+  } catch (e) {
+    errors.value = { ...errors.value, delete: messageOf(e) }
+    busy.value = null
+  }
 }
 
 const themeChoice = computed<ThemePreference>({
@@ -253,6 +274,23 @@ const themeOptions: { label: string; value: ThemePreference }[] = [
       <div>
         <BaseButton :label="accountCopy.signOutEverywhere" @click="signOutEverywhere" />
       </div>
+    </HgPanel>
+
+    <HgPanel :title="accountCopy.deleteTitle" :description="accountCopy.deleteBody">
+      <form class="hg-form" @submit.prevent="deleteAccount">
+        <BaseField :label="accountCopy.deleteLabel(session.username ?? '')" for="delete-confirm">
+          <BaseInput id="delete-confirm" v-model="deleteConfirm" autocomplete="off" />
+        </BaseField>
+        <BaseMessage v-if="errors.delete" tone="error">{{ errors.delete }}</BaseMessage>
+        <div>
+          <BaseButton
+            type="submit"
+            variant="danger"
+            :loading="busy === 'delete'"
+            :label="accountCopy.deleteAction"
+          />
+        </div>
+      </form>
     </HgPanel>
   </div>
 </template>
