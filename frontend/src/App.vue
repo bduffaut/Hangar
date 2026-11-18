@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from './components/AppShell.vue'
 import { setShowAdminWidgets } from './dashboard/index.ts'
+import { IS_SITE, TOUR_BASE } from './demo/mode.ts'
 import { useLiveStore } from './stores/live.ts'
 import { useProjectsStore } from './stores/projects.ts'
 import { useSessionStore } from './stores/session.ts'
@@ -18,9 +19,14 @@ const notify = useNotify()
 
 watch(() => session.isAdmin, setShowAdminWidgets, { immediate: true })
 
+// On the public site the sample hangar is always "signed in", but its deploys and their
+// announcements belong to the tour only, not to the front page or the guides.
+const inTour = computed(() => route.path === TOUR_BASE || route.path.startsWith(`${TOUR_BASE}/`))
+const receiving = computed(() => session.signedIn && (!IS_SITE || inTour.value))
+
 // While signed in: keep live updates connected and announce deployments that finish.
 watch(
-  () => session.signedIn,
+  receiving,
   async (signedIn, wasSignedIn) => {
     if (!signedIn) {
       live.disconnect()
@@ -38,6 +44,7 @@ watch(
 )
 
 const stop = live.onDeployment((deployment, firstLive) => {
+  if (!receiving.value) return
   const name = projects.byId.get(deployment.projectId)?.name ?? 'The app'
   if (deployment.status === 'ready' && firstLive) notify.success(toastCopy.firstLive, name)
   else if (deployment.status === 'ready')

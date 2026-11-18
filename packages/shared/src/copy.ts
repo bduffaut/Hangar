@@ -546,7 +546,9 @@ export const landingCopy = {
   install: 'Install Hangar',
   tour: 'Take the tour',
   tourNote: 'Free and open source. The tour runs in your browser: nothing to install.',
-  commandLabel: 'On a spare computer with Ubuntu or Debian:',
+  commandLabel: 'Run this on the computer that will host your apps (Ubuntu or Debian):',
+  commandNote: 'It downloads the latest release from GitHub and checks it before anything runs.',
+  commandGuide: 'Read the install guide',
   free: 'Free and open source. Your computer, your apps, your data.',
   flightPlan: 'flight-plan',
   plan: [
@@ -600,6 +602,8 @@ export const landingCopy = {
   docs: 'Guides',
   privacy: 'Privacy',
   faqTitle: 'Questions',
+  faqMore: 'Something else? The guides cover every step, from installing to sharing with family.',
+  faqGuides: 'Open the guides',
   faq: [
     {
       q: 'What does it cost?',

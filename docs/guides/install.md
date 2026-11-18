@@ -48,8 +48,14 @@ At the end it prints:
   phone
 - a one-time **setup code** (the boarding pass)
 
-> Prefer to check what you run first? Download the script, read it, then run it:
-> `curl -fsSLO https://github.com/bduffaut/Hangar/releases/latest/download/install.sh && less install.sh && sudo bash install.sh`.
+> **Prefer to read the script before you run it?** Download it, look it over, then run it:
+>
+> ```sh
+> curl -fsSLO https://github.com/bduffaut/Hangar/releases/latest/download/install.sh
+> less install.sh
+> sudo bash install.sh
+> ```
+>
 > It downloads Hangar from the [GitHub release](https://github.com/bduffaut/Hangar/releases) and
 > checks its checksum before running anything.
 

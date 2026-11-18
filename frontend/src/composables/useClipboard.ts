@@ -20,15 +20,18 @@ function copyWithSelection(text: string): boolean {
   }
 }
 
-export function useClipboard() {
+/** `quiet`: the caller shows its own confirmation (a button that reads "Copied"), so no toast. */
+export function useClipboard(options: { quiet?: boolean } = {}) {
   const notify = useNotify()
-  return async (text: string, message: string = toastCopy.copied) => {
+  return async (text: string, message: string = toastCopy.copied): Promise<boolean> => {
     try {
       if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text)
       else if (!copyWithSelection(text)) throw new Error('copy refused')
-      notify.success(message)
+      if (!options.quiet) notify.success(message)
+      return true
     } catch {
       notify.error('Copying is blocked in this browser. Select the text and copy it instead.')
+      return false
     }
   }
 }

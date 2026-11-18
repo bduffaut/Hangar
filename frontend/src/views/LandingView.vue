@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { landingCopy } from '@hangar/shared'
 import BrandMark from '../brand/BrandMark.vue'
-import CopyField from '../components/CopyField.vue'
+import InstallCommand from '../components/InstallCommand.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
-import { INSTALL_COMMAND } from '../site/install.ts'
 import { BaseButton, BaseIcon } from '../ui/index.ts'
 
 // The public site's front door: what Hangar does, how to get it, and what runs where. Nothing
@@ -48,10 +47,6 @@ const tour = { name: 'home' }
             </RouterLink>
           </div>
           <p class="hg-muted hg-hero-note">{{ landingCopy.tourNote }}</p>
-          <div class="hg-hero-command">
-            <p class="hg-muted hg-hero-note">{{ landingCopy.commandLabel }}</p>
-            <CopyField :value="INSTALL_COMMAND" label="install command" wrap />
-          </div>
         </div>
 
         <!-- One deploy, as the dashboard shows it: the only animation on the page. -->
@@ -81,6 +76,15 @@ const tour = { name: 'home' }
             />
           </div>
         </figure>
+
+        <div class="hg-launch">
+          <p class="hg-launch-label">{{ landingCopy.commandLabel }}</p>
+          <InstallCommand />
+          <p class="hg-muted hg-launch-note">
+            {{ landingCopy.commandNote }}
+            <RouterLink :to="install">{{ landingCopy.commandGuide }}</RouterLink>
+          </p>
+        </div>
       </section>
 
       <section class="hg-route" aria-labelledby="route-title">
@@ -111,11 +115,20 @@ const tour = { name: 'home' }
       </section>
 
       <section class="hg-faq" aria-labelledby="faq-title">
-        <h2 id="faq-title">{{ landingCopy.faqTitle }}</h2>
+        <div class="hg-faq-intro">
+          <h2 id="faq-title">{{ landingCopy.faqTitle }}</h2>
+          <p class="hg-muted">
+            {{ landingCopy.faqMore }}
+            <RouterLink :to="{ name: 'docs' }">{{ landingCopy.faqGuides }}</RouterLink>
+          </p>
+        </div>
         <div class="hg-faq-list">
           <details v-for="item in landingCopy.faq" :key="item.q" class="hg-faq-item">
-            <summary>{{ item.q }}</summary>
-            <p class="hg-muted">{{ item.a }}</p>
+            <summary>
+              <span>{{ item.q }}</span>
+              <span class="hg-faq-mark" aria-hidden="true" />
+            </summary>
+            <p class="hg-faq-answer">{{ item.a }}</p>
           </details>
         </div>
       </section>
@@ -171,12 +184,6 @@ const tour = { name: 'home' }
   justify-content: space-between;
   height: 4rem;
 }
-.hg-hero-command {
-  display: grid;
-  gap: var(--hg-space-2);
-  margin-top: var(--hg-space-2);
-  max-width: 34rem;
-}
 .hg-landing-bar .hg-landing-links a {
   font-size: var(--hg-size-sm);
   color: var(--hg-ink-muted);
@@ -206,7 +213,7 @@ const tour = { name: 'home' }
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   align-items: center;
-  gap: 4rem;
+  gap: var(--hg-space-7) 4rem;
 }
 .hg-hero-text {
   display: grid;
@@ -230,6 +237,23 @@ const tour = { name: 'home' }
   gap: var(--hg-space-3);
 }
 .hg-hero-note {
+  font-size: var(--hg-size-sm);
+}
+
+/* The install command: the whole width under the hero, so it fits on one line. */
+.hg-launch {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--hg-space-3);
+  min-width: 0;
+}
+.hg-launch-label {
+  margin: 0;
+  font-weight: var(--hg-weight-bold);
+}
+.hg-launch-note {
+  margin: 0;
+  max-width: none;
   font-size: var(--hg-size-sm);
 }
 
@@ -444,48 +468,92 @@ const tour = { name: 'home' }
   text-decoration: none;
 }
 
-/* Questions */
+/* Questions: the heading beside one column of answers, so opening one moves only what is
+   below it. */
 .hg-faq {
   display: grid;
-  gap: var(--hg-space-5);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--hg-space-6) 4rem;
+  align-items: start;
+}
+.hg-faq-intro {
+  display: grid;
+  gap: var(--hg-space-3);
+  position: sticky;
+  top: var(--hg-space-6);
 }
 .hg-faq h2 {
   font-size: var(--hg-size-xl);
   letter-spacing: -0.02em;
 }
+.hg-faq-intro p {
+  margin: 0;
+  font-size: var(--hg-size-sm);
+  line-height: 1.6;
+  max-width: 22rem;
+}
 .hg-faq-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--hg-space-6);
+  border-bottom: 1px solid var(--hg-line);
 }
 .hg-faq-item {
   border-top: 1px solid var(--hg-line);
-  padding: var(--hg-space-4) 0;
 }
 .hg-faq-item summary {
-  cursor: pointer;
-  font-weight: var(--hg-weight-bold);
-  list-style: none;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--hg-space-3);
+  gap: var(--hg-space-5);
+  padding: var(--hg-space-5) 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--hg-size-md);
+  font-weight: var(--hg-weight-bold);
 }
 .hg-faq-item summary::-webkit-details-marker {
   display: none;
 }
-.hg-faq-item summary::after {
-  content: '+';
+.hg-faq-item summary:hover {
   color: var(--hg-accent);
-  font-family: var(--hg-mono);
-  transition: transform var(--hg-motion-fast, 0.15s) var(--hg-motion-easing);
 }
-.hg-faq-item[open] summary::after {
-  transform: rotate(45deg);
+.hg-faq-item summary:focus-visible {
+  outline: 2px solid var(--hg-focus, var(--hg-link));
+  outline-offset: 4px;
 }
-.hg-faq-item p {
-  margin: var(--hg-space-3) 0 0;
-  font-size: var(--hg-size-sm);
-  line-height: 1.6;
+/* A plus that turns into a minus: the vertical stroke folds away when open. */
+.hg-faq-mark {
+  position: relative;
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+.hg-faq-mark::before,
+.hg-faq-mark::after {
+  content: '';
+  position: absolute;
+  background: var(--hg-accent);
+  transition: transform 0.2s var(--hg-motion-easing);
+}
+.hg-faq-mark::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+}
+.hg-faq-mark::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+}
+.hg-faq-item[open] .hg-faq-mark::after {
+  transform: scaleY(0);
+}
+.hg-faq-answer {
+  margin: calc(-1 * var(--hg-space-2)) 0 0;
+  padding: 0 var(--hg-space-6) var(--hg-space-5) 0;
+  max-width: 40rem;
+  color: var(--hg-ink-muted);
+  line-height: 1.65;
 }
 
 /* The last word */
@@ -526,12 +594,19 @@ const tour = { name: 'home' }
 }
 
 @media (max-width: 60rem) {
-  .hg-faq-list {
-    grid-template-columns: 1fr;
+  .hg-faq {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hg-faq-intro {
+    position: static;
   }
   .hg-hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 3rem;
+  }
+  /* On one column the command comes right after the buttons, before the example. */
+  .hg-plan {
+    order: 1;
   }
   .hg-route-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));

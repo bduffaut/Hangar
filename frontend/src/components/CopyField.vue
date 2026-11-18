@@ -3,15 +3,14 @@ import { ref } from 'vue'
 import { useClipboard } from '../composables/useClipboard.ts'
 import { BaseButton } from '../ui/index.ts'
 
-// A value shown in full with a copy button; secrets stay masked until revealed. `wrap` lets a long
-// value (a command) break over lines, so all of it stays readable on a phone.
-const props = defineProps<{ value: string; secret?: boolean; label: string; wrap?: boolean }>()
+// A value shown in full with a copy button; secrets stay masked until revealed.
+const props = defineProps<{ value: string; secret?: boolean; label: string }>()
 const revealed = ref(!props.secret)
 const copy = useClipboard()
 </script>
 
 <template>
-  <div class="hg-copy" :class="{ 'is-wrapped': wrap }">
+  <div class="hg-copy">
     <code class="hg-copy-value" :aria-label="label">{{ revealed ? value : '•'.repeat(24) }}</code>
     <BaseButton
       v-if="secret"
@@ -47,15 +46,5 @@ const copy = useClipboard()
   overflow-x: auto;
   white-space: nowrap;
   font-size: var(--hg-size-sm);
-}
-.is-wrapped {
-  align-items: flex-start;
-}
-.is-wrapped .hg-copy-value {
-  padding: var(--hg-space-1) 0;
-  overflow-x: visible;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.6;
 }
 </style>
