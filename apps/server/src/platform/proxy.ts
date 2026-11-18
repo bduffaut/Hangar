@@ -33,7 +33,7 @@ export interface RoutingInput {
 }
 
 interface Router {
-  entryPoints: ('web' | 'public' | 'traefik')[]
+  entryPoints: ('web' | 'public' | 'private' | 'traefik')[]
   rule: string
   service: string
   priority?: number
@@ -65,6 +65,7 @@ export const PROXY_API_KEY_HEADER = 'X-Hangar-Proxy-Key'
 const CORE = 'core'
 const FROM_WEB = 'from-web'
 const FROM_PUBLIC = 'from-public'
+const FROM_PRIVATE = 'from-private'
 
 const host = (hostname: string) => `Host(\`${hostname}\`)`
 const loadBalancer = (url: string): Service => ({ loadBalancer: { servers: [{ url }] } })
@@ -85,6 +86,7 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
   const middlewares = {
     [FROM_WEB]: entrypointHeader('web'),
     [FROM_PUBLIC]: entrypointHeader('public'),
+    [FROM_PRIVATE]: entrypointHeader('private'),
   }
 
   routers['proxy-api'] = {
@@ -101,6 +103,17 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
       .join(' || '),
     service: CORE,
     middlewares: [FROM_WEB],
+  }
+  // HTTPS on the Tailscale name: `tailscale serve` ends TLS and passes requests to the `private`
+  // entrypoint, which listens on the machine's loopback only (D40). Core trusts the entrypoint
+  // header to know the browser used HTTPS.
+  if (input.privateHostname) {
+    routers['tower-private'] = {
+      entryPoints: ['private'],
+      rule: host(input.privateHostname),
+      service: CORE,
+      middlewares: [FROM_PRIVATE],
+    }
   }
   // Unknown or stopped apps on the LAN get a friendly page from core. Public traffic gets Traefik's plain 404.
   routers.fallback = {

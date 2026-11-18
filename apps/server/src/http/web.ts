@@ -27,8 +27,10 @@ const CONTENT_SECURITY_POLICY = [
 /** Headers on every response from core. */
 export function addSecurityHeaders(app: FastifyInstance) {
   app.addHook('onSend', async (request, reply) => {
-    // Only public traffic is HTTPS. No includeSubDomains: apps under the domain are their own.
-    if (request.headers[ENTRYPOINT_HEADER.toLowerCase()] === 'public') {
+    // Only public traffic and the private Tailscale address are HTTPS. No includeSubDomains: apps
+    // under the domain are their own.
+    const via = request.headers[ENTRYPOINT_HEADER.toLowerCase()]
+    if (via === 'public' || via === 'private') {
       reply.header('Strict-Transport-Security', 'max-age=31536000')
     }
     reply.header('X-Content-Type-Options', 'nosniff')

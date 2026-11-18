@@ -87,8 +87,8 @@ if ! docker ps --filter name='^hangar-proxy$' -q 2>/dev/null | grep -q .; then
   if ss -ltnH "( sport = :80 )" | awk '{print $4}' | grep -qE "^${port80_conflict}:80$"; then
     fail "Port 80 is already in use on ${HANGAR_BIND_IP}." "Stop whatever uses it, or set HANGAR_BIND_IP to a different address."
   fi
+  ok "Port 80 is free on ${HANGAR_BIND_IP}"
 fi
-ok "Port 80 is free on ${HANGAR_BIND_IP}"
 
 step "Rolling open the hangar doors..." "Writing Hangar's files to $HANGAR_DIR."
 install -d -m 0755 "$HANGAR_DIR"
@@ -150,9 +150,23 @@ fi
 if [ "$USE_TAILSCALE" = 1 ]; then
   tailscale_boot_order
   tailscale_configure
+elif [ -n "$(awk -F= '/^HANGAR_TAILSCALE_HOSTNAME=/ {print $2}' "$ENV_FILE")" ]; then
+  # Asked to leave Tailscale: back to the local network, on every address unless told otherwise.
+  if command -v tailscale >/dev/null 2>&1; then
+    tailscale serve --https=443 off >/dev/null 2>&1 || true
+  fi
+  set_env HANGAR_TAILSCALE_HOSTNAME ''
+  set_env HANGAR_TAILSCALE_HTTPS 0
+  [ -n "$GIVEN_BIND_IP" ] || set_env HANGAR_BIND_IP 0.0.0.0
+  if [ -z "$GIVEN_LAN_IP" ]; then
+    GIVEN_LAN_IP=$(detect_ip)
+    set_env HANGAR_LAN_IP "$GIVEN_LAN_IP"
+  fi
+  ok "Moved the Control Tower from Tailscale to the local network"
 fi
 # Use the saved values from here on (a re-run without arguments keeps the old bind address).
 HANGAR_IMAGE=$(awk -F= '/^HANGAR_IMAGE=/ {print $2}' "$ENV_FILE")
+HANGAR_BIND_IP=$(awk -F= '/^HANGAR_BIND_IP=/ {print $2}' "$ENV_FILE")
 chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 lan_ip=$(awk -F= '/^HANGAR_LAN_IP=/ {print $2}' "$ENV_FILE")

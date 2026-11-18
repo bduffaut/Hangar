@@ -33,7 +33,8 @@ const envSchema = z.object({
   // Control Tower answers there over HTTPS, through `tailscale serve`.
   HANGAR_TAILSCALE_HOSTNAME: z
     .string()
-    .regex(/^([a-z0-9-]+\.)+ts\.net$/i)
+    // Usually <machine>.<tailnet>.ts.net; Headscale and custom MagicDNS names are other domains.
+    .regex(/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]\.?$/i)
     .optional()
     .or(z.literal('').transform(() => undefined)),
   // '1' when `tailscale serve` gives that name HTTPS; otherwise it answers on plain HTTP over

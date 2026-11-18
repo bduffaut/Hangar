@@ -3,6 +3,7 @@ import { navCopy } from '@hangar/shared'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BrandMark from '../brand/BrandMark.vue'
+import { IS_SITE } from '../demo/mode.ts'
 import { useLiveStore } from '../stores/live.ts'
 import { useProjectsStore } from '../stores/projects.ts'
 import { useSessionStore } from '../stores/session.ts'
@@ -39,6 +40,8 @@ function cycleTheme() {
 }
 
 async function signOut() {
+  // The site's tour has no sign-in page: back to the front page.
+  if (IS_SITE) return window.location.assign('/')
   live.disconnect()
   await session.logout()
   await router.push({ name: 'login' })

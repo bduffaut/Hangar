@@ -10,6 +10,7 @@ import {
 } from '@hangar/shared'
 import { ConfigError, loadConfig } from './config.ts'
 import { createContext } from './context.ts'
+import { getSettings } from './modules/settings/repo.ts'
 import { createLogger } from './logger.ts'
 import { issueSetupCode, resetPassword } from './modules/auth/service.ts'
 import { updateSettings } from './modules/settings/service.ts'
@@ -42,6 +43,18 @@ async function main() {
         const code = await issueSetupCode(ctx)
         if (!code) {
           console.log('Hangar is already set up. Sign in with your account instead.')
+          // Servers once paired with a central Hangar (0.2.0) have an admin made for the relay,
+          // with no password; without GitHub sign-in here nobody could get in. Say how.
+          const { rows } = await ctx.db.execute(
+            `select username from users where role = 'admin' and password_hash is null`,
+          )
+          const settings = await getSettings(ctx.db)
+          if (rows.length > 0 && !settings.githubApp) {
+            const names = rows.map((r) => String(r.username))
+            console.log(
+              `No password is set for ${names.join(', ')}. Set one with: sudo hangar-admin reset-password ${names[0]}`,
+            )
+          }
           break
         }
         // Only the code goes to stdout, so the installer can capture it.

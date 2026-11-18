@@ -4,6 +4,8 @@ entryPoints:
     address: ':80'
   public:
     address: ':8081' # reached only by cloudflared over the hangar network
+  private:
+    address: ':8443' # HTTPS on the Tailscale name, from `tailscale serve`; published on loopback only
   traefik:
     address: ':8082' # API and ping; never published to the host in production
 

@@ -125,7 +125,7 @@ async function deleteAccount() {
   try {
     await api('deleteAccount', { body: { confirm: deleteConfirm.value.trim() } })
     // A full load, so nothing of the account stays in memory.
-    window.location.assign('/welcome')
+    window.location.assign('/login')
   } catch (e) {
     errors.value = { ...errors.value, delete: messageOf(e) }
     busy.value = null

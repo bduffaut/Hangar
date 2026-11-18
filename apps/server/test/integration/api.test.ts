@@ -992,6 +992,27 @@ describe('accounts', () => {
     await call({ method: 'DELETE', url: `/api/projects/${adminProject}`, cookie, csrf })
   })
 
+  it('uses a Secure __Host- cookie for HTTPS through tailscale serve (D40)', async () => {
+    const headers = {
+      host: HOST,
+      origin: ORIGIN,
+      'x-hangar-entrypoint': 'private',
+      'content-type': 'application/json',
+    }
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers,
+      payload: { username: 'admin', password: ADMIN_PASSWORD },
+      remoteAddress: '10.9.9.10',
+    })
+    expect(login.statusCode).toBe(200)
+    const cookieHeader = String([login.headers['set-cookie']].flat()[0])
+    expect(cookieHeader).toMatch(/^__Host-hangar_session=/)
+    expect(cookieHeader).toContain('Secure')
+    expect(login.headers['strict-transport-security']).toBeDefined()
+  })
+
   it('never answers the Control Tower on the public entrypoint (D40)', async () => {
     await setSettings(ctx.db, { publicDomains: ['example.com'] })
     await new Promise((resolve) => setTimeout(resolve, 5_100)) // the access policy cache

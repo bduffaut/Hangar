@@ -15,7 +15,6 @@ import {
   findLink,
   getUser,
   insertLink,
-  isOnlyAdmin,
   listOpenInvites,
   listUsersWithCounts,
   setRole,
@@ -65,7 +64,11 @@ export async function removeOwnAccount(ctx: Ctx, id: string, confirm: string): P
       'Type your username exactly to delete the account.',
     )
   }
-  if (await isOnlyAdmin(ctx.db, id)) throw new UserError(409, 'last_admin', LAST_ADMIN)
+  // Stepping down first, under the same lock as role changes, so two admins deleting themselves
+  // at once cannot both pass the check and leave nobody in charge.
+  if (user.role === 'admin' && !(await setRole(ctx.db, id, 'member'))) {
+    throw new UserError(409, 'last_admin', LAST_ADMIN)
+  }
   await eraseUser(ctx, id)
 }
 

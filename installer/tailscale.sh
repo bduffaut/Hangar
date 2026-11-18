@@ -16,16 +16,18 @@
 #   HANGAR_TAILSCALE_AUTHKEY  sign in with an auth key instead of a link (unattended installs)
 #   HANGAR_TAILSCALE_NAME     the machine's name on a new sign-in (default: hangar)
 
-# Reads one field of `tailscale status --json` without needing jq.
+# Reads one field of this machine's Tailscale status (state, dns, or certs) with plain shell
+# tools: no jq or Python, which minimal systems may not have. With --peers=false the only DNSName
+# is this machine's.
 ts_status_field() {
-  tailscale status --json 2>/dev/null | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-self = d.get('Self') or {}
-value = {'state': d.get('BackendState', ''), 'dns': self.get('DNSName', ''),
-         'certs': ' '.join(d.get('CertDomains') or [])}['$1']
-print(value.rstrip('.'))
-" 2>/dev/null
+  local json
+  json=$(tailscale status --json --peers=false 2>/dev/null) || return 0
+  case "$1" in
+    state) printf '%s\n' "$json" | sed -n 's/^ *"BackendState": *"\([^"]*\)".*/\1/p' | head -1 ;;
+    dns) printf '%s\n' "$json" | sed -n 's/^ *"DNSName": *"\([^"]*\)".*/\1/p' | head -1 | sed 's/\.$//' ;;
+    # Empty when HTTPS certificates are off ("CertDomains": null).
+    certs) printf '%s\n' "$json" | tr -d '\n ' | sed -n 's/.*"CertDomains":\["\([^"]*\)".*/\1/p' ;;
+  esac
 }
 
 tailscale_install() {
@@ -89,7 +91,7 @@ tailscale_configure() {
 
   # HTTPS needs "HTTPS certificates" turned on for the tailnet (one switch in Tailscale's admin).
   if [ -n "$(ts_status_field certs)" ]; then
-    if tailscale serve --bg --https=443 "http://$ip:80" >/dev/null 2>&1; then
+    if tailscale serve --bg --https=443 http://127.0.0.1:8443 >/dev/null 2>&1; then
       https=1
       ok "HTTPS on https://$dns"
     else
@@ -130,5 +132,11 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   tailscale_configure
   compose up -d hangar-proxy hangar-core >/dev/null 2>&1
   wait_for_core || fail "Hangar did not come back within 3 minutes." "See what went wrong: docker logs hangar-core"
+  # The database owns the address after the first start; give it the Tailscale one too, so the
+  # tower and every app's address follow.
+  lan_ip=$(awk -F= '/^HANGAR_LAN_IP=/ {print $2}' "$ENV_FILE")
+  docker exec hangar-core hangar-admin set-lan-ip "$lan_ip" >/dev/null 2>&1 \
+    && ok "Server address set to $lan_ip" \
+    || warn "Could not apply the address $lan_ip. Run: sudo hangar-admin set-lan-ip $lan_ip"
   printf '\n  Control Tower:  %s%s%s\n\n' "$BOLD" "$TAILSCALE_URL" "$RESET"
 fi

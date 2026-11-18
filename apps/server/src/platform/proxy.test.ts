@@ -91,6 +91,17 @@ describe('renderRouting', () => {
       .filter((r) => r.entryPoints.includes('public'))
       .map((r) => r.rule)
     expect(publicRules.join(' ')).not.toContain('ts.net')
+    // HTTPS from `tailscale serve` arrives on the loopback-only entrypoint, marked as such.
+    expect(routers['tower-private']).toMatchObject({
+      entryPoints: ['private'],
+      rule: 'Host(`hangar.tail1234.ts.net`)',
+      service: 'core',
+      middlewares: ['from-private'],
+    })
+  })
+
+  it('has no private entrypoint route without a Tailscale name', () => {
+    expect(renderRouting(lanOnly).http.routers['tower-private']).toBeUndefined()
   })
 
   it('never sends public traffic to core except through hooks and address checks', () => {

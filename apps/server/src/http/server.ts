@@ -20,7 +20,12 @@ import {
 } from '../modules/auth/service.ts'
 import { isPendingCheck } from '../modules/settings/reachability.ts'
 import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
-import { type AccessPolicyCache, classifyRequest, createAccessPolicy } from './access.ts'
+import {
+  type AccessPolicyCache,
+  classifyRequest,
+  createAccessPolicy,
+  normalizeHost,
+} from './access.ts'
 import { type EventStream, openEventStream } from './sse.ts'
 
 export const SESSION_COOKIE = 'hangar_session'
@@ -86,13 +91,22 @@ function trackProxyAddresses(host: string) {
 const isLoopback = (address: string) =>
   address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 
+const entrypoint = (request: FastifyRequest) => request.headers[ENTRYPOINT_HEADER.toLowerCase()]
+
 /**
  * True for traffic from the public entrypoint, which is always HTTPS at Cloudflare. Traefik sets
  * this header on every request to core and sees plain HTTP from the tunnel, so the usual
  * X-Forwarded-Proto says http here.
  */
-const isPublicRequest = (request: FastifyRequest) =>
-  request.headers[ENTRYPOINT_HEADER.toLowerCase()] === 'public'
+const isPublicRequest = (request: FastifyRequest) => entrypoint(request) === 'public'
+
+/**
+ * The browser used HTTPS: Cloudflare for public traffic, or `tailscale serve` for the private
+ * address, which reaches Traefik only on the loopback-only `private` entrypoint (D40). Such
+ * requests get Secure, __Host- cookies.
+ */
+export const isSecureRequest = (request: FastifyRequest) =>
+  isPublicRequest(request) || entrypoint(request) === 'private'
 
 /**
  * The visitor's address. Behind the tunnel every request comes from cloudflared, so rate limits
@@ -126,6 +140,17 @@ export function createHttpServer(ctx: Ctx): Http {
     const peer = request.socket.remoteAddress ?? ''
     if (ctx.config.isProduction && !isLoopback(peer) && !(await isProxy.confirm(peer))) {
       return reply.code(404).type('text/plain').send('Not found')
+    }
+    // With HTTPS on the Tailscale name, plain HTTP to it (straight to port 80) moves to HTTPS, so
+    // the session cookie only ever travels encrypted by TLS (D40).
+    const { tailscaleHostname, tailscaleHttps } = ctx.config
+    if (
+      tailscaleHttps &&
+      tailscaleHostname &&
+      entrypoint(request) === 'web' &&
+      normalizeHost(request.headers.host) === tailscaleHostname
+    ) {
+      return reply.redirect(`https://${tailscaleHostname}${request.url}`, 308)
     }
     const area = classifyRequest(await access.get(), {
       host: request.headers.host,
@@ -198,7 +223,7 @@ export function createHttpServer(ctx: Ctx): Http {
 }
 
 const sessionCookieName = (request: FastifyRequest) =>
-  isPublicRequest(request) ? SECURE_SESSION_COOKIE : SESSION_COOKIE
+  isSecureRequest(request) ? SECURE_SESSION_COOKIE : SESSION_COOKIE
 
 export function setSessionCookie(
   request: FastifyRequest,
@@ -211,19 +236,19 @@ export function setSessionCookie(
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    secure: isPublicRequest(request),
+    secure: isSecureRequest(request),
     expires: expiresAt,
   })
 }
 
 export function clearSessionCookie(request: FastifyRequest, reply: FastifyReply) {
-  reply.clearCookie(sessionCookieName(request), { path: '/', secure: isPublicRequest(request) })
+  reply.clearCookie(sessionCookieName(request), { path: '/', secure: isSecureRequest(request) })
 }
 
 // Ties a sign-in with GitHub to the browser that started it (the OAuth state).
 const FLOW_COOKIE = 'hangar_github_flow'
 const flowCookieName = (request: FastifyRequest) =>
-  isPublicRequest(request) ? `__Host-${FLOW_COOKIE}` : FLOW_COOKIE
+  isSecureRequest(request) ? `__Host-${FLOW_COOKIE}` : FLOW_COOKIE
 
 export function setFlowCookie(request: FastifyRequest, reply: FastifyReply, state: string) {
   reply.setCookie(flowCookieName(request), state, {
@@ -231,7 +256,7 @@ export function setFlowCookie(request: FastifyRequest, reply: FastifyReply, stat
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
-    secure: isPublicRequest(request),
+    secure: isSecureRequest(request),
     maxAge: 10 * 60,
   })
 }
@@ -240,7 +265,7 @@ export function setFlowCookie(request: FastifyRequest, reply: FastifyReply, stat
 export function takeFlowCookie(request: FastifyRequest, reply: FastifyReply): string | undefined {
   const raw = request.cookies[flowCookieName(request)]
   if (raw === undefined) return undefined
-  reply.clearCookie(flowCookieName(request), { path: '/', secure: isPublicRequest(request) })
+  reply.clearCookie(flowCookieName(request), { path: '/', secure: isSecureRequest(request) })
   const unsigned = request.unsignCookie(raw)
   return unsigned.valid && unsigned.value ? unsigned.value : undefined
 }

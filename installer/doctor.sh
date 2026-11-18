@@ -39,7 +39,7 @@ ts_name=$(env_value HANGAR_TAILSCALE_HOSTNAME)
 if [ -n "$ts_name" ]; then
   if ! command -v tailscale >/dev/null 2>&1; then
     bad "Tailscale is not installed, but Hangar is set to use it." "Run: sudo hangar-tailscale"
-  elif [ "$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys;print(json.load(sys.stdin).get("BackendState",""))' 2>/dev/null)" != Running ]; then
+  elif ! tailscale status --json --peers=false 2>/dev/null | grep -q '"BackendState": *"Running"'; then
     bad "Tailscale is not connected, so your devices cannot reach the Control Tower." "Run: sudo tailscale up"
   else
     ts_ip=$(tailscale ip -4 2>/dev/null | head -1)

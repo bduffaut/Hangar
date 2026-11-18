@@ -29,6 +29,8 @@ services:
     # the owner's devices can; 0.0.0.0 would be every network the server is on.
     ports:
       - ${HANGAR_BIND_IP:-0.0.0.0}:80:80
+      # `tailscale serve` passes HTTPS for the Tailscale name here (D40); this machine only.
+      - 127.0.0.1:8443:8443
     volumes:
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
       - traefik-dynamic:/etc/traefik/dynamic:ro

@@ -84,22 +84,10 @@ export function createDocker(docker = new Dockerode()) {
   }
 
   const api = {
-    /** The machine Docker runs on (not this container): its name, system, and size. */
+    /** The machine Docker runs on (not this container): its name and operating system. */
     async hostInfo() {
-      const info = (await docker.info()) as {
-        Name?: string
-        OperatingSystem?: string
-        Architecture?: string
-        NCPU?: number
-        MemTotal?: number
-      }
-      return {
-        hostname: info.Name ?? 'unknown',
-        os: info.OperatingSystem ?? 'unknown',
-        arch: info.Architecture ?? 'unknown',
-        cpus: info.NCPU ?? 0,
-        memoryBytes: info.MemTotal ?? 0,
-      }
+      const info = (await docker.info()) as { Name?: string; OperatingSystem?: string }
+      return { hostname: info.Name ?? null, os: info.OperatingSystem ?? null }
     },
 
     async imageExists(ref: string): Promise<boolean> {

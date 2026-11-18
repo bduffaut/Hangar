@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { deckCopy, type FlightStats, navCopy, type SystemInfo } from '@hangar/shared'
+import { deckCopy, type FlightStats, navCopy } from '@hangar/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api/client.ts'
 import { formatDuration, formatUptime } from '../lib/format.ts'
@@ -7,6 +7,7 @@ import { useLiveStore } from '../stores/live.ts'
 import { useMetricsStore } from '../stores/metrics.ts'
 import { useProjectsStore } from '../stores/projects.ts'
 import { useSessionStore } from '../stores/session.ts'
+import { useMachine } from '../composables/useMachine.ts'
 import BarSpark from './BarSpark.vue'
 
 // The top of the home screen: this machine, its live readings, and how the last weeks of
@@ -24,11 +25,6 @@ let unsubscribe: (() => void) | null = null
 onMounted(() => {
   metrics.acquire()
   void loadStats()
-  // The machine's own name is for admins (the server's readings are theirs).
-  if (session.isAdmin)
-    void api('systemInfo')
-      .then((i) => (info.value = i))
-      .catch(() => {})
   // A finished deploy changes the numbers.
   unsubscribe = live.onDeployment((d) => {
     if (d.status === 'ready' || d.status === 'failed') void loadStats()
@@ -39,7 +35,8 @@ onBeforeUnmount(() => {
   unsubscribe?.()
 })
 
-const info = ref<SystemInfo | null>(null)
+// The machine's own name is for admins (the server's readings are theirs).
+const info = useMachine(session.isAdmin)
 const name = computed(() => info.value?.hostname ?? navCopy.thisServer)
 const online = computed(() => live.connected)
 const machine = computed(() => info.value?.os ?? window.location.hostname)
