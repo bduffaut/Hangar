@@ -105,7 +105,6 @@ export const triggerModeCopy = {
 export const navCopy = {
   overview: 'Overview',
   publish: 'Publish',
-  servers: 'Servers',
   projects: 'Projects',
   projectCount: (n: number) => `${n} ${n === 1 ? 'app' : 'apps'} in the hangar`,
   settings: 'Settings',
@@ -115,12 +114,11 @@ export const navCopy = {
   signOut: 'Sign out',
   newProject: 'New project',
   thisServer: 'This server',
+  getStarted: 'Get started',
   switchServer: 'Switch server',
-  addServer: 'Add a server',
   offline: 'Offline',
   online: 'Online',
   notPaired: 'Waiting to connect',
-  noServer: 'No server yet',
 } as const
 
 export const instrumentsCopy = {
@@ -342,9 +340,6 @@ export const githubAppCopy = {
     'Added a new address for the Control Tower later? Add it, ending in /auth/github, as a callback URL in the app on GitHub.',
   created: 'Sign in with GitHub is ready.',
   finishing: 'Finishing the setup with GitHub…',
-  openTitle: 'Let anyone sign up with GitHub',
-  openBody:
-    'New accounts can only use servers of their own, never this one. Turn it off to go back to invites only.',
 } as const
 
 export const usersCopy = {
@@ -500,14 +495,9 @@ export const guideCopy = {
   ],
   tour: [
     {
-      target: 'server',
-      title: 'Your servers',
-      body: 'Everything on this page comes from the server chosen here. Switch to another one, or add a server, from this menu.',
-    },
-    {
       target: 'deck',
       title: 'The flight deck',
-      body: 'Live readings from that server, and how its deploys went over the last two weeks.',
+      body: 'Live readings from this computer, and how its deploys went over the last two weeks.',
     },
     {
       target: 'departures',
@@ -549,20 +539,15 @@ export const errorCopy = {
   unexpected: 'Something went wrong. Try again.',
 } as const
 
-/** The front door: what a visitor sees before signing in. */
+/** The public site's front page (hangar.benduffaut.com). */
 export const landingCopy = {
   title: 'Deploy from GitHub to a computer you own',
-  lede: 'Hangar turns a spare laptop or mini PC into your own deploy platform. Sign up with GitHub, run one command on your machine, and publish any repository to your own domain. Your code builds and runs at home, not on someone else’s cloud.',
-  signUpGithub: 'Sign up with GitHub',
-  signInGithub: 'Sign in with GitHub',
-  signIn: 'Sign in',
+  lede: 'Hangar turns a spare laptop, mini PC, or Raspberry Pi into your own deploy platform, like Vercel at home. Push to GitHub and your app builds and goes live on your own domain. The dashboard stays private to your own devices.',
+  install: 'Install Hangar',
   tour: 'Take the tour',
-  tourNote: 'See the whole dashboard with sample apps. No account needed.',
-  free: 'Free and open source. Your server, your apps, your data.',
-  agree: 'By signing up you agree to the',
-  and: 'and',
-  inviteOnly:
-    'Accounts on this site are by invitation for now. Take the tour, or run Hangar yourself.',
+  tourNote: 'Free and open source. The tour runs in your browser: nothing to install.',
+  commandLabel: 'On a spare computer with Ubuntu or Debian:',
+  free: 'Free and open source. Your computer, your apps, your data.',
   flightPlan: 'flight-plan',
   plan: [
     { label: 'Repository', value: 'you/portfolio' },
@@ -571,110 +556,104 @@ export const landingCopy = {
     { label: 'Address', value: 'portfolio.yourdomain.com' },
   ],
   planStatus: 'Live',
-  stepsTitle: 'From sign-up to a live app',
+  stepsTitle: 'From a spare computer to a live app',
   steps: [
     {
-      title: 'Sign up with GitHub',
-      body: 'Hangar sees only the repositories you choose, and can read them but not change them.',
+      title: 'Get Tailscale',
+      body: 'Install the free Tailscale app on your phone or laptop. It is how you, and only you, reach your dashboard from anywhere.',
     },
     {
-      title: 'Connect your server',
-      body: 'Copy one command and run it on your machine. It installs Hangar there and connects back here. No ports to open.',
+      title: 'Run one command',
+      body: 'On a spare computer, paste the install command. It sets up Docker, Hangar, and Tailscale, and prints your private address.',
     },
     {
-      title: 'Put it on the internet',
-      body: 'Paste a free Cloudflare Tunnel token and add your domain. Your home address stays private.',
+      title: 'Open your dashboard',
+      body: 'On any of your devices, open that address. Create your account, then connect GitHub.',
     },
     {
       title: 'Publish a repository',
-      body: 'Pick a repo and press Publish. Every push after that deploys by itself, with rollback one click away.',
+      body: 'Pick a repo and press Publish. Add a free Cloudflare Tunnel to put it on your domain. Every push deploys by itself.',
     },
   ],
   whereTitle: 'What runs where',
   where: [
     {
-      name: 'This site',
-      body: 'Your sign-in, your list of servers, and the dashboard. It passes your requests to your server.',
+      name: 'Your computer',
+      body: 'Everything: the dashboard, builds, your apps, logs, and settings. Nothing about your apps is stored anywhere else.',
     },
     {
-      name: 'Your server',
-      body: 'Builds, apps, logs, environment variables, and the tunnel. It connects out to this site and to Cloudflare.',
+      name: 'Tailscale',
+      body: 'A private network between your own devices. The dashboard answers only there, so nobody else can even see its sign-in page.',
     },
     {
-      name: 'Cloudflare',
-      body: 'Carries visitors to your apps through the tunnel, with HTTPS. Free.',
+      name: 'Cloudflare (optional)',
+      body: 'Carries visitors to the apps you choose to publish, with HTTPS. Your home address stays hidden and no router ports are opened.',
     },
   ],
-  needsTitle: 'What your server needs',
+  needsTitle: 'What your computer needs',
   needs: [
-    'Ubuntu 22.04 or 24.04, or Debian 12',
+    'Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13, on 64-bit Intel/AMD or ARM',
     '2 GB of memory and 10 GB of free disk',
-    'An internet connection. Docker is installed for you.',
+    'An internet connection. Docker and Tailscale are installed for you.',
   ],
   source: 'Source on GitHub',
-  selfHost: 'Run Hangar yourself',
-  terms: 'Terms',
+  docs: 'Guides',
   privacy: 'Privacy',
   faqTitle: 'Questions',
   faq: [
     {
       q: 'What does it cost?',
-      a: 'Nothing. Hangar is free and open source under the MIT license. You bring the computer, and Cloudflare Tunnel is free too.',
+      a: 'Nothing. Hangar is free and open source under the MIT license. Tailscale is free for personal use, and so is a Cloudflare Tunnel. You only need a computer that stays on.',
     },
     {
-      q: 'What can this site see and do?',
-      a: 'It keeps your account, your list of servers, and your GitHub connection, and passes the requests you make in the dashboard to your server. Your code, builds, apps, logs and environment variables stay on your server. Because it can send your server requests, a connected server trusts this site: if that is not for you, run Hangar yourself.',
+      q: 'Is my dashboard on the internet?',
+      a: 'No. It answers only on your Tailscale network, so it is reachable from your own devices and nobody else’s. Only the apps you choose to publish are public.',
     },
     {
-      q: 'What if this site goes down?',
-      a: 'Your apps keep running and stay online: they run on your server and reach the internet through your own tunnel. You just cannot use the dashboard, or deploy new pushes, until it is back.',
+      q: 'Do I need an account on this site?',
+      a: 'No. This site is just the guide and the installer. There are no accounts here, and it never connects to your computer. Your Hangar is entirely yours.',
     },
     {
       q: 'Do I need to open ports on my router?',
-      a: 'No. Your server connects out to this site, and visitors reach your apps through Cloudflare. Nothing on your home network is opened.',
+      a: 'No. Tailscale and Cloudflare both connect out from your computer, so nothing on your home network is opened.',
     },
     {
       q: 'What can I deploy?',
-      a: 'Any repository with a Dockerfile, or a common framework Hangar can detect: Node.js, Vite, Next.js, Astro, Python, Go, static sites and more. One server can run many apps.',
+      a: 'Any repository with a Dockerfile, or a common framework Hangar can detect: Node.js, Vite, Next.js, Astro, Python, Go, static sites, and more. One computer can run many apps.',
     },
     {
-      q: 'Can I leave?',
-      a: 'Any time. Remove a server and it forgets this site; run sudo hangar-uninstall on it to remove Hangar. Deleting your account removes everything this site holds about you.',
+      q: 'Can my family or team use it?',
+      a: 'Yes. Invite people from the dashboard. Each person sees only their own apps, and reaches the dashboard through your Tailscale network once you share it with them.',
+    },
+    {
+      q: 'What if my computer is off?',
+      a: 'Your apps go offline until it is back: they run on it. Hangar starts them again by itself after a restart. A mini PC or an old laptop on a shelf is ideal.',
     },
   ],
 } as const
 
-/** This machine is someone's own server; its dashboard lives elsewhere. */
-export const managedCopy = {
-  title: 'This server is run from another Hangar',
-  body: (url: string) =>
-    `Open ${url} and sign in there. Your apps build and run on this machine; that site sends it your requests.`,
-  open: 'Open the dashboard',
-} as const
-
-/** The guided tour without an account: a sample hangar that lives only in the browser. */
+/** The tour on the public site: the real dashboard with a sample hangar, in the browser only. */
 export const demoCopy = {
   start: 'Take the tour',
-  startHint: 'No account needed',
-  banner: 'You are exploring a sample hangar. Nothing here is real, and nothing you do is saved.',
+  startHint: 'No install needed',
+  banner:
+    'This is a sample hangar running in your browser. Nothing here is real, and nothing is saved.',
   bannerShort: 'Sample hangar',
-  bannerAction: 'Create your account',
+  bannerAction: 'Install Hangar',
   bannerLeave: 'Leave the tour',
   promptTitle: 'Ready to fly your own?',
-  promptAction: (what: string) => `To ${what}, create a free account. It takes about a minute.`,
+  promptAction: (what: string) =>
+    `To ${what}, install Hangar on a computer of your own. It is free, and takes about 10 minutes.`,
   promptTourDone:
-    'That is the whole tour. Create a free account to connect your own server and publish your first app.',
+    'That is the whole tour. Install Hangar on a spare computer and this dashboard is yours: private to your devices, with your apps on your own domain.',
   promptSteps: [
-    'Sign up with GitHub. Hangar only sees the repositories you pick.',
-    'Copy one command and run it on your own computer.',
-    'Publish a repository. It builds and runs on your machine.',
+    'Install Tailscale on your phone or laptop, so you can reach your dashboard from anywhere.',
+    'Run one command on a spare computer with Ubuntu or Debian.',
+    'Open your private dashboard and publish a repository.',
   ],
-  promptGithub: 'Sign up with GitHub',
-  promptSignIn: 'I already have an account',
+  promptInstall: 'Read the install guide',
+  promptHow: 'How it works',
   promptKeepLooking: 'Keep exploring',
-  promptInviteOnly:
-    'Accounts on this site are by invitation right now. You can still run Hangar yourself on your own server, for free.',
-  promptSelfHost: 'Run Hangar yourself',
   /** What a visitor tried to do, by endpoint; anything else is "do that". */
   actions: {
     createProject: 'publish an app',
@@ -687,25 +666,36 @@ export const demoCopy = {
     deleteProject: 'delete an app',
     updateProject: 'change an app',
     replaceEnv: 'save environment variables',
-    addServer: 'connect your server',
-    newPairingCode: 'connect your server',
-    renameServer: 'rename a server',
-    removeServer: 'remove a server',
     updateSettings: 'change settings',
     setTunnelToken: 'put your apps on the internet',
     setGithubToken: 'connect GitHub',
     githubStart: 'connect GitHub',
+    githubAppManifest: 'set up sign in with GitHub',
+    createInvite: 'invite someone',
     changePassword: 'change your password',
     setFirstPassword: 'set a password',
     signOutEverywhere: 'manage your sessions',
+    deleteAccount: 'delete an account',
   } as Record<string, string>,
   fallbackAction: 'do that',
+} as const
+
+/** The Control Tower's private address on the owner's Tailscale network (D40). */
+export const privateCopy = {
+  title: 'Your private address',
+  description:
+    'Open the Control Tower from any of your devices with Tailscale: your phone, laptop, or tablet. Nobody else can reach it.',
+  label: 'private address',
+  devices:
+    'On another device: install Tailscale, sign in with the same account, then open this address. Bookmark it, or add it to your home screen.',
+  missing:
+    'Hangar was installed without Tailscale, so the Control Tower answers only on your local network. To reach it from anywhere, run sudo hangar-tailscale on the server.',
 } as const
 
 /** First steps after signing in. */
 export const startCopy = {
   title: 'Get set up',
-  subtitle: 'Five steps to your first app on your own server. Each one checks itself off.',
+  subtitle: 'Five steps to your first app on this server. Each one checks itself off.',
   done: 'Done',
   next: 'Up next',
   optional: 'Optional',
@@ -717,24 +707,17 @@ export const startCopy = {
       tokenInstead: 'GitHub sign-in is not set up here. Add a token under Account instead.',
       toAccount: 'Open Account',
     },
-    server: {
-      title: 'Connect your server',
-      body: 'A computer that stays on: an old laptop, a mini PC, or a home server. Hangar installs itself there and connects back here.',
-      nameLabel: 'What do you call it?',
-      namePlaceholder: 'Home laptop',
-      create: 'Get the install command',
-      run: 'On that machine, open a terminal and run:',
-      waiting: 'Waiting for your server to connect…',
-      waitingHelp:
-        'Installing takes two to five minutes the first time. Leave this page open; it updates by itself.',
-      connected: (name: string) => `${name} is connected.`,
-      expires: 'The command works once, for an hour.',
-      trouble: 'Not showing up?',
-      troubleSteps: [
-        'Run it on the server itself, as written: it needs sudo.',
-        'Check the machine can reach the internet: curl -I https://github.com',
-        'See what Hangar is doing there: sudo docker logs hangar-core',
+    devices: {
+      title: 'Open Hangar on your other devices',
+      body: 'This dashboard is private: it answers only on your own Tailscale network, from anywhere. Nobody else can reach it, not even the sign-in page.',
+      label: 'private address',
+      how: [
+        'Install Tailscale on your phone or laptop (tailscale.com/download).',
+        'Sign in with the same Tailscale account you used for this server.',
+        'Open the address above. Bookmark it, or add it to your home screen.',
       ],
+      noTailscale:
+        'Hangar was installed without Tailscale, so this dashboard answers only on your local network. Run sudo hangar-tailscale on the server to reach it from anywhere.',
     },
     repos: {
       title: 'Choose repositories',
@@ -754,39 +737,6 @@ export const startCopy = {
       body: 'Choose a repository and press Publish. Hangar detects the framework, builds it on your server, and gives it an address.',
       action: 'Choose a repository',
     },
-  },
-} as const
-
-export const serversCopy = {
-  title: 'Servers',
-  subtitle:
-    'The machines your apps run on. Each one connects out to this site, so it needs no open ports.',
-  here: 'This server',
-  hereBody: 'The machine this site runs on.',
-  add: 'Add a server',
-  addBody: 'Give it a name, then run the command it gives you on that machine.',
-  open: 'Show its apps',
-  showing: 'Showing',
-  rename: 'Rename',
-  newCommand: 'New install command',
-  newCommandBody:
-    'For a command that ran out, or to move this server to another machine. The old connection stops working.',
-  remove: 'Remove',
-  removeConfirm: (name: string) => ({
-    title: `Remove ${name}?`,
-    body: 'It stops connecting here. Its apps keep running on that machine until you remove them there with sudo hangar-uninstall.',
-    action: 'Remove server',
-  }),
-  lastSeen: 'Last seen',
-  never: 'Not connected yet',
-  empty: 'No servers yet. Add one to start publishing apps.',
-  fields: {
-    machine: 'Machine',
-    system: 'System',
-    cpu: 'Processor',
-    memory: 'Memory',
-    address: 'Network address',
-    version: 'Hangar',
   },
 } as const
 
@@ -834,63 +784,28 @@ export const deckCopy = {
   offline: 'This server is offline. What you see may be out of date.',
 } as const
 
-/** The terms and privacy pages of a hosted Hangar. Plain words, no puns. */
+/** The public site's privacy page. Plain words, no puns. */
 export const legalCopy = {
   updated: 'Last updated November 17, 2026',
   back: 'Back to Hangar',
-  contact:
-    'Questions or requests: open an issue at github.com/bduffaut/Hangar, or use the contact details on the operator’s GitHub profile.',
-  terms: {
-    title: 'Terms of use',
-    sections: [
-      {
-        heading: 'What this is',
-        body: 'This site runs Hangar, free and open-source software, as a free service: it lets you manage apps that build and run on servers you own. It is a personal project offered as is, without any warranty, uptime promise, or support agreement.',
-      },
-      {
-        heading: 'Your servers and your apps',
-        body: 'You are responsible for the servers you connect and for everything you build, run and publish on them, including following the law and the terms of GitHub and Cloudflare. Do not use Hangar to host malware, phishing, spam, or content you do not have the right to publish.',
-      },
-      {
-        heading: 'What this site can do on your server',
-        body: 'When you connect a server, it takes requests from this site: the ones you make in the dashboard, carried out on your server as your account there. Connecting a server means you accept that. You can disconnect it at any time from Servers, or remove Hangar from it with sudo hangar-uninstall.',
-      },
-      {
-        heading: 'Accounts',
-        body: 'Keep your sign-in safe. Accounts that abuse the service or other people may be suspended or removed. You can delete your account at any time from Account.',
-      },
-      {
-        heading: 'Changes',
-        body: 'These terms may change as the project grows. The date at the top shows the latest version. The service may also change or stop; your apps keep running on your own servers either way.',
-      },
-      {
-        heading: 'Liability',
-        body: 'To the extent the law allows, the operator of this site is not liable for any loss or damage from using it, including downtime, lost data, or problems with apps on your servers.',
-      },
-    ],
-  },
   privacy: {
     title: 'Privacy',
     sections: [
       {
-        heading: 'What this site keeps',
-        body: 'Your username and role; your GitHub account name and id if you sign in with GitHub; your GitHub access tokens, encrypted; a password hash if you set a password; your sessions (stored only as hashes); your dashboard layout; and, for each server you connect, its name, when it was last seen, and basic facts it reports (version, hostname, operating system, processor, memory, local IP address).',
+        heading: 'This site',
+        body: 'hangar.benduffaut.com is a static website: the guides, the tour, and the install script. It has no accounts, no cookies, no analytics, and no database. The tour runs entirely in your browser with sample data.',
       },
       {
-        heading: 'What stays on your server',
-        body: 'Your projects, source code, builds, images, apps, logs, environment variables, and Cloudflare tunnel token live on your own server. Requests you make in the dashboard pass through this site to your server and back; they are not stored here.',
-      },
-      {
-        heading: 'What this site does not do',
-        body: 'No ads, no analytics, no tracking cookies, and nothing is sold or shared. The only cookie is the one that keeps you signed in. There is no email address on file.',
+        heading: 'Your Hangar',
+        body: 'Hangar runs on your own computer. Your account, code, builds, apps, logs, and settings stay there. Nothing is sent to this site or to its author, ever.',
       },
       {
         heading: 'Other services',
-        body: 'Signing in with GitHub goes through GitHub. Traffic to this site passes through Cloudflare, which handles it under its own privacy policy. Your server downloads Hangar from GitHub.',
+        body: 'Pages are hosted by GitHub Pages, which keeps its own access logs. The installer downloads Hangar from GitHub, Docker from Docker, and Tailscale from Tailscale. GitHub, Tailscale, and Cloudflare handle what you connect to them under their own privacy policies.',
       },
       {
-        heading: 'Deleting your data',
-        body: 'Delete your account from Account and everything this site keeps about you is removed, and your servers are disconnected.',
+        heading: 'Questions',
+        body: 'Open an issue at github.com/bduffaut/Hangar.',
       },
     ],
   },

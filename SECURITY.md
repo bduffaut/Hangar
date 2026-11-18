@@ -8,7 +8,7 @@ public issue.
 
 ## What Hangar protects
 
-- **Accounts.** Invite-only with one-time links, unless an admin opens sign-up with GitHub. Passwords are hashed with argon2id, sessions are
+- **Accounts.** Invite-only, with one-time links; there is no sign-up. Passwords are hashed with argon2id, sessions are
   stored as hashes, and every change needs a CSRF token and a known origin. Failed sign-ins are
   limited per address and per account.
 - **Separation between accounts.** Projects, deployments, logs, env vars, metrics, and live events
@@ -17,33 +17,19 @@ public issue.
 - **The platform.** Apps cannot reach the database or Traefik's API, and core refuses connections
   that did not come through Traefik. Secrets are encrypted at rest with AES-256-GCM and tied to
   their record.
-- **Exposure.** The Control Tower stays private unless an admin makes it public. Public traffic
-  arrives only through the Cloudflare Tunnel, with no open ports.
-
-## Using a hosted Hangar, such as hangar.benduffaut.com
-
-A hosted Hangar is a central site: it holds sign-in, your list of servers, and your GitHub
-connection, and your own servers keep one outbound connection to it. Your code, builds, apps,
-logs, environment variables and tunnel token stay on your server.
-
-- **The central site can act on your server.** It relays the requests you make in the
-  dashboard, and your server carries them out as your account there. Whoever controls the central
-  site, including an attacker who takes it over, can do the same: deploy code, read environment
-  variables, or stop apps on every connected server. Connect a server only to a central site you
-  trust, or run Hangar yourself.
-- **What it never gets.** Your server never accepts incoming connections, and its tunnel token
-  and the Docker socket stay on it. The GitHub App's secret and refresh tokens stay on the central
-  site; your server asks it for a short-lived token when it needs one.
-- **Leaving.** Removing a server, or deleting your account, closes the connection and the server
-  forgets the central site. `sudo hangar-uninstall` removes Hangar from the server.
-- **Strangers stay off the central machine.** Accounts made through open sign-up can use only
-  servers of their own, never the machine the central site runs on.
+- **Exposure.** The Control Tower answers only on the owner's Tailscale network (or, without
+  Tailscale, the local network); Hangar listens on that address alone. It is never routed through
+  the Cloudflare Tunnel, and core refuses any dashboard request that arrives on the public
+  entrypoint, whatever its hostname. Public traffic reaches only published apps, webhooks, and
+  address checks, with no open ports.
+- **The public site** (hangar.benduffaut.com) is static: guides, the tour, and the install script.
+  It has no accounts and never connects to anyone's Hangar. The install script downloads the
+  release from GitHub and checks its checksum before running it.
 
 ## Known limits
 
-On one server, Hangar is built for people who trust each other, such as a household, friends, or a
-small team. It is not a hosting service for strangers: on a hosted Hangar, each person brings
-their own server.
+Hangar is built for people who trust each other, such as a household, friends, or a small team. It
+is not a hosting service for strangers.
 
 - **Every account runs code on the server.** Apps and builds are ordinary containers, sharing the
   host's kernel. A container escape, which is a Docker or Linux vulnerability rather than a Hangar
@@ -63,8 +49,13 @@ their own server.
 - **Resources are shared.** Limits cover each app's memory, processes, and CPU weight, and the
   number of projects per member. Builds have no such limit, run one at a time, and disk use is
   shared, so one account can slow others down.
-- **The Control Tower speaks plain HTTP on your network.** Use it on a network you trust, such as
-  Tailscale, or expose it through the tunnel, which adds HTTPS.
-- **No two-factor sign-in yet.** A public Control Tower (`hangar.<your domain>`) shows its sign-in
-  page to the whole internet, protected by passwords and sign-in limits alone. Use long, unique
-  passwords, or add Cloudflare Access in front of that address.
+- **Anyone on your Tailscale network can reach the sign-in page.** Share the Hangar machine only
+  with people you would give an account, and use strong passwords. Without Tailscale's HTTPS
+  certificates the Control Tower uses plain HTTP, which Tailscale still encrypts end to end;
+  without Tailscale at all, it is plain HTTP on the local network.
+- **No two-factor sign-in yet.** Tailscale's own sign-in, with its two-factor options, is the
+  first door.
+- **The install command is trusted.** `curl … | sudo bash` runs what hangar.benduffaut.com
+  serves. It only fetches a GitHub release and checks its checksum, but a compromised site could
+  serve a different script to new installs. The install guide shows how to read it first, or to
+  install from a release by hand.

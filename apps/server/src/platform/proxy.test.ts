@@ -8,7 +8,7 @@ const lanOnly: RoutingInput = {
   lanIp: '192.168.1.50',
   lanDomain: '192-168-1-50.sslip.io',
   defaultDomain: null,
-  exposeTowerPublicly: false,
+  privateHostname: null,
   coreUrl: 'http://hangar-core:3000',
   proxyApiKey: 'test-key',
   apps: [
@@ -77,16 +77,23 @@ describe('renderRouting', () => {
     expect(routers['tower-public']).toBeUndefined()
   })
 
-  it('exposes the tower publicly only when asked', () => {
+  it('adds the Tailscale name to the tower, on the private entrypoint only (D40)', () => {
     const { routers } = renderRouting({
       ...lanOnly,
       defaultDomain: 'example.com',
-      exposeTowerPublicly: true,
+      privateHostname: 'hangar.tail1234.ts.net',
     }).http
-    expect(routers['tower-public']).toMatchObject({ rule: 'Host(`hangar.example.com`)' })
+    expect(routers.tower).toMatchObject({
+      entryPoints: ['web'],
+      rule: 'Host(`tower.192-168-1-50.sslip.io`) || Host(`192.168.1.50`) || Host(`hangar.tail1234.ts.net`)',
+    })
+    const publicRules = Object.values(routers)
+      .filter((r) => r.entryPoints.includes('public'))
+      .map((r) => r.rule)
+    expect(publicRules.join(' ')).not.toContain('ts.net')
   })
 
-  it('never sends public traffic to core except through hooks, address checks, or an exposed tower', () => {
+  it('never sends public traffic to core except through hooks and address checks', () => {
     const { routers } = renderRouting({ ...lanOnly, defaultDomain: 'example.com' }).http
     const publicToCore = Object.entries(routers)
       .filter(([, r]) => r.entryPoints.includes('public') && r.service === 'core')

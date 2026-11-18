@@ -15,12 +15,6 @@ export interface Endpoint {
   method: HttpMethod
   path: `/api/${string}`
   access: Access
-  /**
-   * `server`: about one server's apps and settings. The dashboard sends it to the server it has
-   * chosen (D38), through `/api/s/:serverId/…` for a connected one. Everything else is about the
-   * account and is always answered here.
-   */
-  scope?: 'server'
   params?: z.ZodType
   query?: z.ZodType
   body?: z.ZodType
@@ -110,7 +104,7 @@ export const contract = {
     access: 'session',
     response: s.ok,
   }),
-  /** Deletes the signed-in account, its projects here, and its servers' connections (D39). */
+  /** Deletes the signed-in account and its projects (D39). */
   deleteAccount: endpoint({
     method: 'POST',
     path: '/api/me/delete',
@@ -136,14 +130,12 @@ export const contract = {
     method: 'GET',
     path: '/api/settings',
     access: 'session',
-    scope: 'server',
     response: s.settingsView,
   }),
   updateSettings: endpoint({
     method: 'PATCH',
     path: '/api/settings',
     access: 'admin',
-    scope: 'server',
     body: s.settingsPatch,
     response: s.settingsView,
   }),
@@ -158,13 +150,6 @@ export const contract = {
     method: 'GET',
     path: '/api/access',
     access: 'admin',
-    response: s.accessView,
-  }),
-  updateAccess: endpoint({
-    method: 'PATCH',
-    path: '/api/access',
-    access: 'admin',
-    body: s.accessPatch,
     response: s.accessView,
   }),
   githubAppManifest: endpoint({
@@ -187,46 +172,10 @@ export const contract = {
     response: s.accessView,
   }),
 
-  listServers: endpoint({
-    method: 'GET',
-    path: '/api/servers',
-    access: 'session',
-    response: z.array(s.serverView),
-  }),
-  addServer: endpoint({
-    method: 'POST',
-    path: '/api/servers',
-    access: 'session',
-    body: s.serverInput,
-    response: s.serverPairing,
-  }),
-  renameServer: endpoint({
-    method: 'PATCH',
-    path: '/api/servers/:id',
-    access: 'session',
-    params: s.idParams,
-    body: s.serverInput,
-    response: s.serverView,
-  }),
-  removeServer: endpoint({
-    method: 'DELETE',
-    path: '/api/servers/:id',
-    access: 'session',
-    params: s.idParams,
-    response: s.ok,
-  }),
-  newPairingCode: endpoint({
-    method: 'POST',
-    path: '/api/servers/:id/pairing',
-    access: 'session',
-    params: s.idParams,
-    response: s.serverPairing,
-  }),
   checkAddress: endpoint({
     method: 'POST',
     path: '/api/settings/check-address',
     access: 'admin',
-    scope: 'server',
     body: s.addressCheck,
     response: s.addressCheckResult,
   }),
@@ -234,7 +183,6 @@ export const contract = {
     method: 'POST',
     path: '/api/settings/tunnel',
     access: 'admin',
-    scope: 'server',
     body: s.tunnelToken,
     response: s.settingsView,
   }),
@@ -306,14 +254,12 @@ export const contract = {
     method: 'GET',
     path: '/api/projects',
     access: 'session',
-    scope: 'server',
     response: z.array(s.projectView),
   }),
   createProject: endpoint({
     method: 'POST',
     path: '/api/projects',
     access: 'session',
-    scope: 'server',
     body: s.projectInput,
     response: s.projectView,
   }),
@@ -321,7 +267,6 @@ export const contract = {
     method: 'GET',
     path: '/api/projects/:id',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.projectView,
   }),
@@ -329,7 +274,6 @@ export const contract = {
     method: 'PATCH',
     path: '/api/projects/:id',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     body: s.projectPatch,
     response: s.projectView,
@@ -338,7 +282,6 @@ export const contract = {
     method: 'DELETE',
     path: '/api/projects/:id',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.ok,
   }),
@@ -346,7 +289,6 @@ export const contract = {
     method: 'POST',
     path: '/api/projects/:id/start',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.projectView,
   }),
@@ -354,7 +296,6 @@ export const contract = {
     method: 'POST',
     path: '/api/projects/:id/stop',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.projectView,
   }),
@@ -362,7 +303,6 @@ export const contract = {
     method: 'POST',
     path: '/api/projects/:id/restart',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.projectView,
   }),
@@ -370,7 +310,6 @@ export const contract = {
     method: 'POST',
     path: '/api/projects/:id/deploy',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.deploymentView,
   }),
@@ -378,7 +317,6 @@ export const contract = {
     method: 'POST',
     path: '/api/projects/:id/addresses/check',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.projectView,
   }),
@@ -386,7 +324,6 @@ export const contract = {
     method: 'GET',
     path: '/api/projects/:id/webhook',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.webhookView,
   }),
@@ -395,7 +332,6 @@ export const contract = {
     method: 'GET',
     path: '/api/projects/:id/deployments',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     query: s.deploymentListQuery,
     response: z.array(s.deploymentView),
@@ -404,7 +340,6 @@ export const contract = {
     method: 'GET',
     path: '/api/deployments/:id',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.deploymentView,
   }),
@@ -412,7 +347,6 @@ export const contract = {
     method: 'GET',
     path: '/api/deployments/:id/logs',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     query: s.logsQuery,
     response: z.array(s.logLine),
@@ -421,7 +355,6 @@ export const contract = {
     method: 'POST',
     path: '/api/deployments/:id/cancel',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.ok,
   }),
@@ -429,7 +362,6 @@ export const contract = {
     method: 'POST',
     path: '/api/deployments/:id/rollback',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.deploymentView,
   }),
@@ -438,7 +370,6 @@ export const contract = {
     method: 'GET',
     path: '/api/projects/:id/env',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     response: s.envList,
   }),
@@ -446,7 +377,6 @@ export const contract = {
     method: 'GET',
     path: '/api/projects/:id/env/:key/reveal',
     access: 'session',
-    scope: 'server',
     params: s.envKeyParams,
     response: s.envValue,
   }),
@@ -454,7 +384,6 @@ export const contract = {
     method: 'PUT',
     path: '/api/projects/:id/env',
     access: 'session',
-    scope: 'server',
     params: s.idParams,
     body: s.envReplace,
     response: s.envList,
@@ -464,14 +393,12 @@ export const contract = {
     method: 'GET',
     path: '/api/stats',
     access: 'session',
-    scope: 'server',
     response: s.flightStats,
   }),
   systemInfo: endpoint({
     method: 'GET',
     path: '/api/system/info',
     access: 'admin',
-    scope: 'server',
     response: s.systemInfo,
   }),
 } as const
@@ -489,13 +416,6 @@ export const streams = {
 } as const
 
 export type StreamName = keyof typeof streams
-
-/** Where the dashboard sends a server's requests to a connected server (D38). */
-export const SERVER_PREFIX = '/api/s/:serverId'
-/** A person's own server connects here, by WebSocket, and keeps the connection open. */
-export const AGENT_CONNECT_PATH = '/api/agent/connect'
-/** The install command's script, served by a Hangar people connect their servers to. */
-export const INSTALL_SCRIPT_PATH = '/install.sh'
 
 /** Unauthenticated, HMAC-verified. Reachable from the public entrypoint. */
 export const GITHUB_WEBHOOK_PATH = '/api/webhooks/github/:id'

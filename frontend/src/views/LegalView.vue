@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { legalCopy } from '@hangar/shared'
-import { computed } from 'vue'
 import BrandMark from '../brand/BrandMark.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 
-// The terms and privacy pages: public, plain, and the same for every visitor.
-const props = defineProps<{ page: 'terms' | 'privacy' }>()
-const doc = computed(() => legalCopy[props.page])
-useDocumentTitle(doc.value.title)
+// The site's privacy page: public, plain, and the same for every visitor.
+const doc = legalCopy.privacy
+useDocumentTitle(doc.title)
 </script>
 
 <template>
@@ -22,7 +20,6 @@ useDocumentTitle(doc.value.title)
         <h2>{{ section.heading }}</h2>
         <p>{{ section.body }}</p>
       </section>
-      <p class="hg-muted">{{ legalCopy.contact }}</p>
       <RouterLink :to="{ name: 'welcome' }">{{ legalCopy.back }}</RouterLink>
     </main>
   </div>

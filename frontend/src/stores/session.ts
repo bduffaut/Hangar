@@ -2,7 +2,8 @@ import type { Session } from '@hangar/shared'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, onUnauthorized, setCsrfToken } from '../api/client.ts'
-import { isDemo } from '../demo/mode.ts'
+import { demoSession } from '../demo/data.ts'
+import { IS_SITE } from '../demo/mode.ts'
 
 /** Who is signed in, and whether the server still needs its first-run setup. */
 export const useSessionStore = defineStore('session', () => {
@@ -10,10 +11,6 @@ export const useSessionStore = defineStore('session', () => {
   const needsSetup = ref<boolean | null>(null)
   /** The sign-in page offers "Sign in with GitHub". */
   const githubSignIn = ref(false)
-  /** A new GitHub account can sign up without an invite. */
-  const openSignUp = ref(false)
-  /** This is someone's own server, run from that Hangar. */
-  const managedBy = ref<string | null>(null)
   const loaded = ref(false)
   /** True when the server could not be reached on first load. */
   const unreachable = ref(false)
@@ -21,8 +18,6 @@ export const useSessionStore = defineStore('session', () => {
   const signedIn = computed(() => session.value !== null)
   const username = computed(() => session.value?.user.username ?? null)
   const isAdmin = computed(() => session.value?.user.role === 'admin')
-  /** May use this machine; otherwise only servers of their own. */
-  const localAccess = computed(() => session.value?.user.localAccess ?? false)
 
   function apply(next: Session | null) {
     session.value = next
@@ -34,22 +29,20 @@ export const useSessionStore = defineStore('session', () => {
   /** Learns the current state once, on first navigation. */
   async function load() {
     if (loaded.value) return
+    if (IS_SITE) {
+      // The site's tour: always the sample hangar's owner. There is no server to ask.
+      needsSetup.value = false
+      apply(demoSession)
+      loaded.value = true
+      return
+    }
     try {
       const status = await api('setupStatus')
       needsSetup.value = status.needsSetup
       githubSignIn.value = status.githubSignIn
-      openSignUp.value = status.openSignUp
-      managedBy.value = status.managedBy
     } catch {
-      if (!isDemo()) {
-        unreachable.value = true
-        return
-      }
-    }
-    if (isDemo()) {
-      // The tour: signed in as the sample account, whatever this site's own state is.
-      needsSetup.value = false
-      managedBy.value = null
+      unreachable.value = true
+      return
     }
     unreachable.value = false
     if (!needsSetup.value) apply(await api('me').catch(() => null))
@@ -60,15 +53,12 @@ export const useSessionStore = defineStore('session', () => {
     session,
     needsSetup,
     githubSignIn,
-    openSignUp,
-    managedBy,
     unreachable,
     signedIn,
-    /** On the tour without an account (demo/mode.ts). */
-    demo: computed(() => signedIn.value && isDemo()),
+    /** On the site's tour (demo/mode.ts). */
+    demo: IS_SITE,
     username,
     isAdmin,
-    localAccess,
     load,
     /** Signs in with a session the server just issued (a redeemed link, a changed password). */
     apply,

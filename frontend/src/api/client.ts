@@ -31,20 +31,6 @@ export class ApiError extends Error {
 }
 
 let csrfToken: string | null = null
-let serverPrefix = ''
-
-/**
- * Where requests about a server go (D38): '' for this machine, or `/s/<id>` for a connected
- * server, whose requests travel through this Hangar to it.
- */
-export function setServerPrefix(prefix: string) {
-  serverPrefix = prefix
-}
-
-/** A contract or stream path, sent to the chosen server when it is about one. */
-export function serverPath(path: string, serverScoped: boolean): string {
-  return serverScoped && serverPrefix ? path.replace(/^\/api/, `/api${serverPrefix}`) : path
-}
 const unauthorizedListeners = new Set<() => void>()
 
 /** The session's CSRF token, sent with every request that changes something. */
@@ -97,8 +83,7 @@ export async function api<N extends EndpointName>(
 
   let response: Response
   try {
-    const path = serverPath(endpoint.path, 'scope' in endpoint && endpoint.scope === 'server')
-    response = await fetch(buildUrl(path, params, query), {
+    response = await fetch(buildUrl(endpoint.path, params, query), {
       method: endpoint.method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

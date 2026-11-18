@@ -34,7 +34,7 @@ await proxy.apply(
     lanIp: settings.lanIp,
     lanDomain: settings.lanDomain,
     defaultDomain: null,
-    exposeTowerPublicly: false,
+    privateHostname: null,
     coreUrl: config.coreUrl,
     proxyApiKey: config.proxyApiKey,
     apps: [{ name, target }],

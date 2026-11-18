@@ -78,7 +78,7 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
       lanIp: settings.lanIp,
       lanDomain: settings.lanDomain,
       defaultDomain: defaultDomain(settings),
-      exposeTowerPublicly: settings.exposeTowerPublicly,
+      privateHostname: ctx.config.tailscaleHostname,
       coreUrl: ctx.config.coreUrl,
       proxyApiKey: ctx.config.proxyApiKey,
       apps,

@@ -37,7 +37,6 @@ export interface SessionUser {
   id: string
   username: string
   role: UserRole
-  localAccess: boolean
 }
 
 /** What a session knows about its account. */
@@ -45,7 +44,6 @@ export const sessionUser = (user: SessionUser): SessionUser => ({
   id: user.id,
   username: user.username,
   role: user.role,
-  localAccess: user.localAccess,
 })
 
 export interface AuthenticatedSession {

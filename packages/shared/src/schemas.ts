@@ -59,10 +59,6 @@ export const setupStatus = z.object({
   needsSetup: z.boolean(),
   /** Whether the sign-in page offers "Sign in with GitHub". */
   githubSignIn: z.boolean(),
-  /** Whether a new GitHub account can sign up there, without an invite. */
-  openSignUp: z.boolean(),
-  /** This is someone's own server, run from another Hangar: its address. */
-  managedBy: z.string().nullable(),
 })
 export const setupComplete = z.object({
   setupCode: z
@@ -83,8 +79,6 @@ export const session = z.object({
     id,
     username: z.string(),
     role: z.enum(USER_ROLES),
-    /** May use this machine itself; otherwise only their own connected servers (D38). */
-    localAccess: z.boolean(),
   }),
   /** Send as X-CSRF-Token on every non-GET request. */
   csrfToken: z.string(),
@@ -176,11 +170,15 @@ export const settingsView = z.object({
   /** The server's domains for public access; the first is the default. */
   publicDomains: z.array(z.string()),
   defaultDomain: z.string().nullable(),
-  exposeTowerPublicly: z.boolean(),
   /** Whether the signed-in user has connected their own GitHub token. */
   githubConnected: z.boolean(),
   tunnelConfigured: z.boolean(),
   towerUrl: z.string().nullable(),
+  /**
+   * The Control Tower's private HTTPS address on the owner's Tailscale network (D40), such as
+   * https://hangar.tail1234.ts.net. Null when Hangar was installed without Tailscale.
+   */
+  privateUrl: z.string().nullable(),
 })
 export type SettingsView = z.infer<typeof settingsView>
 
@@ -191,7 +189,6 @@ export const settingsPatch = z
     publicDomains: z
       .array(z.string().trim().toLowerCase().max(253, { error: 'That domain is too long.' }))
       .max(MAX_PUBLIC_DOMAINS, { error: `Hangar can use at most ${MAX_PUBLIC_DOMAINS} domains.` }),
-    exposeTowerPublicly: z.boolean(),
   })
   .partial()
 export const githubToken = z.object({
@@ -256,48 +253,10 @@ export type GithubFinished = z.infer<typeof githubFinished>
 /** A form the dashboard posts to GitHub, which creates the app and comes back with a code. */
 export const githubAppManifest = z.object({ action: z.string(), manifest: z.string() })
 
-/** Who can get in: the GitHub App, and whether anyone may sign up with GitHub. */
-export const accessView = z.object({ githubApp: githubAppView, openSignUp: z.boolean() })
+/** The GitHub App behind "Sign in with GitHub". Only people with an account or invite get in. */
+export const accessView = z.object({ githubApp: githubAppView })
 export type AccessView = z.infer<typeof accessView>
-export const accessPatch = z.object({ openSignUp: z.boolean() })
 
-// Servers: people's own machines, connected to this Hangar (D38)
-
-export const serverInput = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, { error: 'Give the server a name, like "Home laptop".' })
-    .max(60, { error: 'Keep the name under 60 characters.' }),
-})
-export const serverInfo = z.object({
-  version: z.string(),
-  hostname: z.string(),
-  os: z.string(),
-  arch: z.string(),
-  cpus: z.number(),
-  memoryBytes: z.number(),
-  lanIp: z.string().nullable(),
-})
-export type ServerInfo = z.infer<typeof serverInfo>
-export const serverView = z.object({
-  id,
-  name: z.string(),
-  /** Connected right now, so requests can reach it. */
-  online: z.boolean(),
-  paired: z.boolean(),
-  lastSeenAt: timestamp.nullable(),
-  info: serverInfo.nullable(),
-  createdAt: timestamp,
-})
-export type ServerView = z.infer<typeof serverView>
-export const serverPairing = z.object({
-  server: serverView,
-  /** Run on the server, as root. Shown once: it holds a one-time code. */
-  installCommand: z.string(),
-  expiresAt: timestamp,
-})
-export type ServerPairing = z.infer<typeof serverPairing>
 export const tunnelToken = z.object({
   token: z.string().trim().max(4000, { error: 'That tunnel token is too long.' }).nullable(),
 })
@@ -481,6 +440,9 @@ export const systemInfo = z.object({
   cpuModel: z.string().nullable(),
   cpuThreads: z.number().int(),
   kernel: z.string().nullable(),
+  /** The machine's name and operating system, as Docker reports them. */
+  hostname: z.string().nullable(),
+  os: z.string().nullable(),
 })
 export type SystemInfo = z.infer<typeof systemInfo>
 

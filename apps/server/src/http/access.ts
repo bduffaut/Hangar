@@ -1,4 +1,4 @@
-import { defaultDomain, hooksHostname, publicTowerHostname, towerHostname } from '@hangar/shared'
+import { defaultDomain, hooksHostname, towerHostname } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
@@ -11,8 +11,6 @@ import { ADDRESS_CHECK_PATH, ENTRYPOINT_HEADER } from '../platform/proxy.ts'
 export interface AccessPolicy {
   /** Hostnames (with port, if any) that serve the Control Tower on the LAN. */
   towerHosts: Set<string>
-  /** `hangar.<default domain>` when the Control Tower is exposed publicly. */
-  publicTowerHost: string | null
   /** `hooks.<default domain>`, which only serves webhooks. */
   hooksHost: string | null
   /** Origins allowed to send state-changing requests. */
@@ -40,12 +38,16 @@ export function createAccessPolicy(ctx: Ctx) {
       origins.add(origin)
       towerHosts.add(new URL(origin).host)
     }
+    // The private HTTPS address on the owner's Tailscale network (D40).
+    const privateHost = ctx.config.tailscaleHostname
+    if (privateHost) {
+      towerHosts.add(privateHost)
+      origins.add(`https://${privateHost}`)
+      origins.add(`http://${privateHost}`)
+    }
     const domain = defaultDomain(settings)
-    const publicTowerHost =
-      domain && settings.exposeTowerPublicly ? publicTowerHostname(domain) : null
-    if (publicTowerHost) origins.add(`https://${publicTowerHost}`)
     const hooksHost = domain ? hooksHostname(domain) : null
-    return { towerHosts, publicTowerHost, hooksHost, origins }
+    return { towerHosts, hooksHost, origins }
   }
 
   return {
@@ -87,10 +89,9 @@ export function classifyRequest(
   if (path === '/api/health') return 'health'
   if (path.startsWith('/api/webhooks/')) return 'webhook'
   if (isPublic && path.startsWith(ADDRESS_CHECK_PATH)) return 'address-check'
-  if (isPublic) {
-    // The public entrypoint reaches core only for webhooks and an explicitly exposed tower.
-    return policy.publicTowerHost && host === policy.publicTowerHost ? 'api' : 'not-found'
-  }
+  // The public entrypoint reaches core only for webhooks and address checks, never the Control
+  // Tower (D40): it is private to the owner's network.
+  if (isPublic) return 'not-found'
   if (policy.towerHosts.has(host)) return 'api'
   if (policy.hooksHost && host === policy.hooksHost) return 'not-found'
   return 'app-not-running'

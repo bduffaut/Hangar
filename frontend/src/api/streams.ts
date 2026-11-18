@@ -4,7 +4,6 @@
 import { type StreamName, streams } from '@hangar/shared'
 import { demoStream } from '../demo/streams.ts'
 import { isDemo } from '../demo/mode.ts'
-import { serverPath } from './client.ts'
 
 export interface Stream {
   close(): void
@@ -25,8 +24,7 @@ export function streamUrl(
   params: Record<string, string> = {},
   query: Record<string, string | number> = {},
 ): string {
-  // Every stream is about one server.
-  const path = serverPath(streams[name], true).replace(/:(\w+)/g, (_, key: string) =>
+  const path = streams[name].replace(/:(\w+)/g, (_, key: string) =>
     encodeURIComponent(params[key] ?? ''),
   )
   const search = new URLSearchParams(

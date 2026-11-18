@@ -10,7 +10,6 @@ import { useNow } from '../composables/useNow.ts'
 import { goToGithub } from '../lib/github.ts'
 import { relativeTime } from '../lib/format.ts'
 import { useProjectsStore } from '../stores/projects.ts'
-import { useServersStore } from '../stores/servers.ts'
 import {
   BaseButton,
   BaseIcon,
@@ -29,7 +28,6 @@ useDocumentTitle(publishCopy.title)
 const router = useRouter()
 const notify = useNotify()
 const projects = useProjectsStore()
-const servers = useServersStore()
 const now = useNow()
 
 const account = ref<AccountView | null>(null)
@@ -38,9 +36,7 @@ const query = ref('')
 const busy = ref<string | null>(null)
 const error = ref<string | null>(null)
 
-const serverName = computed(() =>
-  servers.isLocal ? navCopy.thisServer.toLowerCase() : (servers.remote?.name ?? ''),
-)
+const serverName = navCopy.thisServer.toLowerCase()
 
 async function load() {
   error.value = null

@@ -1,6 +1,5 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { enterDemo } from './demo/mode.ts'
-import { useServersStore } from './stores/servers.ts'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { IS_SITE, TOUR_BASE } from './demo/mode.ts'
 import { useSessionStore } from './stores/session.ts'
 
 declare module 'vue-router' {
@@ -11,155 +10,150 @@ declare module 'vue-router' {
     shell?: boolean
     /** Needs the admin role. The server enforces this; here it only keeps people off dead pages. */
     admin?: boolean
-    /** About the chosen server's apps: needs a server to show. */
-    server?: boolean
-    /** The chosen server's settings: admins here, and anyone on a server of their own. */
-    serverAdmin?: boolean
   }
 }
 
+/** The dashboard's pages. On the site they live under /tour, filled with the sample hangar. */
+const dashboard: RouteRecordRaw[] = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('./views/HomeView.vue'),
+    meta: { shell: true },
+  },
+  {
+    // First steps, in order: your other devices, GitHub, the internet, a first app.
+    path: '/start',
+    name: 'start',
+    component: () => import('./views/StartView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/publish',
+    name: 'publish',
+    component: () => import('./views/PublishView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/projects/new',
+    name: 'new-project',
+    component: () => import('./views/NewProjectView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/projects/:name/:tab?',
+    name: 'project',
+    component: () => import('./views/ProjectView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/deployments/:id',
+    name: 'deployment',
+    component: () => import('./views/DeploymentView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/settings/:section?',
+    name: 'settings',
+    component: () => import('./views/SettingsView.vue'),
+    meta: { shell: true, admin: true },
+  },
+  {
+    path: '/people',
+    // GitHub comes back to the alias after creating the app (see UsersView).
+    alias: '/people/github-app',
+    name: 'users',
+    component: () => import('./views/UsersView.vue'),
+    meta: { shell: true, admin: true },
+  },
+  {
+    path: '/account',
+    name: 'account',
+    component: () => import('./views/AccountView.vue'),
+    meta: { shell: true },
+  },
+  {
+    path: '/guide',
+    name: 'guide',
+    component: () => import('./views/GuideView.vue'),
+    meta: { shell: true },
+  },
+]
+
+/** Signing in on a person's own Hangar. */
+const signIn: RouteRecordRaw[] = [
+  {
+    path: '/setup',
+    name: 'setup',
+    component: () => import('./views/SetupView.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('./views/LoginView.vue'),
+    meta: { public: true },
+  },
+  {
+    // The token is in the #fragment, which browsers never send to any server.
+    path: '/invite',
+    name: 'link',
+    component: () => import('./views/LinkView.vue'),
+    meta: { public: true },
+  },
+  {
+    // GitHub sends people back here after they authorize the app, with a code and the state.
+    path: '/auth/github',
+    name: 'github-callback',
+    component: () => import('./views/GithubCallbackView.vue'),
+    meta: { public: true },
+  },
+]
+
+/** The public site's own pages: the front door and the guides. */
+const site: RouteRecordRaw[] = [
+  {
+    path: '/',
+    name: 'welcome',
+    component: () => import('./views/LandingView.vue'),
+    meta: { public: true },
+  },
+  {
+    path: '/docs/:slug?',
+    name: 'docs',
+    component: () => import('./views/DocsView.vue'),
+    meta: { public: true },
+  },
+  { path: '/install', redirect: { name: 'docs', params: { slug: 'install' } } },
+  {
+    path: '/privacy',
+    name: 'privacy',
+    component: () => import('./views/LegalView.vue'),
+    meta: { public: true },
+  },
+]
+
+const notFound: RouteRecordRaw = {
+  path: '/:pathMatch(.*)*',
+  name: 'not-found',
+  component: () => import('./views/NotFoundView.vue'),
+  meta: { public: true },
+}
+
+const underTour = (route: RouteRecordRaw): RouteRecordRaw => ({
+  ...route,
+  path: route.path === '/' ? TOUR_BASE : `${TOUR_BASE}${route.path}`,
+  ...('alias' in route && typeof route.alias === 'string'
+    ? { alias: `${TOUR_BASE}${route.alias}` }
+    : {}),
+})
+
 export const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
-  routes: [
-    {
-      path: '/setup',
-      name: 'setup',
-      component: () => import('./views/SetupView.vue'),
-      meta: { public: true },
-    },
-    {
-      // The front door for visitors: what Hangar is, and how to start.
-      path: '/welcome',
-      name: 'welcome',
-      component: () => import('./views/LandingView.vue'),
-      meta: { public: true },
-    },
-    {
-      path: '/terms',
-      name: 'terms',
-      component: () => import('./views/LegalView.vue'),
-      props: { page: 'terms' },
-      meta: { public: true },
-    },
-    {
-      path: '/privacy',
-      name: 'privacy',
-      component: () => import('./views/LegalView.vue'),
-      props: { page: 'privacy' },
-      meta: { public: true },
-    },
-    {
-      // The tour without an account: the real dashboard, filled with a sample hangar. A full
-      // load, so every store starts from the sample rather than from this site.
-      path: '/tour',
-      name: 'tour',
-      component: { render: () => null },
-      meta: { public: true },
-    },
-    {
-      // This machine is someone's own server: its dashboard lives on the Hangar it is run from.
-      path: '/managed',
-      name: 'managed',
-      component: () => import('./views/ManagedView.vue'),
-      meta: { public: true },
-    },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('./views/LoginView.vue'),
-      meta: { public: true },
-    },
-    {
-      // The token is in the #fragment, which browsers never send to any server.
-      path: '/invite',
-      name: 'link',
-      component: () => import('./views/LinkView.vue'),
-      meta: { public: true },
-    },
-    {
-      // GitHub sends people back here after they authorize the app, with a code and the state.
-      path: '/auth/github',
-      name: 'github-callback',
-      component: () => import('./views/GithubCallbackView.vue'),
-      meta: { public: true },
-    },
-    {
-      path: '/',
-      name: 'home',
-      component: () => import('./views/HomeView.vue'),
-      meta: { shell: true, server: true },
-    },
-    {
-      // First steps, in order: a server, GitHub, the internet, a first app.
-      path: '/start',
-      name: 'start',
-      component: () => import('./views/StartView.vue'),
-      meta: { shell: true },
-    },
-    {
-      path: '/servers',
-      name: 'servers',
-      component: () => import('./views/ServersView.vue'),
-      meta: { shell: true },
-    },
-    {
-      path: '/publish',
-      name: 'publish',
-      component: () => import('./views/PublishView.vue'),
-      meta: { shell: true, server: true },
-    },
-    {
-      path: '/projects/new',
-      name: 'new-project',
-      component: () => import('./views/NewProjectView.vue'),
-      meta: { shell: true, server: true },
-    },
-    {
-      path: '/projects/:name/:tab?',
-      name: 'project',
-      component: () => import('./views/ProjectView.vue'),
-      meta: { shell: true, server: true },
-    },
-    {
-      path: '/deployments/:id',
-      name: 'deployment',
-      component: () => import('./views/DeploymentView.vue'),
-      meta: { shell: true, server: true },
-    },
-    {
-      path: '/settings/:section?',
-      name: 'settings',
-      component: () => import('./views/SettingsView.vue'),
-      meta: { shell: true, server: true, serverAdmin: true },
-    },
-    {
-      path: '/people',
-      // GitHub comes back to the alias after creating the app (see UsersView).
-      alias: '/people/github-app',
-      name: 'users',
-      component: () => import('./views/UsersView.vue'),
-      meta: { shell: true, admin: true },
-    },
-    {
-      path: '/account',
-      name: 'account',
-      component: () => import('./views/AccountView.vue'),
-      meta: { shell: true },
-    },
-    {
-      path: '/guide',
-      name: 'guide',
-      component: () => import('./views/GuideView.vue'),
-      meta: { shell: true },
-    },
-    {
-      path: '/:pathMatch(.*)*',
-      name: 'not-found',
-      component: () => import('./views/NotFoundView.vue'),
-      meta: { shell: true, public: true },
-    },
-  ],
+  scrollBehavior: (to, _from, saved) => saved ?? (to.hash ? { el: to.hash, top: 80 } : { top: 0 }),
+  routes: IS_SITE
+    ? [...site, ...dashboard.map(underTour), notFound]
+    : [...signIn, ...dashboard, { ...notFound, meta: { shell: true, public: true } }],
 })
 
 // After an update, an open tab may ask for code files that no longer exist. Load the page fresh
@@ -175,28 +169,18 @@ router.onError((error, to) => {
 })
 
 // Until the first account exists every page leads to setup; after that, pages need a session.
+// The site has no accounts: its tour is always "signed in" to the sample hangar.
 router.beforeEach(async (to) => {
-  if (to.name === 'tour') {
-    enterDemo()
-    window.location.replace('/')
-    return false
-  }
   const session = useSessionStore()
   await session.load()
+  if (IS_SITE) return true
   // App.vue shows a retry screen; let the navigation finish so the address bar is right.
   if (session.unreachable) return true
-  if (session.managedBy) return to.name === 'managed' ? true : { name: 'managed' }
   if (session.needsSetup && to.name !== 'setup') return { name: 'setup' }
   if (to.name === 'setup' && !session.needsSetup && !session.signedIn) return { name: 'login' }
-  if ((to.name === 'login' || to.name === 'welcome') && session.signedIn) return { name: 'home' }
+  if (to.name === 'login' && session.signedIn) return { name: 'home' }
   if (!to.meta.public && !session.signedIn) {
-    if (to.fullPath === '/') return { name: 'welcome' }
-    return { name: 'login', query: { next: to.fullPath } }
+    return to.fullPath === '/' ? { name: 'login' } : { name: 'login', query: { next: to.fullPath } }
   }
-  if (!session.signedIn) return true
-  const servers = useServersStore()
-  if (!servers.loaded) await servers.load(session.localAccess)
-  if (to.meta.server && !servers.hasServer) return { name: 'start' }
   if (to.meta.admin && !session.isAdmin) return { name: 'home' }
-  if (to.meta.serverAdmin && servers.isLocal && !session.isAdmin) return { name: 'home' }
 })

@@ -6,7 +6,6 @@ export const settingsSchema = {
   lanDomain: z.string().nullable(),
   /** The owner's domains for public access. The first is the default (see `defaultDomain`). */
   publicDomains: z.array(z.string()),
-  exposeTowerPublicly: z.boolean(),
   githubToken: z.string().nullable(), // encrypted
   cloudflareTunnelToken: z.string().nullable(), // encrypted
   setupCodeHash: z.string().nullable(),
@@ -21,20 +20,6 @@ export const settingsSchema = {
       htmlUrl: z.string(),
     })
     .nullable(),
-  /** Anyone may create an account with GitHub; such accounts deploy only to their own servers. */
-  openSignUp: z.boolean(),
-  /**
-   * On a person's own server: the Hangar it is connected to (D38). `credential` is encrypted;
-   * `localUserId` is the account here that requests from there run as.
-   */
-  central: z
-    .object({
-      url: z.string(),
-      serverId: z.string(),
-      credential: z.string(),
-      localUserId: z.string(),
-    })
-    .nullable(),
 }
 
 export type SettingKey = keyof typeof settingsSchema
@@ -44,20 +29,17 @@ export const SETTING_DEFAULTS: Settings = {
   lanIp: null,
   lanDomain: null,
   publicDomains: [],
-  exposeTowerPublicly: false,
   githubToken: null,
   cloudflareTunnelToken: null,
   setupCodeHash: null,
   githubApp: null,
-  openSignUp: false,
-  central: null,
 }
 
 export const SETTING_KEYS = Object.keys(settingsSchema) as SettingKey[]
 
 /**
  * The default public domain: suggested for new projects, and home of the webhook address
- * (hooks.<domain>) and, when exposed, the public Control Tower (hangar.<domain>).
+ * (hooks.<domain>).
  */
 export const defaultDomain = (settings: Pick<Settings, 'publicDomains'>): string | null =>
   settings.publicDomains[0] ?? null

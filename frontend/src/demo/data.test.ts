@@ -7,10 +7,10 @@ import {
   demoLog,
   demoProjects,
   demoSample,
-  demoServers,
   demoSession,
   demoSettings,
   demoStats,
+  demoUsers,
   demoSystemInfo,
 } from './data.ts'
 
@@ -18,7 +18,7 @@ import {
 describe('the sample hangar', () => {
   it('matches the contract', () => {
     expect(() => contract.me.response.parse(demoSession)).not.toThrow()
-    expect(() => contract.listServers.response.parse(demoServers)).not.toThrow()
+    expect(() => contract.listUsers.response.parse(demoUsers)).not.toThrow()
     expect(() => contract.listProjects.response.parse(demoProjects())).not.toThrow()
     expect(() => contract.flightStats.response.parse(demoStats())).not.toThrow()
     expect(() => contract.systemInfo.response.parse(demoSystemInfo)).not.toThrow()

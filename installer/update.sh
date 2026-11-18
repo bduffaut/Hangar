@@ -45,6 +45,13 @@ if docker cp "$container:/app/installer/." "$staging" >/dev/null 2>&1; then
   install -m 0644 "$staging/lib.sh" "$HANGAR_DIR/lib.sh"
   install -m 0755 "$staging/update.sh" /usr/local/bin/hangar-update
   install -m 0755 "$staging/uninstall.sh" /usr/local/bin/hangar-uninstall
+  if [ -f "$staging/tailscale.sh" ]; then
+    install -m 0755 "$staging/tailscale.sh" "$HANGAR_DIR/tailscale.sh"
+    ln -sf "$HANGAR_DIR/tailscale.sh" /usr/local/bin/hangar-tailscale
+    install -m 0755 "$staging/doctor.sh" /usr/local/bin/hangar-doctor
+  fi
+  # Settings of the central site, which no longer exists (D40).
+  sed -i '/^HANGAR_CENTRAL_URL=/d; /^HANGAR_PAIRING_CODE=/d' "$HANGAR_DIR/.env"
   ok "Refreshed the stack files from the new release"
 else
   warn "This release does not include stack files; keeping the current ones."

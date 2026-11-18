@@ -10,7 +10,6 @@ import type {
   LogLineView,
   MetricsSample,
   ProjectView,
-  ServerView,
   Session,
   SettingsView,
   SystemInfo,
@@ -36,51 +35,14 @@ function seeded(seed: number) {
   }
 }
 
-const LAN_IP = '192.168.1.42'
+const LAN_IP = '100.88.12.34'
 const LAN_DOMAIN = `${LAN_IP.replaceAll('.', '-')}.sslip.io`
 const DOMAIN = 'example.com'
 
 export const demoSession: Session = {
-  user: { id: uuid(1, 1), username: 'you', role: 'member', localAccess: false },
+  user: { id: uuid(1, 1), username: 'you', role: 'admin' },
   csrfToken: 'tour',
 }
-
-export const demoServers: ServerView[] = [
-  {
-    id: uuid(2, 1),
-    name: 'Home laptop',
-    online: true,
-    paired: true,
-    lastSeenAt: iso(now()),
-    info: {
-      version: '0.3.0',
-      hostname: 'thinkpad',
-      os: 'Ubuntu 24.04.1 LTS',
-      arch: 'x64',
-      cpus: 8,
-      memoryBytes: 16 * 1024 ** 3,
-      lanIp: LAN_IP,
-    },
-    createdAt: iso(now() - 30 * DAY),
-  },
-  {
-    id: uuid(2, 2),
-    name: 'Raspberry Pi',
-    online: true,
-    paired: true,
-    lastSeenAt: iso(now()),
-    info: {
-      version: '0.3.0',
-      hostname: 'pi5',
-      os: 'Debian GNU/Linux 12 (bookworm)',
-      arch: 'arm64',
-      cpus: 4,
-      memoryBytes: 8 * 1024 ** 3,
-      lanIp: '192.168.1.57',
-    },
-    createdAt: iso(now() - 9 * DAY),
-  },
-]
 
 interface Seed {
   name: string
@@ -278,6 +240,8 @@ export const demoSystemInfo: SystemInfo = {
   cpuModel: 'Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz',
   cpuThreads: 8,
   kernel: '6.8.0-48-generic',
+  hostname: 'thinkpad',
+  os: 'Ubuntu 24.04.1 LTS',
 }
 
 export const demoSettings: SettingsView = {
@@ -285,10 +249,10 @@ export const demoSettings: SettingsView = {
   lanDomain: LAN_DOMAIN,
   publicDomains: [DOMAIN],
   defaultDomain: DOMAIN,
-  exposeTowerPublicly: false,
   githubConnected: true,
   tunnelConfigured: true,
-  towerUrl: null,
+  towerUrl: `http://tower.${LAN_DOMAIN}`,
+  privateUrl: 'https://hangar.tail1234.ts.net',
 }
 
 export const demoAccount: AccountView = {
@@ -296,6 +260,23 @@ export const demoAccount: AccountView = {
   githubApp: null,
   github: { connected: true, kind: 'app', login: 'you' },
 }
+
+export const demoUsers = [
+  {
+    id: demoSession.user.id,
+    username: 'you',
+    role: 'admin' as const,
+    projectCount: 4,
+    createdAt: iso(now() - 30 * DAY),
+  },
+  {
+    id: uuid(1, 2),
+    username: 'sam',
+    role: 'member' as const,
+    projectCount: 0,
+    createdAt: iso(now() - 6 * DAY),
+  },
+]
 
 export const demoRepos = [
   ...SEEDS.map((s, i) => ({

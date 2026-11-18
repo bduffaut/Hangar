@@ -1,43 +1,19 @@
 import { ref } from 'vue'
 
-// The tour without an account (/tour). While it is on, the dashboard's requests are answered from
-// demo/data.ts instead of the server, and anything that would change something asks the visitor
-// to sign up. It lasts for the browser tab (sessionStorage), so switching server, which reloads
-// the page, stays inside the tour.
-const KEY = 'hangar.tour'
+/**
+ * Which build this is (D40). The dashboard is installed on each person's own server. The site
+ * (`VITE_HANGAR_SITE=1`, published at hangar.benduffaut.com) is static: the front page, the
+ * guides, and the tour, which shows the real dashboard under /tour with sample data from
+ * demo/data.ts. The site has no server; nothing in it calls an API.
+ */
+export const IS_SITE = import.meta.env.VITE_HANGAR_SITE === '1'
 
-function read(): boolean {
-  try {
-    return sessionStorage.getItem(KEY) === '1'
-  } catch {
-    return false
-  }
-}
+/** Dashboard pages on the site live under /tour. */
+export const TOUR_BASE = '/tour'
 
-let active = read()
+/** The tour's sample data answers every call. Only ever true on the site. */
+export const isDemo = () => IS_SITE
 
-export const isDemo = () => active
-
-export function enterDemo() {
-  active = true
-  try {
-    sessionStorage.setItem(KEY, '1')
-  } catch {
-    // Private browsing: the tour lasts until the next full page load.
-  }
-}
-
-/** Leaves the tour and loads `to` fresh, so nothing of the sample stays in memory. */
-export function leaveDemo(to = '/') {
-  active = false
-  try {
-    sessionStorage.removeItem(KEY)
-  } catch {
-    // Nothing was stored.
-  }
-  window.location.assign(to)
-}
-
-/** The sign-up prompt: what the visitor tried to do, or 'tour-done' after the last tour step. */
+/** The install prompt: what the visitor tried to do, or 'tour-done' after the last tour step. */
 export const signUpPrompt = ref<string | null>(null)
 export const askToSignUp = (reason: string) => (signUpPrompt.value = reason)

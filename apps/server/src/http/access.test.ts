@@ -3,7 +3,6 @@ import { type AccessPolicy, classifyRequest } from './access.ts'
 
 const policy: AccessPolicy = {
   towerHosts: new Set(['tower.192-168-1-50.sslip.io', '192.168.1.50', 'localhost:5173']),
-  publicTowerHost: null,
   hooksHost: 'hooks.example.com',
   origins: new Set(),
 }
@@ -47,9 +46,11 @@ describe('classifyRequest', () => {
     expect(classify('tower.192-168-1-50.sslip.io', '/.well-known/hangar-check/abc')).toBe('api')
   })
 
-  it('serves the API publicly only on an exposed tower hostname', () => {
-    const exposed = { ...policy, publicTowerHost: 'hangar.example.com' }
-    expect(classify('hangar.example.com', '/api/projects', 'public', exposed)).toBe('api')
-    expect(classify('blog.example.com', '/api/projects', 'public', exposed)).toBe('not-found')
+  it('never serves the API on the public entrypoint, whatever the hostname (D40)', () => {
+    const tailnet = { ...policy, towerHosts: new Set(['hangar.tail1234.ts.net']) }
+    expect(classify('hangar.tail1234.ts.net', '/api/projects', undefined, tailnet)).toBe('api')
+    expect(classify('hangar.tail1234.ts.net', '/api/projects', 'public', tailnet)).toBe('not-found')
+    expect(classify('tower.192-168-1-50.sslip.io', '/api/projects', 'public')).toBe('not-found')
+    expect(classify('hangar.example.com', '/api/auth/login', 'public')).toBe('not-found')
   })
 })

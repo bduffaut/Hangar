@@ -4,17 +4,20 @@
 //
 // Settings (environment variables):
 //   HANGAR_SHIP_HOST  SSH destination (default bduffaut@homeserver)
-//   HANGAR_BIND_IP    address Hangar listens on there (required, e.g. the Tailscale IP)
+//   HANGAR_TAILSCALE=0  install without Tailscale (by default the installer puts Hangar on the
+//                       server's Tailscale address, D40); then also:
+//   HANGAR_BIND_IP    address Hangar listens on there
 //   HANGAR_LAN_IP     address devices use to reach it (default: same as HANGAR_BIND_IP)
 import { execFileSync, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
 const host = process.env.HANGAR_SHIP_HOST ?? 'bduffaut@homeserver'
+const tailscale = process.env.HANGAR_TAILSCALE !== '0'
 const bindIp = process.env.HANGAR_BIND_IP
 const lanIp = process.env.HANGAR_LAN_IP ?? bindIp
-if (!bindIp || !/^\d{1,3}(\.\d{1,3}){3}$/.test(bindIp)) {
+if (!tailscale && (!bindIp || !/^\d{1,3}(\.\d{1,3}){3}$/.test(bindIp))) {
   console.error(
-    'Set HANGAR_BIND_IP to the address Hangar should listen on, e.g. HANGAR_BIND_IP=100.64.0.10 pnpm ship',
+    'Without Tailscale, set HANGAR_BIND_IP to the address Hangar should listen on, e.g. HANGAR_TAILSCALE=0 HANGAR_BIND_IP=192.168.1.50 pnpm ship',
   )
   process.exit(1)
 }
@@ -94,8 +97,8 @@ remote(
   'env',
   `HANGAR_IMAGE=${image}`,
   'HANGAR_SKIP_PULL=1',
-  `HANGAR_BIND_IP=${bindIp}`,
-  `HANGAR_LAN_IP=${lanIp}`,
+  `HANGAR_TAILSCALE=${tailscale ? 1 : 0}`,
+  ...(tailscale ? [] : [`HANGAR_BIND_IP=${bindIp}`, `HANGAR_LAN_IP=${lanIp}`]),
   `HANGAR_VERSION=${version}-${commit}`,
   'HANGAR_ASSUME_YES=1',
   'bash',

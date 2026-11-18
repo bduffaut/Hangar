@@ -47,5 +47,12 @@ fi
 # Each account's apps have a network of their own.
 docker network ls -q --filter label=hangar.managed=true | xargs -r docker network rm >/dev/null 2>&1 || true
 docker network rm hangar hangar-apps >/dev/null 2>&1 || true
-rm -f /usr/local/bin/hangar-update /usr/local/bin/hangar-uninstall /usr/local/bin/hangar-admin
-printf '\nHangar has been removed.\n'
+# The private address. Tailscale itself stays: other things on this machine may use it.
+if command -v tailscale >/dev/null 2>&1; then
+  tailscale serve --https=443 off >/dev/null 2>&1 || true
+fi
+rm -f /etc/systemd/system/docker.service.d/hangar-tailscale.conf /etc/sysctl.d/90-hangar.conf
+systemctl daemon-reload >/dev/null 2>&1 || true
+rm -f /usr/local/bin/hangar-update /usr/local/bin/hangar-uninstall /usr/local/bin/hangar-admin \
+  /usr/local/bin/hangar-tailscale /usr/local/bin/hangar-doctor
+printf '\nHangar has been removed. Tailscale is still installed; remove it with: sudo apt-get remove tailscale\n'

@@ -3,24 +3,21 @@ import { type AccessView, githubAppCopy } from '@hangar/shared'
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
-import { BaseButton, BaseMessage, BaseSwitch, useConfirmAction, useNotify } from '../ui/index.ts'
+import { BaseButton, BaseMessage, useConfirmAction, useNotify } from '../ui/index.ts'
 import HgPanel from './HgPanel.vue'
 
-// Who can get in: the GitHub App behind "Sign in with GitHub", created through GitHub's manifest
-// flow, and whether anyone may sign up with it (D37, D38).
+// The GitHub App behind "Sign in with GitHub", created through GitHub's manifest flow (D37).
 const route = useRoute()
 const router = useRouter()
 const notify = useNotify()
 const confirm = useConfirmAction()
 
 const access = ref<AccessView | null>(null)
-const openSignUp = ref(false)
 const busy = ref<string | null>(null)
 const error = ref<string | null>(null)
 
 function apply(next: AccessView) {
   access.value = next
-  openSignUp.value = next.openSignUp
 }
 
 async function act(key: string, action: () => Promise<void>) {
@@ -75,11 +72,6 @@ async function remove() {
   if (!(await confirm({ ...githubAppCopy.removeConfirm, danger: true }))) return
   await act('app', async () => apply(await api('removeGithubApp')))
 }
-
-const saveOpen = () =>
-  act('open', async () =>
-    apply(await api('updateAccess', { body: { openSignUp: openSignUp.value } })),
-  )
 </script>
 
 <template>
@@ -93,18 +85,6 @@ const saveOpen = () =>
         <p class="hg-access-ok">
           {{ githubAppCopy.connected(access.githubApp.slug, access.githubApp.owner) }}
         </p>
-        <label class="hg-access-switch">
-          <BaseSwitch
-            id="open-sign-up"
-            v-model="openSignUp"
-            :disabled="busy !== null"
-            @update:model-value="saveOpen"
-          />
-          <span>
-            <strong>{{ githubAppCopy.openTitle }}</strong>
-            <span class="hg-muted">{{ githubAppCopy.openBody }}</span>
-          </span>
-        </label>
         <p class="hg-muted hg-access-note">{{ githubAppCopy.newAddressHint }}</p>
       </template>
       <p v-else-if="access" class="hg-muted hg-access-note">{{ githubAppCopy.setUpHelp }}</p>

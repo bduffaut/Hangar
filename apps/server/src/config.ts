@@ -29,9 +29,16 @@ const envSchema = z.object({
   HANGAR_HOST_SYS: z.string().min(1).default('/sys'),
   // Extra browser origins allowed to call the API, comma-separated (development only).
   HANGAR_DEV_ORIGINS: z.string().default(''),
-  // A person's own server: the Hangar it is run from, and the one-time code to pair with it (D38).
-  HANGAR_CENTRAL_URL: z.union([z.literal(''), z.url()]).default(''),
-  HANGAR_PAIRING_CODE: z.string().default(''),
+  // This machine's name on the owner's Tailscale network, like hangar.tail1234.ts.net (D40). The
+  // Control Tower answers there over HTTPS, through `tailscale serve`.
+  HANGAR_TAILSCALE_HOSTNAME: z
+    .string()
+    .regex(/^([a-z0-9-]+\.)+ts\.net$/i)
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  // '1' when `tailscale serve` gives that name HTTPS; otherwise it answers on plain HTTP over
+  // Tailscale (still encrypted by Tailscale itself).
+  HANGAR_TAILSCALE_HTTPS: z.enum(['0', '1', '']).default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.string().default('development'),
 })
@@ -75,8 +82,8 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
         : e.HANGAR_DEV_ORIGINS.split(',')
             .map((origin) => origin.trim())
             .filter(Boolean),
-    centralUrl: e.HANGAR_CENTRAL_URL.replace(/\/+$/, '') || null,
-    pairingCode: e.HANGAR_PAIRING_CODE || null,
+    tailscaleHostname: e.HANGAR_TAILSCALE_HOSTNAME?.toLowerCase().replace(/\.$/, '') ?? null,
+    tailscaleHttps: e.HANGAR_TAILSCALE_HTTPS === '1',
     logLevel: e.LOG_LEVEL,
     isProduction: e.NODE_ENV === 'production',
   }

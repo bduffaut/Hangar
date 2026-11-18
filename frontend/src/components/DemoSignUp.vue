@@ -1,16 +1,11 @@
 <script setup lang="ts">
 import { demoCopy } from '@hangar/shared'
-import { computed, ref } from 'vue'
-import { leaveDemo, signUpPrompt } from '../demo/mode.ts'
-import { useSessionStore } from '../stores/session.ts'
+import { computed } from 'vue'
+import { signUpPrompt } from '../demo/mode.ts'
 import { BaseButton, BaseDialog } from '../ui/index.ts'
 
-// On the tour: a strip under the header saying this is a sample, and the prompt to sign up that
-// opens when a visitor tries something that needs an account, or finishes the tour.
-const session = useSessionStore()
-const canSignUp = computed(() => session.githubSignIn && session.openSignUp)
-const busy = ref(false)
-
+// On the site's tour: a strip under the header saying this is a sample, and the prompt to install
+// Hangar that opens when a visitor tries something that needs a real one, or finishes the tour.
 const visible = computed({
   get: () => signUpPrompt.value !== null,
   set: (open) => {
@@ -22,12 +17,8 @@ const lede = computed(() => {
   if (reason === 'tour-done' || reason === 'banner') return demoCopy.promptTourDone
   return demoCopy.promptAction((reason && demoCopy.actions[reason]) ?? demoCopy.fallbackAction)
 })
-
-/** Leaves the tour first, so the sign-up talks to this site for real. */
-function signUp() {
-  busy.value = true
-  leaveDemo('/welcome?signup=github')
-}
+const install = { name: 'docs', params: { slug: 'install' } }
+const how = { name: 'docs', params: { slug: 'how-it-works' } }
 </script>
 
 <template>
@@ -37,18 +28,12 @@ function signUp() {
       ><span class="hg-demo-short">{{ demoCopy.bannerShort }}</span>
     </p>
     <div class="hg-demo-strip-actions">
-      <BaseButton
-        size="sm"
-        variant="primary"
-        :label="demoCopy.bannerAction"
-        @click="signUpPrompt = 'banner'"
-      />
-      <BaseButton
-        size="sm"
-        variant="ghost"
-        :label="demoCopy.bannerLeave"
-        @click="leaveDemo('/welcome')"
-      />
+      <RouterLink v-slot="{ navigate }" :to="install" custom>
+        <BaseButton size="sm" variant="primary" :label="demoCopy.bannerAction" @click="navigate" />
+      </RouterLink>
+      <RouterLink v-slot="{ navigate }" :to="{ name: 'welcome' }" custom>
+        <BaseButton size="sm" variant="ghost" :label="demoCopy.bannerLeave" @click="navigate" />
+      </RouterLink>
     </div>
   </div>
 
@@ -60,30 +45,33 @@ function signUp() {
         <span>{{ step }}</span>
       </li>
     </ol>
-    <p v-if="!canSignUp" class="hg-muted hg-demo-note">{{ demoCopy.promptInviteOnly }}</p>
     <template #footer>
       <div class="hg-demo-actions">
         <BaseButton variant="ghost" :label="demoCopy.promptKeepLooking" @click="visible = false" />
-        <BaseButton
-          variant="secondary"
-          :label="demoCopy.promptSignIn"
-          @click="leaveDemo('/login')"
-        />
-        <BaseButton
-          v-if="canSignUp"
-          variant="primary"
-          icon="github"
-          :loading="busy"
-          :label="demoCopy.promptGithub"
-          @click="signUp"
-        />
-        <a
-          v-else
-          class="hg-demo-selfhost"
-          href="https://github.com/bduffaut/Hangar#run-hangar-yourself"
-          rel="noopener"
-          >{{ demoCopy.promptSelfHost }}</a
-        >
+        <RouterLink v-slot="{ navigate }" :to="how" custom>
+          <BaseButton
+            :label="demoCopy.promptHow"
+            @click="
+              () => {
+                visible = false
+                navigate()
+              }
+            "
+          />
+        </RouterLink>
+        <RouterLink v-slot="{ navigate }" :to="install" custom>
+          <BaseButton
+            variant="primary"
+            icon="download"
+            :label="demoCopy.promptInstall"
+            @click="
+              () => {
+                visible = false
+                navigate()
+              }
+            "
+          />
+        </RouterLink>
       </div>
     </template>
   </BaseDialog>
@@ -107,6 +95,10 @@ function signUp() {
 .hg-demo-short {
   display: none;
 }
+.hg-demo-strip-actions {
+  display: flex;
+  gap: var(--hg-space-2);
+}
 @media (max-width: 40rem) {
   .hg-demo-strip {
     justify-content: space-between;
@@ -120,10 +112,6 @@ function signUp() {
   .hg-demo-short {
     display: inline;
   }
-}
-.hg-demo-strip-actions {
-  display: flex;
-  gap: var(--hg-space-2);
 }
 .hg-demo-lede {
   margin: 0 0 var(--hg-space-4);
@@ -152,17 +140,11 @@ function signUp() {
   font-size: 0.75rem;
   font-weight: 700;
 }
-.hg-demo-note {
-  margin: var(--hg-space-4) 0 0;
-}
 .hg-demo-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: var(--hg-space-2);
-}
-.hg-demo-selfhost {
-  font-weight: 600;
 }
 </style>

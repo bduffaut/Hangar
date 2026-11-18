@@ -358,7 +358,7 @@ Run the installer as root. It prints the Control Tower address and the boarding 
 ### On your laptop, from this PC
 
 ```
-HANGAR_BIND_IP=100.64.0.10 pnpm ship
+pnpm ship
 ```
 
 This builds Hangar's image on this PC, copies it to the laptop over your SSH connection, copies the installer, and runs it with Hangar bound to the Tailscale address. Nothing is published anywhere. Running it again updates Hangar and keeps all your data and secrets.
@@ -397,30 +397,36 @@ GitHub runs the lint, type, unit, and integration checks on every push.
 | Deploy from the command line (development) | `pnpm hangar help` lists the commands.                                                                                                                                                    |
 | Change the database structure              | Edit `apps/server/src/db/schema.ts`, then run `pnpm db:generate --name <change>`.                                                                                                         |
 | Add an API endpoint                        | Add it to `packages/shared/src/contract.ts` (and its shapes in `schemas.ts`), then register it with `route()` in the feature's `routes.ts`. The dashboard can call it by name right away. |
-| Ship to the laptop                         | `HANGAR_BIND_IP=100.64.0.10 pnpm ship`.                                                                                                                                                   |
+| Ship to the laptop                         | `pnpm ship`.                                                                                                                                                                              |
 
 ### Sharing Hangar with other people
 
-Unless you turn on open sign-up (below), there is no public sign-up. Open **People**, create an invite link, and send it to the person; it works once, for 7 days. They choose a username and password. Everyone sees only their own projects, logs, and settings, and connects their own GitHub token under **Account**. Admins also manage accounts and server settings, but they do not see other people's projects either. Forgotten password? An admin creates a reset link on **People**.
+There is no public sign-up. Open **People**, create an invite link, and send it to the person; it works once, for 7 days. They choose a username and password. Everyone sees only their own projects, logs, and settings, and connects their own GitHub token under **Account**. Admins also manage accounts and server settings, but they do not see other people's projects either. Forgotten password? An admin creates a reset link on **People**.
 
 Each account can run code on your server, so invite only people you trust. SECURITY.md lists what the separation does and does not cover.
 
-### Running apps on other people's servers (and your own)
+### Reaching the Control Tower from anywhere
 
-A Hangar that others sign in to (such as hangar.benduffaut.com) is a **central site**: people sign in there, but their apps never run on your laptop. Each person connects a machine of their own:
+The installer puts Hangar on your **Tailscale** network (decision D40 in ARCHITECTURE.md): it
+installs Tailscale, signs the machine in, and makes Hangar listen on its Tailscale address only.
+With HTTPS certificates turned on for your tailnet, the Control Tower is at
+`https://<machine>.<tailnet>.ts.net`; otherwise at `http://<machine>.<tailnet>.ts.net`. Any of
+your devices with Tailscale on can open it, from anywhere; nobody else can. Nothing about the
+Control Tower goes through the Cloudflare tunnel, which carries only the apps you publish.
 
-1. They sign in (with GitHub, if **People → Sign in with GitHub** is set up and **Let anyone sign up** is on).
-2. **Servers → Add a server** gives a one-line command. They run it on their machine; it installs Hangar there and connects back. No ports to open.
-3. The server menu at the top picks which machine the dashboard shows. Projects, logs, settings, and the Cloudflare tunnel all belong to that machine.
-4. **Publish** lists their GitHub repositories; one click builds and runs one on the chosen server.
+`sudo hangar-tailscale` runs that step again (after turning on HTTPS, renaming the machine, or to
+add Tailscale to an install made without it), and `sudo hangar-doctor` checks every piece.
 
-People who signed up on their own can never use your laptop itself; invited people and you can. **Get started** walks a new person through every step and checks each one off. A removed server stops connecting; `sudo hangar-uninstall` on it removes everything there.
+**Leaving.** Anyone can delete their own account under **Account → Delete account** by typing
+their username. The last admin cannot.
 
-**The tour.** Visitors can press **Take the tour** on the front page (or open `/tour`) to see the whole dashboard filled with a sample hangar: two servers, a few apps, two weeks of deployments, and a deploy that runs while they watch. It lives only in their browser and never touches this server. Anything that would change something (deploy, publish, connect a server) opens a **Create your account** prompt instead.
+### The public site
 
-**Leaving.** Anyone can delete their own account under **Account → Delete account** by typing their username. Their servers are disconnected and forget this site; the apps on them keep running until `sudo hangar-uninstall` is run there. The last admin cannot delete their account.
-
-**Before opening sign-up to strangers**, check the **Terms** and **Privacy** pages (`/terms`, `/privacy`, wording in `packages/shared/src/copy.ts`, `legalCopy`) say what you want them to say. Each account can connect at most 10 servers.
+hangar.benduffaut.com is a static site built from this repository (`pnpm build:site`, published by
+the Site workflow on each release): the front page, the guides in `docs/guides/`, the tour, and
+`install.sh`. The tour is the real dashboard under `/tour`, answering every request from sample
+data in the browser (`frontend/src/demo/`). The site has no accounts and never talks to anyone's
+Hangar.
 
 ### Sign in with GitHub
 

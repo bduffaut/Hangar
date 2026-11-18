@@ -64,6 +64,13 @@
       "when": 1794372149981,
       "tag": "0008_servers",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794963384631,
+      "tag": "0009_remove_central_site",
+      "breakpoints": true
     }
   ]
 }

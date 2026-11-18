@@ -1,5 +1,4 @@
 export const TOWER_SUBDOMAIN = 'tower'
-export const PUBLIC_TOWER_SUBDOMAIN = 'hangar'
 export const HOOKS_SUBDOMAIN = 'hooks'
 
 export const RESERVED_NAMES: ReadonlySet<string> = new Set([
@@ -39,11 +38,6 @@ export function sslipDomain(ip: string): string {
 
 export function towerHostname(domain: string): string {
   return `${TOWER_SUBDOMAIN}.${domain}`
-}
-
-/** Where the Control Tower answers on the internet, when an admin makes it public. */
-export function publicTowerHostname(domain: string): string {
-  return `${PUBLIC_TOWER_SUBDOMAIN}.${domain}`
 }
 
 export function hooksHostname(domain: string): string {
@@ -110,7 +104,7 @@ export function checkPublicHostname(
   if (address.subdomain.includes('.')) return 'too_deep'
   if (
     address.subdomain === TOWER_SUBDOMAIN ||
-    address.subdomain === PUBLIC_TOWER_SUBDOMAIN ||
+    address.subdomain === 'hangar' ||
     address.subdomain === HOOKS_SUBDOMAIN
   ) {
     return 'reserved'

@@ -11,9 +11,8 @@ test('create, deploy, configure, roll back, and delete a project', async ({ page
 
   // First visit to the Control Tower: the tour walks through the main screen.
   await page.goto('/')
-  await expect(page.getByRole('dialog', { name: 'Your servers' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'The flight deck' })).toBeVisible()
   for (const step of [
-    'Your servers',
     'The flight deck',
     'Departures',
     'Your apps',

@@ -98,7 +98,6 @@ export async function getActiveSession(db: Db, id: string) {
         id: users.id,
         username: users.username,
         role: users.role,
-        localAccess: users.localAccess,
       },
     })
     .from(sessions)

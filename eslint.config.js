@@ -5,7 +5,15 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'apps/server/drizzle/**', '.cache/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-site/**',
+      '**/node_modules/**',
+      'apps/server/drizzle/**',
+      '.cache/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],

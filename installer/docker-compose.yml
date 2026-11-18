@@ -25,8 +25,8 @@ services:
     container_name: hangar-proxy
     restart: unless-stopped
     command: ['--configFile=/etc/traefik/traefik.yml']
-    # HANGAR_BIND_IP limits who can reach Hangar: 0.0.0.0 is every network the server is on;
-    # a single address (like a Tailscale IP) keeps it to that network only.
+    # HANGAR_BIND_IP limits who can reach Hangar: normally the Tailscale address (D40), so only
+    # the owner's devices can; 0.0.0.0 would be every network the server is on.
     ports:
       - ${HANGAR_BIND_IP:-0.0.0.0}:80:80
     volumes:
@@ -44,9 +44,9 @@ services:
       HANGAR_SESSION_SECRET: ${HANGAR_SESSION_SECRET}
       HANGAR_LAN_IP: ${HANGAR_LAN_IP}
       HANGAR_VERSION: ${HANGAR_VERSION}
-      # Set when this server is run from another Hangar (D38).
-      HANGAR_CENTRAL_URL: ${HANGAR_CENTRAL_URL:-}
-      HANGAR_PAIRING_CODE: ${HANGAR_PAIRING_CODE:-}
+      # The machine's name on the owner's Tailscale network, where the Control Tower answers (D40).
+      HANGAR_TAILSCALE_HOSTNAME: ${HANGAR_TAILSCALE_HOSTNAME:-}
+      HANGAR_TAILSCALE_HTTPS: ${HANGAR_TAILSCALE_HTTPS:-0}
     # The Docker socket lets core build and run apps. /proc and / inside a container already show
     # the host's CPU, memory, and disk, so no host directories are mounted.
     volumes:

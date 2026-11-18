@@ -196,9 +196,7 @@ export async function finishGithubFlow(
     }
   }
   if (flow.purpose === 'login') {
-    const user =
-      (await userByGithubId(ctx, github.id)) ??
-      ((await getSettings(ctx.db)).openSignUp ? await createSignedUpUser(ctx, github) : null)
+    const user = await userByGithubId(ctx, github.id)
     if (!user) {
       throw new UserError(
         403,
@@ -287,39 +285,6 @@ async function createInvitedUser(ctx: Ctx, flow: Flow, github: { id: number; log
     }
     throw error
   }
-}
-
-/**
- * Open sign-up (D38): anyone with a GitHub account gets one here. It deploys only to servers of
- * its own, never to this machine. Its username is its GitHub name, made unique if needed.
- */
-async function createSignedUpUser(ctx: Ctx, github: { id: number; login: string }) {
-  const base = github.login.toLowerCase().replace(/[^a-z0-9_.-]/g, '-')
-  const stem = (/^[a-z0-9]/.test(base) ? base : `gh-${base}`).padEnd(3, '0').slice(0, 28)
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const username = attempt === 0 ? stem : `${stem}-${randomBytes(2).toString('hex')}`
-    if (!USERNAME_PATTERN.test(username)) continue
-    try {
-      const [created] = await ctx.db
-        .insert(users)
-        .values({
-          username,
-          passwordHash: null,
-          role: 'member',
-          localAccess: false,
-          githubUserId: github.id,
-          githubLogin: github.login,
-        })
-        .returning()
-      ctx.log.info({ username }, 'Someone signed up with GitHub')
-      return created!
-    } catch (error) {
-      const cause = (error as { cause?: { code?: string; constraint?: string } }).cause
-      if (cause?.code !== '23505') throw error
-      if (cause.constraint?.includes('github')) return userByGithubId(ctx, github.id)
-    }
-  }
-  throw new UserError(409, 'username_taken', 'Hangar could not find a free username. Try again.')
 }
 
 // The signed-in person's account
@@ -429,23 +394,11 @@ export async function completeGithubApp(
 
 /** Stops GitHub sign-in here. The app itself stays on GitHub until its owner deletes it. */
 export async function removeGithubApp(ctx: Ctx) {
-  await setSettings(ctx.db, { githubApp: null, openSignUp: false })
+  await setSettings(ctx.db, { githubApp: null })
 }
 
 export async function accessView(ctx: Ctx) {
-  return {
-    githubApp: await githubAppView(ctx),
-    openSignUp: (await getSettings(ctx.db)).openSignUp,
-  }
-}
-
-/** Open sign-up needs GitHub sign-in: GitHub is the only way such an account gets in. */
-export async function updateAccess(ctx: Ctx, patch: { openSignUp: boolean }) {
-  if (patch.openSignUp && !(await getSettings(ctx.db)).githubApp) {
-    throw new UserError(400, 'github_sign_in_off', 'Set up Sign in with GitHub first.')
-  }
-  await setSettings(ctx.db, { openSignUp: patch.openSignUp })
-  return accessView(ctx)
+  return { githubApp: await githubAppView(ctx) }
 }
 
 /** What every signed-in page may know about the app. */

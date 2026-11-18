@@ -8,11 +8,18 @@ export async function health(ctx: Ctx) {
 }
 
 export async function systemInfo(ctx: Ctx) {
-  const [imageDiskBytes, host] = await Promise.all([
+  const [imageDiskBytes, host, machine] = await Promise.all([
     ctx.docker.imageDiskUsage(),
     ctx.hostMetrics.info(),
+    ctx.docker.hostInfo().catch(() => null),
   ])
-  return { version: ctx.config.version, imageDiskBytes, ...host }
+  return {
+    version: ctx.config.version,
+    imageDiskBytes,
+    ...host,
+    hostname: machine?.hostname ?? null,
+    os: machine?.os ?? null,
+  }
 }
 
 const DAY_MS = 24 * 60 * 60_000

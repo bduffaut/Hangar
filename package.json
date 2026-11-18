@@ -21,7 +21,10 @@
     "test": "vitest run --project shared --project server --project frontend",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "db:generate": "pnpm --filter @hangar/server db:generate"
+    "db:generate": "pnpm --filter @hangar/server db:generate",
+    "site": "pnpm --filter @hangar/frontend dev:site",
+    "build:site": "pnpm --filter @hangar/frontend build:site",
+    "test:site": "playwright test --config e2e/site/site.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

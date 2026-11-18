@@ -137,8 +137,6 @@ describe('first-run setup', () => {
     expect((await call({ url: '/api/setup/status' })).json()).toEqual({
       needsSetup: true,
       githubSignIn: false,
-      openSignUp: false,
-      managedBy: null,
     })
   })
 
@@ -188,8 +186,6 @@ describe('first-run setup', () => {
     expect((await call({ url: '/api/setup/status' })).json()).toEqual({
       needsSetup: false,
       githubSignIn: false,
-      openSignUp: false,
-      managedBy: null,
     })
     const res = await call({
       method: 'POST',
@@ -204,7 +200,7 @@ describe('sessions', () => {
   it('returns the signed-in user', async () => {
     const res = await call({ url: '/api/auth/me', cookie })
     expect(res.json()).toEqual({
-      user: { id: expect.any(String), username: 'admin', role: 'admin', localAccess: true },
+      user: { id: expect.any(String), username: 'admin', role: 'admin' },
       csrfToken: csrf,
     })
   })
@@ -347,10 +343,10 @@ describe('settings', () => {
       lanDomain: '127-0-0-1.sslip.io',
       publicDomains: [],
       defaultDomain: null,
-      exposeTowerPublicly: false,
       githubConnected: false,
       tunnelConfigured: false,
       towerUrl: 'http://tower.127-0-0-1.sslip.io',
+      privateUrl: null,
     })
   })
 
@@ -368,14 +364,6 @@ describe('settings', () => {
       defaultDomain: 'example.com',
     })
     expect((await settings({ publicDomains: [] })).json().publicDomains).toEqual([])
-    const expose = await call({
-      method: 'PATCH',
-      url: '/api/settings',
-      body: { exposeTowerPublicly: true },
-      cookie,
-      csrf,
-    })
-    expect(expose.json().error.code).toBe('no_public_domain')
   })
 })
 
@@ -930,7 +918,7 @@ describe('accounts', () => {
     expect(own.json().error.code).toBe('last_admin')
   })
 
-  it('lets people delete their own account, with its servers', async () => {
+  it('lets people delete their own account', async () => {
     const token = await invite()
     // From its own address: this suite has used up the sign-in limit for the default one.
     const joined = await call({
@@ -940,13 +928,6 @@ describe('accounts', () => {
       remoteAddress: '10.9.9.9',
     })
     const leaving = { cookie: joined.cookie!, csrf: joined.json().csrfToken as string }
-    const added = await call({
-      method: 'POST',
-      url: '/api/servers',
-      body: { name: 'Old laptop' },
-      ...leaving,
-    })
-    expect(added.status).toBe(200)
     const remove = (confirm: string) =>
       call({ method: 'POST', url: '/api/me/delete', body: { confirm }, ...leaving })
 
@@ -954,10 +935,9 @@ describe('accounts', () => {
     expect((await remove('leaving')).status).toBe(200)
     expect((await call({ url: '/api/auth/me', cookie: leaving.cookie })).status).toBe(401)
     const { rows } = await ctx.db.execute(
-      `select (select count(*) from users where username = 'leaving') as users,
-              (select count(*) from servers where name = 'Old laptop') as servers`,
+      `select count(*)::int as n from users where username = 'leaving'`,
     )
-    expect(rows[0]).toEqual({ users: '0', servers: '0' })
+    expect(rows[0]!.n).toBe(0)
   })
 
   it('cancels the links of a demoted admin, so they cannot buy their way back', async () => {
@@ -1012,35 +992,24 @@ describe('accounts', () => {
     await call({ method: 'DELETE', url: `/api/projects/${adminProject}`, cookie, csrf })
   })
 
-  it('uses a __Host- cookie and HSTS on the public HTTPS address', async () => {
-    await setSettings(ctx.db, { publicDomains: ['example.com'], exposeTowerPublicly: true })
-    const headers = {
-      host: 'hangar.example.com',
-      origin: 'https://hangar.example.com',
-      'x-hangar-entrypoint': 'public',
-      'content-type': 'application/json',
-    }
+  it('never answers the Control Tower on the public entrypoint (D40)', async () => {
+    await setSettings(ctx.db, { publicDomains: ['example.com'] })
     await new Promise((resolve) => setTimeout(resolve, 5_100)) // the access policy cache
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/auth/login',
-      headers,
-      payload: { username: 'admin', password: ADMIN_PASSWORD },
-    })
-    expect(login.statusCode).toBe(200)
-    const cookieHeader = String([login.headers['set-cookie']].flat()[0])
-    expect(cookieHeader).toMatch(/^__Host-hangar_session=/)
-    expect(cookieHeader).toContain('Secure')
-    expect(cookieHeader).toContain('HttpOnly')
-    expect(login.headers['strict-transport-security']).toBeDefined()
-    // The name the LAN uses means nothing here, so a planted cookie gets nowhere.
-    const value = cookieHeader.split(';')[0]!.split('=').slice(1).join('=')
-    const planted = await app.inject({
-      url: '/api/auth/me',
-      headers: { ...headers, cookie: `hangar_session=${value}` },
-    })
-    expect(planted.statusCode).toBe(401)
-    await setSettings(ctx.db, { publicDomains: [], exposeTowerPublicly: false })
+    for (const host of ['hangar.example.com', 'tower.127-0-0-1.sslip.io']) {
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        headers: {
+          host,
+          origin: `https://${host}`,
+          'x-hangar-entrypoint': 'public',
+          'content-type': 'application/json',
+        },
+        payload: { username: 'admin', password: ADMIN_PASSWORD },
+      })
+      expect(login.statusCode).toBe(404)
+    }
+    await setSettings(ctx.db, { publicDomains: [] })
   })
 })
 

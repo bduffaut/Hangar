@@ -56,17 +56,19 @@ export async function settingsView(ctx: Ctx, userId: string): Promise<SettingsVi
     lanDomain: s.lanDomain,
     publicDomains: s.publicDomains,
     defaultDomain: defaultDomain(s),
-    exposeTowerPublicly: s.exposeTowerPublicly,
     githubConnected: (await getGithubToken(ctx, userId)) !== null,
     tunnelConfigured: s.cloudflareTunnelToken !== null,
     towerUrl: s.lanDomain ? `http://${towerHostname(s.lanDomain)}` : null,
+    privateUrl: ctx.config.tailscaleHostname
+      ? `${ctx.config.tailscaleHttps ? 'https' : 'http'}://${ctx.config.tailscaleHostname}`
+      : null,
   }
 }
 
 /** Changing an address re-renders every route. */
 export async function updateSettings(
   ctx: Ctx,
-  patch: { lanIp?: string; publicDomains?: string[]; exposeTowerPublicly?: boolean },
+  patch: { lanIp?: string; publicDomains?: string[] },
 ): Promise<void> {
   const next: Partial<Settings> = {}
   if (patch.lanIp !== undefined) {
@@ -75,18 +77,6 @@ export async function updateSettings(
   }
   if (patch.publicDomains !== undefined) {
     next.publicDomains = await cleanPublicDomains(ctx, patch.publicDomains)
-    if (next.publicDomains.length === 0) next.exposeTowerPublicly = false
-  }
-  if (patch.exposeTowerPublicly !== undefined) {
-    const domains = next.publicDomains ?? (await getSettings(ctx.db)).publicDomains
-    if (patch.exposeTowerPublicly && domains.length === 0) {
-      throw new UserError(
-        400,
-        'no_public_domain',
-        'Add a domain before making the Control Tower public.',
-      )
-    }
-    next.exposeTowerPublicly = patch.exposeTowerPublicly
   }
   await setSettings(ctx.db, next)
   await syncRouting(ctx)

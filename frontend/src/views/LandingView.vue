@@ -1,46 +1,26 @@
 <script setup lang="ts">
-import { authCopy, landingCopy } from '@hangar/shared'
-import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
-import { messageOf } from '../api/client.ts'
+import { landingCopy } from '@hangar/shared'
 import BrandMark from '../brand/BrandMark.vue'
+import CopyField from '../components/CopyField.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
-import { goToGithub } from '../lib/github.ts'
-import { useSessionStore } from '../stores/session.ts'
-import { BaseButton, BaseIcon, BaseMessage } from '../ui/index.ts'
+import { INSTALL_COMMAND } from '../site/install.ts'
+import { BaseButton, BaseIcon } from '../ui/index.ts'
 
-// The front door for visitors: what Hangar does, how to get going, and what runs where. Signing in
-// with GitHub creates an account when sign-up is open. The tour shows the dashboard without one.
-useDocumentTitle('Hangar')
-const session = useSessionStore()
-const route = useRoute()
-const busy = ref(false)
-const error = ref<string | null>(null)
-
-async function signInWithGithub() {
-  busy.value = true
-  error.value = null
-  try {
-    await goToGithub({ purpose: 'login' })
-  } catch (e) {
-    error.value = messageOf(e)
-    busy.value = false
-  }
-}
-
-// "Sign up with GitHub" on the tour leaves it and comes here to start for real.
-onMounted(() => {
-  if (route.query.signup === 'github' && session.githubSignIn) void signInWithGithub()
-})
+// The public site's front door: what Hangar does, how to get it, and what runs where. Nothing
+// here talks to a server; the tour runs in the browser with sample data.
+useDocumentTitle('Hangar: deploy from GitHub to a computer you own')
+const install = { name: 'docs', params: { slug: 'install' } }
+const tour = { name: 'home' }
 </script>
 
 <template>
   <div class="hg-landing">
     <header class="hg-landing-bar">
       <BrandMark />
-      <RouterLink class="hg-landing-signin" :to="{ name: 'login' }">{{
-        authCopy.signIn
-      }}</RouterLink>
+      <nav class="hg-landing-links" aria-label="Site">
+        <RouterLink :to="{ name: 'docs' }">{{ landingCopy.docs }}</RouterLink>
+        <a href="https://github.com/bduffaut/Hangar" rel="noopener">GitHub</a>
+      </nav>
     </header>
 
     <main class="hg-landing-main">
@@ -49,18 +29,17 @@ onMounted(() => {
           <h1 id="hero-title">{{ landingCopy.title }}</h1>
           <p class="hg-hero-lede">{{ landingCopy.lede }}</p>
           <div class="hg-hero-actions">
-            <BaseButton
-              v-if="session.githubSignIn"
-              variant="primary"
-              icon="github"
-              :label="session.openSignUp ? landingCopy.signUpGithub : landingCopy.signInGithub"
-              :loading="busy"
-              class="hg-hero-cta"
-              @click="signInWithGithub"
-            />
-            <RouterLink v-slot="{ navigate }" :to="{ name: 'tour' }" custom>
+            <RouterLink v-slot="{ navigate }" :to="install" custom>
               <BaseButton
-                :variant="session.githubSignIn ? 'secondary' : 'primary'"
+                variant="primary"
+                icon="download"
+                :label="landingCopy.install"
+                class="hg-hero-cta"
+                @click="navigate"
+              />
+            </RouterLink>
+            <RouterLink v-slot="{ navigate }" :to="tour" custom>
+              <BaseButton
                 icon="play"
                 :label="landingCopy.tour"
                 class="hg-hero-cta"
@@ -68,19 +47,11 @@ onMounted(() => {
               />
             </RouterLink>
           </div>
-          <BaseMessage v-if="error" tone="error">{{ error }}</BaseMessage>
-          <p class="hg-muted hg-hero-note">
-            {{ session.openSignUp ? landingCopy.tourNote : landingCopy.inviteOnly }}
-          </p>
-          <p v-if="session.openSignUp" class="hg-muted hg-hero-note">
-            {{ landingCopy.agree }}
-            <RouterLink :to="{ name: 'terms' }">{{ landingCopy.terms.toLowerCase() }}</RouterLink>
-            {{ landingCopy.and }}
-            <RouterLink :to="{ name: 'privacy' }">{{
-              landingCopy.privacy.toLowerCase()
-            }}</RouterLink
-            >.
-          </p>
+          <p class="hg-muted hg-hero-note">{{ landingCopy.tourNote }}</p>
+          <div class="hg-hero-command">
+            <p class="hg-muted hg-hero-note">{{ landingCopy.commandLabel }}</p>
+            <CopyField :value="INSTALL_COMMAND" label="install command" />
+          </div>
         </div>
 
         <!-- One deploy, as the dashboard shows it: the only animation on the page. -->
@@ -152,15 +123,15 @@ onMounted(() => {
       <section class="hg-closer" aria-label="Get started">
         <p class="hg-closer-line">{{ landingCopy.free }}</p>
         <div class="hg-hero-actions">
-          <BaseButton
-            v-if="session.githubSignIn && session.openSignUp"
-            variant="primary"
-            icon="github"
-            :label="landingCopy.signUpGithub"
-            :loading="busy"
-            @click="signInWithGithub"
-          />
-          <RouterLink v-slot="{ navigate }" :to="{ name: 'tour' }" custom>
+          <RouterLink v-slot="{ navigate }" :to="install" custom>
+            <BaseButton
+              variant="primary"
+              icon="download"
+              :label="landingCopy.install"
+              @click="navigate"
+            />
+          </RouterLink>
+          <RouterLink v-slot="{ navigate }" :to="tour" custom>
             <BaseButton icon="play" :label="landingCopy.tour" @click="navigate" />
           </RouterLink>
         </div>
@@ -172,10 +143,7 @@ onMounted(() => {
         ><BaseIcon name="github" :size="16" /> {{ landingCopy.source }}</a
       >
       <nav class="hg-landing-links" aria-label="About this site">
-        <a href="https://github.com/bduffaut/Hangar#run-hangar-yourself" rel="noopener">{{
-          landingCopy.selfHost
-        }}</a>
-        <RouterLink :to="{ name: 'terms' }">{{ landingCopy.terms }}</RouterLink>
+        <RouterLink :to="{ name: 'docs' }">{{ landingCopy.docs }}</RouterLink>
         <RouterLink :to="{ name: 'privacy' }">{{ landingCopy.privacy }}</RouterLink>
       </nav>
     </footer>
@@ -202,6 +170,20 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   height: 4rem;
+}
+.hg-hero-command {
+  display: grid;
+  gap: var(--hg-space-2);
+  margin-top: var(--hg-space-2);
+  max-width: 34rem;
+}
+.hg-landing-bar .hg-landing-links a {
+  font-size: var(--hg-size-sm);
+  color: var(--hg-ink-muted);
+  text-decoration: none;
+}
+.hg-landing-bar .hg-landing-links a:hover {
+  color: var(--hg-ink);
 }
 .hg-landing-signin {
   font-size: var(--hg-size-sm);

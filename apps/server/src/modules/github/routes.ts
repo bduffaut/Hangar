@@ -21,7 +21,6 @@ import {
   githubAppManifest,
   removeGithubApp,
   startGithubFlow,
-  updateAccess,
 } from './service.ts'
 
 // Per client address, per minute, like the other sign-in endpoints.
@@ -105,7 +104,6 @@ export function githubRoutes(http: Http) {
   )
 
   route(http, contract.getAccess, () => accessView(ctx))
-  route(http, contract.updateAccess, ({ body }) => updateAccess(ctx, body))
 
   route(http, contract.githubAppComplete, async ({ auth, body }) => {
     await completeGithubApp(ctx, auth.user.id, body)

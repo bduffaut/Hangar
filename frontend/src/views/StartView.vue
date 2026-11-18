@@ -1,30 +1,28 @@
 <script setup lang="ts">
-import { type AccountView, startCopy } from '@hangar/shared'
+import { type AccountView, type SettingsView, startCopy } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api/client.ts'
-import AddServerFlow from '../components/AddServerFlow.vue'
+import CopyField from '../components/CopyField.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { goToGithub } from '../lib/github.ts'
-import { useServersStore } from '../stores/servers.ts'
 import { BaseButton, BaseIcon, BaseSkeleton } from '../ui/index.ts'
 
-// First steps, in order. Each one is checked against the real state (GitHub, the servers, the
-// chosen server's settings and projects), so the list checks itself off as things happen.
+// First steps, in order. Each one is checked against the real state (the private address, GitHub,
+// settings and projects), so the list checks itself off as things happen.
 useDocumentTitle(startCopy.title)
-const servers = useServersStore()
 const steps = startCopy.steps
 
 const account = ref<AccountView | null>(null)
 const repoCount = ref<number | null>(null)
 const internetReady = ref<boolean | null>(null)
+const settings = ref<SettingsView | null>(null)
 const projectCount = ref<number | null>(null)
 const loaded = ref(false)
 const open = ref<string | null>(null)
 
-/** A server to put apps on: this machine for the owner, or a connected one. */
-const serverReady = computed(() => servers.hasServer)
-const serverOnline = computed(() => servers.isLocal || (servers.remote?.online ?? false))
+/** Opened through the private Tailscale address: this device is set up already. */
+const onPrivateAddress = window.location.hostname.endsWith('.ts.net')
 
 async function check() {
   account.value = await api('getAccount').catch(() => null)
@@ -33,25 +31,22 @@ async function check() {
         .then((r) => r.length)
         .catch(() => null)
     : null
-  if (serverReady.value && serverOnline.value) {
-    const [settings, projects] = await Promise.all([
-      api('getSettings').catch(() => null),
-      api('listProjects').catch(() => null),
-    ])
-    internetReady.value = settings
-      ? settings.tunnelConfigured && settings.publicDomains.length > 0
-      : null
-    projectCount.value = projects?.length ?? null
-  }
+  const [found, projects] = await Promise.all([
+    api('getSettings').catch(() => null),
+    api('listProjects').catch(() => null),
+  ])
+  settings.value = found
+  internetReady.value = found ? found.tunnelConfigured && found.publicDomains.length > 0 : null
+  projectCount.value = projects?.length ?? null
   loaded.value = true
 }
 onMounted(check)
 
-type Key = 'github' | 'server' | 'repos' | 'internet' | 'publish'
+type Key = 'devices' | 'github' | 'repos' | 'internet' | 'publish'
 const rows = computed(() => {
   const list: { key: Key; done: boolean; optional?: boolean }[] = [
+    { key: 'devices', done: onPrivateAddress, optional: !settings.value?.privateUrl },
     { key: 'github', done: account.value?.github.connected ?? false },
-    { key: 'server', done: serverReady.value },
     { key: 'repos', done: (repoCount.value ?? 0) > 0 },
     { key: 'internet', done: internetReady.value === true, optional: true },
     { key: 'publish', done: (projectCount.value ?? 0) > 0 },
@@ -67,10 +62,6 @@ const current = computed(
 )
 const expanded = (key: Key) => (open.value ?? current.value) === key
 
-function connected(id: string) {
-  // Show the new server's apps from now on; this page reloads on it.
-  servers.choose(id, '/start')
-}
 const chooseRepos = () =>
   account.value?.githubApp && window.open(account.value.githubApp.installUrl, '_blank', 'noopener')
 </script>
@@ -134,7 +125,15 @@ const chooseRepos = () =>
           </p>
         </template>
 
-        <AddServerFlow v-if="row.key === 'server' && !row.done" @connected="connected" />
+        <template v-if="row.key === 'devices'">
+          <template v-if="settings?.privateUrl">
+            <CopyField :value="settings.privateUrl" :label="steps.devices.label" />
+            <ol class="hg-step-list">
+              <li v-for="line in steps.devices.how" :key="line">{{ line }}</li>
+            </ol>
+          </template>
+          <p v-else class="hg-muted">{{ steps.devices.noTailscale }}</p>
+        </template>
 
         <div v-if="row.key === 'repos'" class="hg-step-actions">
           <p v-if="row.done" class="hg-step-ok">{{ steps.repos.found(repoCount ?? 0) }}</p>
@@ -154,12 +153,7 @@ const chooseRepos = () =>
             :to="{ name: 'settings', params: { section: 'public' } }"
             custom
           >
-            <BaseButton
-              icon="cloud"
-              :label="steps.internet.action"
-              :disabled="!serverReady"
-              @click="navigate"
-            />
+            <BaseButton icon="cloud" :label="steps.internet.action" @click="navigate" />
           </RouterLink>
           <p class="hg-muted hg-step-note">{{ steps.internet.skip }}</p>
         </div>
@@ -170,7 +164,7 @@ const chooseRepos = () =>
               variant="primary"
               icon="upload"
               :label="steps.publish.action"
-              :disabled="!serverReady || !account?.github.connected"
+              :disabled="!account?.github.connected"
               @click="navigate"
             />
           </RouterLink>
@@ -299,5 +293,11 @@ const chooseRepos = () =>
   .hg-step-body {
     padding-left: var(--hg-space-4);
   }
+}
+.hg-step-list {
+  margin: var(--hg-space-3) 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: var(--hg-space-1);
 }
 </style>

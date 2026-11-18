@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { deckCopy, type FlightStats, navCopy } from '@hangar/shared'
+import { deckCopy, type FlightStats, navCopy, type SystemInfo } from '@hangar/shared'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api/client.ts'
 import { formatDuration, formatUptime } from '../lib/format.ts'
 import { useLiveStore } from '../stores/live.ts'
 import { useMetricsStore } from '../stores/metrics.ts'
 import { useProjectsStore } from '../stores/projects.ts'
-import { useServersStore } from '../stores/servers.ts'
+import { useSessionStore } from '../stores/session.ts'
 import BarSpark from './BarSpark.vue'
 
-// The top of the home screen: which server this is, its live readings, and how the last weeks of
+// The top of the home screen: this machine, its live readings, and how the last weeks of
 // deploys went. The one bold element on the page; the board below stays quiet.
-const servers = useServersStore()
+const session = useSessionStore()
 const metrics = useMetricsStore()
 const projects = useProjectsStore()
 const live = useLiveStore()
@@ -24,6 +24,11 @@ let unsubscribe: (() => void) | null = null
 onMounted(() => {
   metrics.acquire()
   void loadStats()
+  // The machine's own name is for admins (the server's readings are theirs).
+  if (session.isAdmin)
+    void api('systemInfo')
+      .then((i) => (info.value = i))
+      .catch(() => {})
   // A finished deploy changes the numbers.
   unsubscribe = live.onDeployment((d) => {
     if (d.status === 'ready' || d.status === 'failed') void loadStats()
@@ -34,15 +39,10 @@ onBeforeUnmount(() => {
   unsubscribe?.()
 })
 
-const name = computed(() =>
-  servers.isLocal ? navCopy.thisServer : (servers.remote?.name ?? navCopy.noServer),
-)
-const online = computed(() => servers.isLocal || (servers.remote?.online ?? false))
-const machine = computed(() => {
-  const info = servers.remote?.info
-  if (info) return `${info.hostname}, ${info.os}`
-  return servers.isLocal ? window.location.hostname : ''
-})
+const info = ref<SystemInfo | null>(null)
+const name = computed(() => info.value?.hostname ?? navCopy.thisServer)
+const online = computed(() => live.connected)
+const machine = computed(() => info.value?.os ?? window.location.hostname)
 
 const host = computed(() => metrics.latest?.host ?? null)
 const pct = (used: number, total: number) => (total > 0 ? (used / total) * 100 : 0)

@@ -7,22 +7,22 @@ import {
   demoProject,
   demoProjects,
   demoRepos,
-  demoServers,
   demoSession,
   demoSettings,
   demoStats,
+  demoUsers,
   demoSystemInfo,
   startSimulation,
 } from './data.ts'
-import { askToSignUp, leaveDemo } from './mode.ts'
+import { askToSignUp } from './mode.ts'
 
-/** Thrown for anything the tour cannot do; pages show nothing, since the sign-up prompt opens. */
+/** Thrown for anything the tour cannot do; the install prompt opens instead. */
 export class DemoActionError extends Error {
   readonly status = 0
   readonly code = 'tour'
   readonly hint = undefined
   constructor(readonly endpoint: string) {
-    super('Create an account to do that.')
+    super('Install Hangar on your own computer to do that.')
   }
 }
 
@@ -51,8 +51,12 @@ export async function demoCall(
       return { ok: true }
     case 'getSettings':
       return demoSettings
-    case 'listServers':
-      return demoServers
+    case 'listUsers':
+      return demoUsers
+    case 'listInvites':
+      return []
+    case 'getAccess':
+      return { githubApp: null }
     case 'githubRepos':
       return demoRepos
     case 'githubBranches':
@@ -91,7 +95,8 @@ export async function demoCall(
     case 'checkAddress':
       return { status: 'ok', message: 'This address reaches your server.' }
     case 'logout':
-      leaveDemo('/welcome')
+      // Signing out of the tour goes back to the front page.
+      window.location.assign('/')
       return { ok: true }
     default:
       askToSignUp(name)

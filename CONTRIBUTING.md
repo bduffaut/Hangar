@@ -19,8 +19,8 @@ pnpm dev     # Postgres, Traefik, and core in Docker, and the dashboard on http:
 ```
 
 The first run shows the Preflight Checklist; get a boarding pass with
-`pnpm hangar-admin issue-setup-code`. To look at the dashboard without setting anything up, open
-`http://localhost:5173/tour`.
+`pnpm hangar-admin issue-setup-code`. The public site (front page, guides, tour) runs with
+`pnpm site` on `http://localhost:5174`; its tour needs no server at all.
 
 [docs/GUIDE.md](docs/GUIDE.md) explains how the pieces fit, in plain language, and
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the engineering reference, including the
@@ -32,6 +32,7 @@ numbered decisions (D1, D2, …) the code refers to.
 pnpm lint && pnpm typecheck && pnpm test   # what CI runs first
 pnpm test:integration                      # with `pnpm dev` running
 pnpm test:e2e                              # browser tests, for dashboard changes
+pnpm test:site                             # the public site's browser tests
 ```
 
 A few house rules, which keep the codebase easy to work in:
@@ -50,11 +51,9 @@ A few house rules, which keep the codebase easy to work in:
 ## Releasing (maintainers)
 
 1. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under the new version and date.
-2. Set the version in `package.json`, `RELEASE_VERSION` in `packages/shared/src/constants.ts`,
-   and the default `HANGAR_VERSION` in `installer/install.sh`.
+2. Set the version in `package.json` and the default `HANGAR_VERSION` in `installer/install.sh`.
 3. Commit, then tag and push: `git tag v0.3.0 && git push origin v0.3.0`. The Release workflow
-   builds the multi-arch image, packages the installer, and creates the GitHub release.
-4. Only then update any hosted Control Tower: its install command downloads the release that
-   matches its own version.
+   builds the multi-arch image, packages the installer, and creates the GitHub release; the Site
+   workflow publishes hangar.benduffaut.com with an `install.sh` for that release.
 
 By contributing you agree that your work is released under the [MIT license](LICENSE).

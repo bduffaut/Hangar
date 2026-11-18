@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { appHostname, hooksHostname, publicTowerHostname, towerHostname } from '@hangar/shared'
+import { appHostname, hooksHostname, towerHostname } from '@hangar/shared'
 
 /** Public path that answers a reachability check; core decides whether the token is real. */
 export const ADDRESS_CHECK_PATH = '/.well-known/hangar-check/'
@@ -19,9 +19,13 @@ export interface AppRoute {
 export interface RoutingInput {
   lanIp: string
   lanDomain: string
-  /** Home of hooks.<domain> and, when exposed, hangar.<domain>. */
+  /** Home of hooks.<domain>, the only part of Hangar itself on the internet. */
   defaultDomain: string | null
-  exposeTowerPublicly: boolean
+  /**
+   * The machine's Tailscale name (D40). `tailscale serve` brings HTTPS for it to the `web`
+   * entrypoint; the Control Tower is never routed on the public entrypoint.
+   */
+  privateHostname: string | null
   coreUrl: string
   /** Traefik's API answers only requests carrying this key, so apps cannot read the routing table. */
   proxyApiKey: string
@@ -91,7 +95,10 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
 
   routers.tower = {
     entryPoints: ['web'],
-    rule: `${host(towerHostname(lanDomain))} || ${host(lanIp)}`,
+    rule: [towerHostname(lanDomain), lanIp, input.privateHostname]
+      .filter((h): h is string => !!h)
+      .map(host)
+      .join(' || '),
     service: CORE,
     middlewares: [FROM_WEB],
   }
@@ -119,14 +126,6 @@ export function renderRouting(input: RoutingInput): DynamicConfig {
       rule: `${host(hooksHostname(defaultDomain))} && PathPrefix(\`/api/webhooks/\`)`,
       service: CORE,
       middlewares: [FROM_PUBLIC],
-    }
-    if (input.exposeTowerPublicly) {
-      routers['tower-public'] = {
-        entryPoints: ['public'],
-        rule: host(publicTowerHostname(defaultDomain)),
-        service: CORE,
-        middlewares: [FROM_PUBLIC],
-      }
     }
   }
 

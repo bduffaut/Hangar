@@ -4,19 +4,18 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BrandMark from '../brand/BrandMark.vue'
 import { useLiveStore } from '../stores/live.ts'
-import { useServersStore } from '../stores/servers.ts'
+import { useProjectsStore } from '../stores/projects.ts'
 import { useSessionStore } from '../stores/session.ts'
 import { type ThemePreference, useTheme } from '../theme/useTheme.ts'
 import { BaseButton, BaseIcon, type IconName } from '../ui/index.ts'
 import DemoSignUp from './DemoSignUp.vue'
-import ServerSwitcher from './ServerSwitcher.vue'
 import TourOverlay from './TourOverlay.vue'
 
 const session = useSessionStore()
-const servers = useServersStore()
-/** Settings belong to the chosen server: its owner manages them. */
-const showSettings = computed(() => servers.hasServer && (servers.isLocal ? session.isAdmin : true))
 const live = useLiveStore()
+const projects = useProjectsStore()
+/** The first-steps checklist, until there is an app. */
+const showStart = computed(() => projects.loaded && projects.projects.length === 0)
 const router = useRouter()
 const route = useRoute()
 /** Project and deployment pages belong under Projects in the navigation. */
@@ -41,7 +40,6 @@ function cycleTheme() {
 
 async function signOut() {
   live.disconnect()
-  servers.reset()
   await session.logout()
   await router.push({ name: 'login' })
 }
@@ -54,21 +52,15 @@ async function signOut() {
       <RouterLink :to="{ name: 'home' }" class="hg-shell-brand" aria-label="Hangar home">
         <BrandMark />
       </RouterLink>
-      <ServerSwitcher v-if="servers.hasServer || servers.servers.length" />
       <nav class="hg-shell-nav" aria-label="Main">
-        <template v-if="servers.hasServer">
-          <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
-            navCopy.overview
-          }}</RouterLink>
-          <RouterLink :to="{ name: 'publish' }" data-tour="publish">{{
-            navCopy.publish
-          }}</RouterLink>
-        </template>
-        <RouterLink v-else :to="{ name: 'start' }">Get started</RouterLink>
-        <RouterLink :to="{ name: 'servers' }">{{ navCopy.servers }}</RouterLink>
+        <RouterLink :to="{ name: 'home' }" :class="{ 'is-section': inProjects }">{{
+          navCopy.overview
+        }}</RouterLink>
+        <RouterLink :to="{ name: 'publish' }" data-tour="publish">{{ navCopy.publish }}</RouterLink>
+        <RouterLink v-if="showStart" :to="{ name: 'start' }">{{ navCopy.getStarted }}</RouterLink>
         <RouterLink v-if="session.isAdmin" :to="{ name: 'users' }">{{ navCopy.users }}</RouterLink>
         <RouterLink
-          v-if="showSettings"
+          v-if="session.isAdmin"
           :to="{ name: 'settings' }"
           :class="{ 'is-section': inSettings }"
           >{{ navCopy.settings }}</RouterLink

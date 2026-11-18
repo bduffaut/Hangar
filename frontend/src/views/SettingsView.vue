@@ -4,6 +4,7 @@ import {
   brand,
   settingsCopy,
   navCopy,
+  privateCopy,
   type SettingsView,
   type SystemInfo,
   toastCopy,
@@ -11,7 +12,6 @@ import {
 } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { useServersStore } from '../stores/servers.ts'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
@@ -25,20 +25,17 @@ import {
   BaseMessage,
   BasePassword,
   BaseSkeleton,
-  BaseSwitch,
   useNotify,
 } from '../ui/index.ts'
 
 useDocumentTitle(navCopy.settings)
 const notify = useNotify()
 const route = useRoute()
-const servers = useServersStore()
 
 const settings = ref<SettingsView | null>(null)
 const info = ref<SystemInfo | null>(null)
 const lanIp = ref('')
 const newDomain = ref('')
-const exposeTower = ref(false)
 const tunnelToken = ref('')
 const busy = ref<string | null>(null)
 const errors = ref<Record<string, string | null>>({})
@@ -46,7 +43,6 @@ const errors = ref<Record<string, string | null>>({})
 function apply(next: SettingsView) {
   settings.value = next
   lanIp.value = next.lanIp ?? ''
-  exposeTower.value = next.exposeTowerPublicly
 }
 
 const loadError = ref('')
@@ -69,9 +65,7 @@ const section = computed<Section>(() => {
   const wanted = route.params.section
   return sectionKeys.includes(wanted as Section) ? (wanted as Section) : 'network'
 })
-const serverName = computed(() =>
-  servers.isLocal ? navCopy.thisServer.toLowerCase() : (servers.remote?.name ?? ''),
-)
+const serverName = computed(() => info.value?.hostname ?? navCopy.thisServer.toLowerCase())
 
 async function act(key: string, action: () => Promise<void>, toast = true) {
   busy.value = key
@@ -119,10 +113,6 @@ const makeDefault = (domain: string) =>
   )
 
 const defaultDomain = computed(() => settings.value?.defaultDomain ?? null)
-const saveExposeTower = () =>
-  act('expose', async () =>
-    apply(await api('updateSettings', { body: { exposeTowerPublicly: exposeTower.value } })),
-  )
 
 // Check that names under a domain reach this Hangar through the tunnel.
 const checks = ref<Record<string, AddressCheckResult | 'checking'>>({})
@@ -176,6 +166,17 @@ const saveTunnel = (token: string | null) =>
       </RouterLink>
     </nav>
     <div class="hg-settings-page">
+      <HgPanel
+        v-if="section === 'network'"
+        :title="privateCopy.title"
+        :description="privateCopy.description"
+      >
+        <template v-if="settings.privateUrl">
+          <CopyField :value="settings.privateUrl" :label="privateCopy.label" />
+          <p class="hg-muted hg-note">{{ privateCopy.devices }}</p>
+        </template>
+        <BaseMessage v-else tone="info">{{ privateCopy.missing }}</BaseMessage>
+      </HgPanel>
       <HgPanel
         v-if="section === 'network'"
         title="Address"
@@ -353,24 +354,10 @@ const saveTunnel = (token: string | null) =>
               GitHub webhooks arrive at <code>hooks.{{ defaultDomain }}</code
               >, so pushes deploy instantly instead of within a minute.
             </p>
-            <div class="hg-switch-row">
-              <BaseSwitch
-                id="set-expose"
-                v-model="exposeTower"
-                :disabled="!defaultDomain || busy !== null"
-                @update:model-value="saveExposeTower"
-              />
-              <label for="set-expose">
-                Make the {{ brand.dashboardName }} public{{
-                  defaultDomain ? ` at hangar.${defaultDomain}` : ''
-                }}
-                <span class="hg-muted hg-switch-help"
-                  >Anyone on the internet can then reach its sign-in page, and it controls the whole
-                  server, so use strong passwords.</span
-                >
-              </label>
-            </div>
-            <BaseMessage v-if="errors.expose" tone="error">{{ errors.expose }}</BaseMessage>
+            <p class="hg-muted hg-note">
+              The {{ brand.dashboardName }} itself is never on the internet: only the apps you give
+              a public address.
+            </p>
           </section>
         </div>
       </HgPanel>
