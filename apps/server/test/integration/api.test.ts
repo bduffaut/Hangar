@@ -482,7 +482,10 @@ describe('projects and env vars', () => {
       'one level',
     )
     expect((await patch({ hostnames: ['tower.example.com'] })).status).toBe(400)
-    expect((await patch({ hostnames: ['hangar.example.com'] })).status).toBe(400)
+    // hangar. was the public Control Tower before D40; an admin may give it to an app now (D41).
+    expect((await create('site', { hostnames: ['hangar.example.com'] })).json().hostnames).toEqual([
+      'hangar.example.com',
+    ])
     const taken = await patch({ hostnames: ['auto.example.com'] })
     expect(taken.status).toBe(409)
     expect(taken.json().error.message).toContain('already in use by another project')
