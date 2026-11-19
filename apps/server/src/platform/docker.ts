@@ -23,7 +23,24 @@ export const LABELS = {
   owner: 'hangar.owner',
   /** On the tunnel container: a hash of the token it runs with, to detect a changed token. */
   tunnelToken: 'hangar.tunnel-token',
+  /** On a data volume: the app it was made for (by name), kept after the app is deleted. */
+  app: 'hangar.app',
 } as const
+
+/** One mount of an app container: a Hangar volume, or a library folder from the computer. */
+export interface AppMount {
+  type: 'volume' | 'bind'
+  source: string
+  target: string
+  readOnly: boolean
+}
+
+export interface DataVolume {
+  name: string
+  /** The app it was made for, and the account that owned it. */
+  app: string | null
+  ownerId: string | null
+}
 
 export const TUNNEL_CONTAINER = 'hangar-tunnel'
 
@@ -35,6 +52,9 @@ export interface AppContainerSpec {
   env: Record<string, string>
   memoryLimitMb: number
   network: string
+  mounts?: AppMount[]
+  /** Pass /dev/dri (the graphics chip) through. */
+  gpu?: boolean
 }
 
 export interface ManagedContainer {
@@ -195,6 +215,18 @@ export function createDocker(docker = new Dockerode()) {
           CapDrop: APP_DROPPED_CAPABILITIES,
           SecurityOpt: ['no-new-privileges'],
           Memory: spec.memoryLimitMb * 1024 * 1024,
+          // Volumes and library folders. A bind source must already exist: Docker refuses a
+          // missing folder instead of creating it as root (the Mounts API, not -v).
+          Mounts: (spec.mounts ?? []).map((m) => ({
+            Type: m.type,
+            Source: m.source,
+            Target: m.target,
+            ReadOnly: m.readOnly,
+            ...(m.type === 'bind' ? { BindOptions: { Propagation: 'rprivate' as const } } : {}),
+          })),
+          Devices: spec.gpu
+            ? [{ PathOnHost: '/dev/dri', PathInContainer: '/dev/dri', CgroupPermissions: 'rwm' }]
+            : [],
           // A runaway app (fork loop, busy loop) must not starve the database or Hangar itself:
           // cap its processes, and give it half the default CPU weight when the CPU is contended.
           PidsLimit: APP_PIDS_LIMIT,
@@ -332,6 +364,164 @@ export function createDocker(docker = new Dockerode()) {
         if (isNotFound(error)) return null
         throw error
       }
+    },
+
+    /**
+     * Pulls `ref` and returns the image's ID. Progress goes to `onLine` once per layer step, not
+     * once per byte. `signal` aborts the pull.
+     */
+    async pullImage(
+      ref: string,
+      onLine: (line: string) => void,
+      signal: AbortSignal,
+    ): Promise<string> {
+      const stream = (await docker.pull(ref, { abortSignal: signal })) as NodeJS.ReadableStream
+      const seen = new Map<string, string>()
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => reject(signal.reason ?? new Error('aborted'))
+        signal.addEventListener('abort', abort, { once: true })
+        docker.modem.followProgress(
+          stream,
+          (error) => {
+            signal.removeEventListener('abort', abort)
+            if (error) reject(error)
+            else resolve()
+          },
+          (event: { id?: string; status?: string; error?: string }) => {
+            if (event.error) return onLine(event.error)
+            if (!event.status) return
+            // "Downloading" and "Extracting" repeat with byte counts: report each step once.
+            if (event.id && seen.get(event.id) === event.status) return
+            if (event.id) seen.set(event.id, event.status)
+            onLine(event.id ? `${event.id}: ${event.status}` : event.status)
+          },
+        )
+      })
+      const image = await docker.getImage(ref).inspect()
+      return image.Id
+    },
+
+    /** Adds `target` (repository:tag) as another name of an image. */
+    async tagImage(source: string, target: string): Promise<void> {
+      const colon = target.lastIndexOf(':')
+      await docker
+        .getImage(source)
+        .tag({ repo: target.slice(0, colon), tag: target.slice(colon + 1) })
+    },
+
+    /** Removes one name of an image, leaving the image while other names use it. */
+    async untagImage(ref: string): Promise<void> {
+      try {
+        await docker.getImage(ref).remove({ noprune: true })
+      } catch (error) {
+        if (!isNotFound(error)) throw error
+      }
+    },
+
+    /**
+     * Makes sure an app's data volume exists. A volume left by a deleted app of the same name is
+     * reused only by the same account; anyone else's is refused (`false`), so no one inherits
+     * another account's data by choosing its old name.
+     */
+    async ensureDataVolume(name: string, app: string, ownerId: string): Promise<boolean> {
+      const existing = await docker
+        .getVolume(name)
+        .inspect()
+        .catch((error: unknown) => {
+          if (isNotFound(error)) return null
+          throw error
+        })
+      if (existing) return existing.Labels?.[LABELS.owner] === ownerId
+      await docker.createVolume({
+        Name: name,
+        Labels: {
+          [LABELS.managed]: 'true',
+          [LABELS.kind]: 'data',
+          [LABELS.app]: app,
+          [LABELS.owner]: ownerId,
+        },
+      })
+      return true
+    },
+
+    async listDataVolumes(): Promise<DataVolume[]> {
+      const { Volumes } = await docker.listVolumes({
+        filters: { label: [`${LABELS.managed}=true`, `${LABELS.kind}=data`] },
+      })
+      return (Volumes ?? []).map((v) => ({
+        name: v.Name,
+        app: v.Labels?.[LABELS.app] ?? null,
+        ownerId: v.Labels?.[LABELS.owner] ?? null,
+      }))
+    },
+
+    async removeVolume(name: string): Promise<void> {
+      try {
+        await docker.getVolume(name).remove()
+      } catch (error) {
+        if (!isNotFound(error)) throw error
+      }
+    },
+
+    /**
+     * The size of each data volume, from Docker's disk usage report. That report walks every
+     * volume, so callers cache it (see modules/storage).
+     */
+    async dataVolumeSizes(): Promise<Map<string, number>> {
+      const usage = (await docker.df()) as {
+        Volumes?: { Name: string; Labels?: Record<string, string>; UsageData?: { Size: number } }[]
+      }
+      const sizes = new Map<string, number>()
+      for (const v of usage.Volumes ?? []) {
+        if (v.Labels?.[LABELS.kind] !== 'data') continue
+        if (v.UsageData && v.UsageData.Size >= 0) sizes.set(v.Name, v.UsageData.Size)
+      }
+      return sizes
+    },
+
+    /**
+     * Runs a short command in a throwaway container with no network, no capabilities, and a
+     * read-only root, and returns its exit code and output. Used to look at the computer's
+     * folders without giving core itself access to them.
+     */
+    async runProbe(spec: {
+      image: string
+      cmd: string[]
+      binds: string[]
+    }): Promise<{ exitCode: number; output: string }> {
+      const container = await docker.createContainer({
+        Image: spec.image,
+        Entrypoint: [],
+        Cmd: spec.cmd,
+        User: '0:0',
+        Labels: { [LABELS.managed]: 'true', [LABELS.kind]: 'probe' },
+        HostConfig: {
+          Binds: spec.binds,
+          NetworkMode: 'none',
+          // Only reading: DAC_READ_SEARCH lets it look into folders other users locked (a home
+          // folder is usually 750), on a mount that is read-only anyway.
+          CapDrop: ['ALL'],
+          CapAdd: ['DAC_READ_SEARCH'],
+          SecurityOpt: ['no-new-privileges'],
+          ReadonlyRootfs: true,
+          Memory: 64 * 1024 * 1024,
+          PidsLimit: 64,
+        },
+      })
+      try {
+        await container.start()
+        const { StatusCode } = (await container.wait()) as { StatusCode: number }
+        const output = await container.logs({ stdout: true, stderr: true, follow: false })
+        return { exitCode: StatusCode, output: demuxLogs(output).trim() }
+      } finally {
+        await container.remove({ force: true }).catch(() => {})
+      }
+    },
+
+    /** The image a running container was created from (core's own, for probes). */
+    async containerImage(idOrName: string): Promise<string | null> {
+      const info = await inspectContainer(idOrName)
+      return info?.Image ?? null
     },
 
     /** Total size of Hangar's app images (`hangar/*`). */

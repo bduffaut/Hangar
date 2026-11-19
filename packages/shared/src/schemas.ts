@@ -3,6 +3,13 @@
 import { z } from 'zod'
 import { PROJECT_NAME_MAX_LENGTH } from './hostnames.ts'
 import {
+  APP_KINDS,
+  DEPLOY_STRATEGIES,
+  MAX_APP_LIBRARIES,
+  MAX_APP_VOLUMES,
+  VOLUME_NAME_PATTERN,
+} from './apps.ts'
+import {
   ADDRESS_STATUSES,
   DEPLOYMENT_TRIGGERS,
   DESIRED_STATES,
@@ -322,6 +329,36 @@ export const projectInput = z.object({
   /** Deploy the branch head right away (default true). */
   deploy: z.boolean().optional(),
 })
+
+// Storage and libraries (D42)
+
+/** Storage Hangar keeps for an app: a Docker volume mounted at `mountPath`, kept across deploys. */
+const volumeInput = z.object({
+  name: z.string().trim().toLowerCase().regex(VOLUME_NAME_PATTERN, {
+    error: 'Storage names are 1 to 32 lowercase letters, digits, and dashes, like "data".',
+  }),
+  mountPath: z.string().trim().max(200),
+})
+/** A library mounted into an app. Read-only unless the library allows writing and this asks. */
+const libraryMountInput = z.object({
+  libraryId: id,
+  mountPath: z.string().trim().max(200),
+  writable: z.boolean().optional(),
+})
+const appStorage = {
+  volumes: z
+    .array(volumeInput)
+    .max(MAX_APP_VOLUMES, { error: `An app can have at most ${MAX_APP_VOLUMES} storage folders.` })
+    .optional(),
+  libraries: z
+    .array(libraryMountInput)
+    .max(MAX_APP_LIBRARIES, { error: `An app can use at most ${MAX_APP_LIBRARIES} libraries.` })
+    .optional(),
+  /** Pass the computer's graphics chip (/dev/dri) to the app. Admins only. */
+  gpu: z.boolean().optional(),
+  strategy: z.enum(DEPLOY_STRATEGIES).optional(),
+}
+
 export const projectPatch = projectInput
   .pick({
     branch: true,
@@ -331,7 +368,89 @@ export const projectPatch = projectInput
     triggerMode: true,
     hostnames: true,
   })
+  .extend({
+    /** Image apps: the image to run from the next update on. */
+    image: z.string().trim().max(255).optional(),
+    ...appStorage,
+  })
   .partial()
+
+/** Installs an app that runs a published image, from the catalog or by name (admins). */
+export const imageAppInput = z.object({
+  name: projectInput.shape.name,
+  image: z.string().trim().max(255, { error: 'That image name is too long.' }),
+  port: port.nullable().optional(),
+  memoryLimitMb: projectInput.shape.memoryLimitMb,
+  hostnames: projectInput.shape.hostnames,
+  /** Initial env vars, such as a template's. More can be set later like any project's. */
+  env: z.record(z.string().regex(ENV_KEY_PATTERN), z.string().max(4096)).optional(),
+  /** The catalog template it came from, for its icon and first steps. */
+  catalogId: z.string().max(64).optional(),
+  deploy: z.boolean().optional(),
+  ...appStorage,
+})
+
+export const projectDeleteQuery = z.object({
+  /** `delete` also removes the app's storage; by default it is kept for a reinstall. */
+  data: z.enum(['keep', 'delete']).default('keep'),
+})
+
+export const libraryView = z.object({
+  id,
+  name: z.string(),
+  path: z.string(),
+  /** Whether apps may be given write access. Read-only otherwise. */
+  writable: z.boolean(),
+  /** The apps that use it. */
+  usedBy: z.array(z.string()),
+  createdAt: timestamp,
+})
+export type LibraryView = z.infer<typeof libraryView>
+
+export const libraryInput = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, { error: 'Give the library a name, like Movies.' })
+    .max(40, { error: 'Library names can be at most 40 characters.' }),
+  path: z.string().trim().max(400),
+  writable: z.boolean().optional(),
+})
+export const libraryPatch = libraryInput.pick({ name: true, writable: true }).partial()
+
+/** An app's storage, with how much each holds (measured every few minutes). */
+export const storageView = z.object({
+  volumes: z.array(
+    z.object({
+      name: z.string(),
+      mountPath: z.string(),
+      dockerName: z.string(),
+      sizeBytes: z.number().nullable(),
+    }),
+  ),
+  libraries: z.array(
+    z.object({
+      libraryId: id,
+      name: z.string(),
+      path: z.string(),
+      mountPath: z.string(),
+      readOnly: z.boolean(),
+    }),
+  ),
+})
+export type StorageView = z.infer<typeof storageView>
+
+/** Every volume Hangar keeps on this computer, including those of deleted apps. Admins only. */
+export const volumeListView = z.array(
+  z.object({
+    dockerName: z.string(),
+    app: z.string().nullable(),
+    /** The app it belonged to was deleted with "keep its data". */
+    orphaned: z.boolean(),
+    sizeBytes: z.number().nullable(),
+  }),
+)
+export const volumeParams = z.object({ name: z.string().regex(/^hangar-data-[a-z0-9-]+$/) })
 
 export const deploymentView = z.object({
   id,
@@ -370,6 +489,16 @@ export type AddressView = z.infer<typeof addressView>
 export const projectView = z.object({
   id,
   name: z.string(),
+  kind: z.enum(APP_KINDS),
+  /** Image apps: the image they run, like jellyfin/jellyfin:12.4. */
+  image: z.string().nullable(),
+  catalogId: z.string().nullable(),
+  strategy: z.enum(DEPLOY_STRATEGIES),
+  gpu: z.boolean(),
+  volumes: z.array(volumeInput),
+  libraries: z.array(
+    z.object({ libraryId: id, name: z.string(), mountPath: z.string(), readOnly: z.boolean() }),
+  ),
   repoUrl: z.string(),
   branch: z.string(),
   rootDir: z.string(),
@@ -443,6 +572,8 @@ export const systemInfo = z.object({
   /** The machine's name and operating system, as Docker reports them. */
   hostname: z.string().nullable(),
   os: z.string().nullable(),
+  /** Whether the computer has a graphics chip apps can use (/dev/dri). */
+  gpu: z.boolean(),
 })
 export type SystemInfo = z.infer<typeof systemInfo>
 

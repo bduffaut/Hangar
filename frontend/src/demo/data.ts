@@ -7,11 +7,13 @@ import type {
   AddressView,
   DeploymentView,
   FlightStats,
+  LibraryView,
   LogLineView,
   MetricsSample,
   ProjectView,
   Session,
   SettingsView,
+  StorageView,
   SystemInfo,
 } from '@hangar/shared'
 
@@ -51,7 +53,21 @@ interface Seed {
   stopped?: boolean
   framework: string
   commits: string[]
+  /** An app from the catalog: runs this image, with storage and a library. */
+  image?: string
 }
+
+const LIBRARY_ID = uuid(9, 1)
+export const demoLibraries: LibraryView[] = [
+  {
+    id: LIBRARY_ID,
+    name: 'Movies',
+    path: '/srv/media/movies',
+    writable: false,
+    usedBy: ['jellyfin'],
+    createdAt: iso(now() - 12 * DAY),
+  },
+]
 
 const SEEDS: Seed[] = [
   {
@@ -94,6 +110,14 @@ const SEEDS: Seed[] = [
     ],
   },
   {
+    name: 'jellyfin',
+    repo: '',
+    hostnames: [],
+    framework: 'Image',
+    commits: ['jellyfin/jellyfin:12.4'],
+    image: 'jellyfin/jellyfin:12.4',
+  },
+  {
     name: 'discord-bot',
     repo: 'you/discord-bot',
     hostnames: [],
@@ -119,27 +143,28 @@ function buildProjects(): ProjectRecord[] {
     const id = uuid(3, index + 1)
     const createdAt = now() - (20 + index * 3) * DAY
     const deployments: DeploymentView[] = []
-    const count = seed.stopped ? 5 : 9 + index * 2
+    const count = seed.stopped ? 5 : seed.image ? 3 : 9 + index * 2
     let at = createdAt
     for (let n = 1; n <= count; n++) {
       at += ((now() - 2 * HOUR - at) / (count - n + 1)) * (0.6 + random() * 0.4)
       // recipes-api's newest build failed: the previous version keeps running, which is the point.
-      const failed = (seed.name === 'recipes-api' && n === count) || (n > 2 && random() < 0.12)
+      const failed =
+        (seed.name === 'recipes-api' && n === count) || (!seed.image && n > 2 && random() < 0.12)
       const seconds = 25 + Math.floor(random() * 70)
       deployments.push({
         id: uuid(4, ++deploymentSeq),
         projectId: id,
         number: n,
-        commitSha: sha(random),
+        commitSha: seed.image ? sha(random) + sha(random).slice(0, 24) : sha(random),
         commitMessage: seed.commits[(count - n) % seed.commits.length]!,
-        commitAuthor: 'you',
-        branch: 'main',
+        commitAuthor: seed.image ? null : 'you',
+        branch: seed.image ? '' : 'main',
         status: failed ? 'failed' : 'ready',
         failureCode: failed ? 'build_failed' : null,
         failureReason: failed ? 'The build command exited with code 1.' : null,
         trigger: n === 1 ? 'manual' : random() < 0.8 ? 'push' : 'manual',
         sourceDeploymentId: null,
-        port: seed.framework === 'Node.js' ? 8080 : 3000,
+        port: seed.image ? 8096 : seed.framework === 'Node.js' ? 8080 : 3000,
         isCurrent: false,
         createdAt: iso(at),
         startedAt: iso(at + 2000),
@@ -162,12 +187,26 @@ function buildProjects(): ProjectRecord[] {
       view: {
         id,
         name: seed.name,
-        repoUrl: `https://github.com/${seed.repo}`,
-        branch: 'main',
+        kind: seed.image ? 'image' : 'source',
+        image: seed.image ?? null,
+        catalogId: seed.image ? 'jellyfin' : null,
+        strategy: seed.image ? 'recreate' : 'rolling',
+        gpu: Boolean(seed.image),
+        volumes: seed.image
+          ? [
+              { name: 'config', mountPath: '/config' },
+              { name: 'cache', mountPath: '/cache' },
+            ]
+          : [],
+        libraries: seed.image
+          ? [{ libraryId: LIBRARY_ID, name: 'Movies', mountPath: '/media', readOnly: true }]
+          : [],
+        repoUrl: seed.repo ? `https://github.com/${seed.repo}` : '',
+        branch: seed.image ? '' : 'main',
         rootDir: '',
-        port: null,
-        memoryLimitMb: 512,
-        triggerMode: index === 1 ? 'webhook' : 'poll',
+        port: seed.image ? 8096 : null,
+        memoryLimitMb: seed.image ? 2048 : 512,
+        triggerMode: seed.image ? 'manual' : index === 1 ? 'webhook' : 'poll',
         desiredState: seed.stopped ? 'stopped' : 'running',
         url: `http://${seed.name}.${LAN_DOMAIN}`,
         hostnames: seed.hostnames,
@@ -242,6 +281,28 @@ export const demoSystemInfo: SystemInfo = {
   kernel: '6.8.0-48-generic',
   hostname: 'thinkpad',
   os: 'Ubuntu 24.04.1 LTS',
+  gpu: true,
+}
+
+/** Storage of the sample Jellyfin: its settings, and a cache of converted video. */
+export function demoStorage(projectId: string): StorageView {
+  const project = projects.find((p) => p.view.id === projectId)?.view
+  if (!project) return { volumes: [], libraries: [] }
+  const sizes: Record<string, number> = { config: 184 * 1024 ** 2, cache: 2.3 * 1024 ** 3 }
+  return {
+    volumes: project.volumes.map((v) => ({
+      ...v,
+      dockerName: `hangar-data-${project.name}-${v.name}`,
+      sizeBytes: sizes[v.name] ?? 12 * 1024 ** 2,
+    })),
+    libraries: project.libraries.map((l) => ({
+      libraryId: l.libraryId,
+      name: l.name,
+      path: demoLibraries.find((d) => d.id === l.libraryId)?.path ?? '',
+      mountPath: l.mountPath,
+      readOnly: l.readOnly,
+    })),
+  }
 }
 
 export const demoSettings: SettingsView = {

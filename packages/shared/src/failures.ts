@@ -1,5 +1,7 @@
 export const FAILURE_CODES = [
   'clone_failed',
+  'pull_failed',
+  'not_permitted',
   'build_failed',
   'build_timeout',
   'image_missing',

@@ -283,6 +283,68 @@ export const contract = {
     path: '/api/projects/:id',
     access: 'session',
     params: s.idParams,
+    query: s.projectDeleteQuery,
+    response: s.ok,
+  }),
+  projectStorage: endpoint({
+    method: 'GET',
+    path: '/api/projects/:id/storage',
+    access: 'session',
+    params: s.idParams,
+    response: s.storageView,
+  }),
+
+  // Apps from a published image (D42). Admins only for now: an image is any software at all.
+  createImageApp: endpoint({
+    method: 'POST',
+    path: '/api/apps',
+    access: 'admin',
+    body: s.imageAppInput,
+    response: s.projectView,
+  }),
+
+  // Libraries: folders on the computer that apps may use. Admins only.
+  listLibraries: endpoint({
+    method: 'GET',
+    path: '/api/libraries',
+    access: 'admin',
+    response: z.array(s.libraryView),
+  }),
+  createLibrary: endpoint({
+    method: 'POST',
+    path: '/api/libraries',
+    access: 'admin',
+    body: s.libraryInput,
+    response: s.libraryView,
+  }),
+  updateLibrary: endpoint({
+    method: 'PATCH',
+    path: '/api/libraries/:id',
+    access: 'admin',
+    params: s.idParams,
+    body: s.libraryPatch,
+    response: s.libraryView,
+  }),
+  deleteLibrary: endpoint({
+    method: 'DELETE',
+    path: '/api/libraries/:id',
+    access: 'admin',
+    params: s.idParams,
+    response: s.ok,
+  }),
+
+  /** Every volume Hangar keeps, including the kept data of deleted apps. */
+  listVolumes: endpoint({
+    method: 'GET',
+    path: '/api/storage',
+    access: 'admin',
+    response: s.volumeListView,
+  }),
+  deleteVolume: endpoint({
+    method: 'DELETE',
+    path: '/api/storage/:name',
+    access: 'admin',
+    params: s.volumeParams,
     response: s.ok,
   }),
   startProject: endpoint({

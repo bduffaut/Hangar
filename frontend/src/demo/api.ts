@@ -4,12 +4,14 @@ import {
   demoDeployment,
   demoDeployments,
   demoEnvKeys,
+  demoLibraries,
   demoProject,
   demoProjects,
   demoRepos,
   demoSession,
   demoSettings,
   demoStats,
+  demoStorage,
   demoUsers,
   demoSystemInfo,
   startSimulation,
@@ -77,6 +79,19 @@ export async function demoCall(
       return demoDeployments(id, Number(input.query?.limit ?? 20))
     case 'getDeployment':
       return demoDeployment(id) ?? Promise.reject(notFound())
+    case 'projectStorage':
+      return demoStorage(id)
+    case 'listLibraries':
+      return demoLibraries
+    case 'listVolumes':
+      return demoProjects().flatMap((p) =>
+        demoStorage(p.id).volumes.map((v) => ({
+          dockerName: v.dockerName,
+          app: p.name,
+          orphaned: false,
+          sizeBytes: v.sizeBytes,
+        })),
+      )
     case 'listEnv':
       return { keys: demoEnvKeys }
     case 'revealEnv': {

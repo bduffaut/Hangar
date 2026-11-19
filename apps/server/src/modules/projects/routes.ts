@@ -5,6 +5,7 @@ import { queueBranchHead, queueDeployment } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { refreshAddresses } from '../addresses/service.ts'
 import {
+  createImageApp,
   createProject,
   deleteProject,
   followRuntimeLogs,
@@ -31,6 +32,13 @@ export function projectRoutes(http: Http) {
     return projectView(ctx, await ownedProject(ctx, auth.user.id, project.id))
   })
 
+  route(http, contract.createImageApp, async ({ auth, body }) => {
+    const { deploy, ...input } = body
+    const project = await createImageApp(ctx, auth.user, input)
+    if (deploy !== false) await queueBranchHead(ctx, project, 'manual')
+    return projectView(ctx, await ownedProject(ctx, auth.user.id, project.id))
+  })
+
   route(http, contract.getProject, async ({ auth, params }) =>
     projectView(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
@@ -40,8 +48,8 @@ export function projectRoutes(http: Http) {
     return projectView(ctx, await updateProjectSettings(ctx, auth.user.role, project, body))
   })
 
-  route(http, contract.deleteProject, async ({ auth, params }) => {
-    await deleteProject(ctx, await ownedProject(ctx, auth.user.id, params.id))
+  route(http, contract.deleteProject, async ({ auth, params, query }) => {
+    await deleteProject(ctx, await ownedProject(ctx, auth.user.id, params.id), query.data)
     return OK
   })
 

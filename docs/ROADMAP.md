@@ -1,6 +1,6 @@
 # Roadmap: from deploy tool to home server dashboard
 
-Status: plan, 2026-11-18. Nothing here is built yet. Each phase ends with something you can use
+Status: 2026-11-18. **Phase 1 is built** (D42): apps from images, storage, libraries, the graphics chip, and the first catalog app (Jellyfin). The rest is planned. Each phase ends with something you can use
 on your own server, and each one becomes Decisions rows in [ARCHITECTURE.md](ARCHITECTURE.md)
 when it lands.
 
@@ -269,7 +269,9 @@ off-site.
 
 ## Catalog template format
 
-One file per app in `catalog/<id>.yaml`, released with Hangar. Example:
+Phase 1 keeps the catalog as typed code in `packages/shared/src/apps.ts` (`CATALOG`), checked by
+tests, which needs no parser and cannot drift from the API. Once stacks arrive (phase 2) it may
+move to one file per app in `catalog/<id>.yaml`, released with Hangar. Example of that shape:
 
 ```yaml
 id: jellyfin

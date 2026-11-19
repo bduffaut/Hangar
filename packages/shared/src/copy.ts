@@ -44,6 +44,15 @@ export const failureCopy: Record<FailureCode, FailureCopy> = {
     explanation: 'Hangar could not download this commit from the repository.',
     fix: 'Check that the repository still exists. If it is private, connect a GitHub token in Account.',
   },
+  pull_failed: {
+    explanation: 'Hangar could not download the image.',
+    fix: 'Check the image name and version on its registry page, and that this computer is online.',
+  },
+  not_permitted: {
+    explanation:
+      'This app uses something only an admin can grant (a library, the graphics chip, or a published image), and its owner is no longer an admin.',
+    fix: 'Ask an admin to update the app, or remove those settings.',
+  },
   build_failed: {
     explanation: 'The build stopped with an error.',
     fix: 'Read the last lines of the build log below; they usually name the problem.',
@@ -105,6 +114,7 @@ export const triggerModeCopy = {
 export const navCopy = {
   overview: 'Overview',
   publish: 'Publish',
+  apps: 'Apps',
   projects: 'Projects',
   projectCount: (n: number) => `${n} ${n === 1 ? 'app' : 'apps'} in the hangar`,
   settings: 'Settings',
@@ -769,6 +779,7 @@ export const settingsCopy = {
   sections: {
     network: { label: 'Network', description: 'How devices at home reach this server.' },
     public: { label: 'Public access', description: 'Your domains, through a Cloudflare Tunnel.' },
+    storage: { label: 'Storage', description: 'Folders apps may use, and the data they keep.' },
     system: { label: 'System', description: 'The machine and the Hangar running on it.' },
   },
 } as const

@@ -1035,6 +1035,221 @@ describe('accounts', () => {
     }
     await setSettings(ctx.db, { publicDomains: [] })
   })
+  describe('apps, storage, and libraries (D42)', () => {
+    // A folder on the Docker host, and a link to it, made by a throwaway container.
+    const root = `/srv/hangar-it-${Date.now().toString(36)}`
+    const image = execFileSync('docker', ['inspect', 'hangar-core', '--format', '{{.Image}}'])
+      .toString()
+      .trim()
+    const onHost = (script: string) =>
+      execFileSync('docker', [
+        'run',
+        '--rm',
+        '--entrypoint',
+        'sh',
+        '-v',
+        '/srv:/srv',
+        image,
+        '-c',
+        script,
+      ])
+    // Docker Desktop (macOS, Windows) does not let containers bind the computer's own folders,
+    // so library folders are checked only where Docker runs natively, as on a Hangar server.
+    const desktop = execFileSync('docker', ['info', '--format', '{{.OperatingSystem}}'])
+      .toString()
+      .includes('Docker Desktop')
+    beforeAll(() => {
+      if (!desktop) onHost(`mkdir -p ${root}/movies && ln -s ${root}/movies ${root}/link`)
+    })
+    afterAll(() => {
+      if (!desktop) onHost(`rm -rf ${root}`)
+    })
+
+    const admin = (method: Call['method'], url: string, body?: unknown) =>
+      call({ method, url, body, cookie, csrf })
+    // A member of its own: earlier tests sign the first one out.
+    let pupil = { cookie: '', csrf: '', id: '' }
+    beforeAll(async () => {
+      // From an address of its own: sign-up is rate limited per address.
+      const res = await call({
+        method: 'POST',
+        url: '/api/auth/link/redeem',
+        body: {
+          token: await invite(),
+          username: `pupil-${Date.now().toString(36)}`,
+          password: PASSWORD,
+        },
+        remoteAddress: '10.42.0.7',
+      })
+      pupil = { cookie: res.cookie ?? '', csrf: res.json().csrfToken, id: res.json().user.id }
+    })
+    const asMember = (method: Call['method'], url: string, body?: unknown) =>
+      call({ method, url, body, cookie: pupil.cookie, csrf: pupil.csrf })
+    let libraryId = ''
+
+    it('refuses system folders before looking at the computer', async () => {
+      const add = (path: string) => admin('POST', '/api/libraries', { name: 'Movies', path })
+      expect((await add('/etc')).json().error.message).toContain('system folder')
+      expect((await add('/home/someone')).json().error.message).toContain('too broad')
+      expect((await add('/srv/../etc')).status).toBe(400)
+      expect((await add('/srv/media$(id)')).status).toBe(400)
+    })
+
+    it('installs an app from an image, private by default, and refuses bad images', async () => {
+      const install = (body: object) =>
+        admin('POST', '/api/apps', {
+          name: 'kuma',
+          image: 'louislam/uptime-kuma:2',
+          deploy: false,
+          ...body,
+        })
+      expect((await install({ image: 'Not An Image' })).status).toBe(400)
+      expect((await install({ image: 'nginx; rm -rf /' })).status).toBe(400)
+      expect((await install({ volumes: [{ name: 'proc', mountPath: '/proc' }] })).status).toBe(400)
+      const kuma = await install({ volumes: [{ name: 'data', mountPath: '/app/data' }] })
+      expect(kuma.status).toBe(200)
+      expect(kuma.json()).toMatchObject({
+        kind: 'image',
+        strategy: 'recreate',
+        triggerMode: 'manual',
+        hostnames: [],
+        repoUrl: '',
+      })
+      expect(
+        (await admin('PATCH', `/api/projects/${kuma.json().id}`, { image: 'BAD' })).status,
+      ).toBe(400)
+      expect((await admin('DELETE', `/api/projects/${kuma.json().id}`)).status).toBe(200)
+    })
+
+    it('keeps libraries and published images to admins', async () => {
+      expect((await asMember('GET', '/api/libraries')).status).toBe(403)
+      expect(
+        (await asMember('POST', '/api/libraries', { name: 'x', path: `${root}/movies` })).status,
+      ).toBe(403)
+      const app = await asMember('POST', '/api/apps', {
+        name: 'sneaky',
+        image: 'nginx:1.29',
+        deploy: false,
+      })
+      expect(app.status).toBe(403)
+      expect((await asMember('GET', '/api/storage')).status).toBe(403)
+    })
+
+    it.skipIf(desktop)('checks a library folder on paper and on the computer', async () => {
+      const add = (path: string, name = 'Movies') => admin('POST', '/api/libraries', { name, path })
+      const system = await add('/etc')
+      expect(system.status).toBe(400)
+      expect(system.json().error.message).toContain('system folder')
+      expect((await add('/home/someone')).json().error.message).toContain('too broad')
+      const missing = await add(`${root}/nope`)
+      expect(missing.status).toBe(400)
+      expect(missing.json().error.message).toContain('There is no folder')
+      // A link could later point the library anywhere, /etc included.
+      const link = await add(`${root}/link`)
+      expect(link.status).toBe(400)
+      expect(link.json().error.message).toContain('is a link')
+
+      const created = await add(`${root}/movies`)
+      expect(created.status).toBe(200)
+      expect(created.json()).toMatchObject({ name: 'Movies', writable: false, usedBy: [] })
+      libraryId = created.json().id
+      expect((await add(`${root}/movies`, 'Films')).status).toBe(409)
+    })
+
+    it.skipIf(desktop)(
+      'installs an app from an image, private, with storage and a read-only library',
+      async () => {
+        const install = (body: object) =>
+          admin('POST', '/api/apps', {
+            name: 'films',
+            image: 'jellyfin/jellyfin:12.4',
+            port: 8096,
+            volumes: [{ name: 'config', mountPath: '/config' }],
+            libraries: [{ libraryId, mountPath: '/media' }],
+            catalogId: 'jellyfin',
+            deploy: false,
+            ...body,
+          })
+        expect((await install({ image: 'Not An Image' })).status).toBe(400)
+        expect((await install({ image: 'nginx; rm -rf /' })).status).toBe(400)
+        const overlap = await install({ volumes: [{ name: 'media', mountPath: '/media/cache' }] })
+        expect(overlap.json().error.message).toContain('overlaps')
+        const writable = await install({
+          libraries: [{ libraryId, mountPath: '/media', writable: true }],
+        })
+        expect(writable.json().error.message).toContain('read-only for apps')
+        expect((await install({ volumes: [{ name: 'proc', mountPath: '/proc' }] })).status).toBe(
+          400,
+        )
+
+        const films = await install({})
+        expect(films.status).toBe(200)
+        expect(films.json()).toMatchObject({
+          kind: 'image',
+          image: 'jellyfin/jellyfin:12.4',
+          strategy: 'recreate',
+          triggerMode: 'manual',
+          hostnames: [],
+          volumes: [{ name: 'config', mountPath: '/config' }],
+          libraries: [{ libraryId, name: 'Movies', mountPath: '/media', readOnly: true }],
+        })
+        const storage = (await admin('GET', `/api/projects/${films.json().id}/storage`)).json()
+        expect(storage.volumes[0].dockerName).toBe('hangar-data-films-config')
+        expect(storage.libraries[0]).toMatchObject({ path: `${root}/movies`, readOnly: true })
+
+        // An image app follows no branch, and a library in use stays.
+        const branch = await admin('PATCH', `/api/projects/${films.json().id}`, {
+          triggerMode: 'poll',
+        })
+        expect(branch.status).toBe(400)
+        const inUse = await admin('DELETE', `/api/libraries/${libraryId}`)
+        expect(inUse.status).toBe(409)
+        expect(inUse.json().error.message).toContain('films')
+        expect((await admin('DELETE', `/api/projects/${films.json().id}?data=delete`)).status).toBe(
+          200,
+        )
+        expect((await admin('DELETE', `/api/libraries/${libraryId}`)).status).toBe(200)
+      },
+    )
+
+    it('lets members give their own apps storage, but not libraries or the graphics chip', async () => {
+      const mine = (
+        await asMember('POST', '/api/projects', {
+          name: `pupil-app`,
+          repoUrl,
+          deploy: false,
+          hostnames: [],
+        })
+      ).json()
+      const gpu = await asMember('PATCH', `/api/projects/${mine.id}`, { gpu: true })
+      expect(gpu.status).toBe(403)
+      const kept = await asMember('PATCH', `/api/projects/${mine.id}`, {
+        volumes: [{ name: 'data', mountPath: '/data' }],
+      })
+      expect(kept.status).toBe(200)
+      // Two copies of an app must never write to the same storage: it now stops the old one first.
+      expect(kept.json()).toMatchObject({
+        strategy: 'recreate',
+        volumes: [{ name: 'data', mountPath: '/data' }],
+      })
+      expect(
+        (await asMember('PATCH', `/api/projects/${mine.id}`, { image: 'nginx:1' })).status,
+      ).toBe(400)
+    })
+
+    it("never hands one account's kept data to another", async () => {
+      const name = `hangar-data-it-${Date.now().toString(36)}-data`
+      expect(await ctx.docker.ensureDataVolume(name, 'it', pupil.id)).toBe(true)
+      expect(await ctx.docker.ensureDataVolume(name, 'it', pupil.id)).toBe(true)
+      expect(await ctx.docker.ensureDataVolume(name, 'it', 'someone-else')).toBe(false)
+      const listed = (await admin('GET', '/api/storage')).json()
+      expect(listed.find((v: { dockerName: string }) => v.dockerName === name)).toMatchObject({
+        orphaned: true,
+      })
+      expect((await admin('DELETE', `/api/storage/${name}`)).status).toBe(200)
+      expect((await ctx.docker.listDataVolumes()).some((v) => v.name === name)).toBe(false)
+    })
+  })
 })
 
 describe('sign in with GitHub', () => {

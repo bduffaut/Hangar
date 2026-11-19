@@ -67,6 +67,19 @@ const dashboard: RouteRecordRaw[] = [
     meta: { shell: true, admin: true },
   },
   {
+    // Ready-made apps, and any published image (D42). Admins only, as the server enforces.
+    path: '/apps',
+    name: 'apps',
+    component: () => import('./views/AppsView.vue'),
+    meta: { shell: true, admin: true },
+  },
+  {
+    path: '/apps/:id',
+    name: 'app-install',
+    component: () => import('./views/AppInstallView.vue'),
+    meta: { shell: true, admin: true },
+  },
+  {
     path: '/account',
     name: 'account',
     component: () => import('./views/AccountView.vue'),

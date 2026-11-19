@@ -1,5 +1,7 @@
 import {
   ADDRESS_STATUSES,
+  APP_KINDS,
+  DEPLOY_STRATEGIES,
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
   DESIRED_STATES,
@@ -14,6 +16,7 @@ import { sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -48,6 +51,8 @@ export const logStream = pgEnum('log_stream', LOG_STREAMS)
 export const userRole = pgEnum('user_role', USER_ROLES)
 export const linkKind = pgEnum('link_kind', LINK_KINDS)
 export const addressStatus = pgEnum('address_status', ADDRESS_STATUSES)
+export const appKind = pgEnum('app_kind', APP_KINDS)
+export const deployStrategy = pgEnum('deploy_strategy', DEPLOY_STRATEGIES)
 
 export const users = pgTable('users', {
   id: id(),
@@ -120,6 +125,13 @@ export const projects = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
     name: text().notNull().unique(),
+    /** source: built from `repoUrl`. image: pulls `image` (D42); repo fields are then empty. */
+    kind: appKind().notNull().default('source'),
+    image: text(),
+    catalogId: text(),
+    strategy: deployStrategy().notNull().default('rolling'),
+    /** Pass the computer's graphics chip (/dev/dri) to the container. Granted by an admin. */
+    gpu: boolean().notNull().default(false),
     repoUrl: text().notNull(),
     branch: text().notNull(),
     rootDir: text().notNull().default(''),
@@ -142,6 +154,47 @@ export const projects = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [index().on(t.ownerId)],
+)
+
+/**
+ * Folders on the computer that apps may use (D42), registered by an admin. `path` was checked
+ * when added (and is checked again at each deploy): a plain folder, no links, no system folders.
+ */
+export const libraries = pgTable('libraries', {
+  id: id(),
+  name: text().notNull().unique(),
+  path: text().notNull().unique(),
+  writable: boolean().notNull().default(false),
+  createdAt: createdAt(),
+})
+
+/** Storage an app keeps across deploys: Docker volume `hangar-data-<app>-<name>`. */
+export const appVolumes = pgTable(
+  'app_volumes',
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    mountPath: text().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.name] }), unique().on(t.projectId, t.mountPath)],
+)
+
+/** Libraries mounted into an app. A library in use cannot be removed. */
+export const appLibraries = pgTable(
+  'app_libraries',
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    libraryId: uuid()
+      .notNull()
+      .references(() => libraries.id, { onDelete: 'restrict' }),
+    mountPath: text().notNull(),
+    writable: boolean().notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.mountPath] })],
 )
 
 /** The newest real result for each public address, written by modules/addresses. */

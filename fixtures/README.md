@@ -6,6 +6,7 @@ its name, so tests can tell which version is serving.
 | Fixture              | Built by   | Checks                                                          |
 | -------------------- | ---------- | --------------------------------------------------------------- |
 | `static-site`        | Railpack   | Static detection (`index.html`), served by Caddy                |
+| `stateful-app`       | Dockerfile | Counts its starts in `/data`: proves storage survives deploys   |
 | `node-express`       | Railpack   | Node detection, `npm start`, listens on `PORT`                  |
 | `vite-app`           | Railpack   | Vite build, served as a static SPA                              |
 | `dockerfile-app`     | Dockerfile | Port from `EXPOSE`, build secrets, runtime env vars             |

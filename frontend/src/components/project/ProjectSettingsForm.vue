@@ -2,6 +2,8 @@
 import {
   confirmCopy,
   errorCopy,
+  isPinnedImage,
+  isValidImageRef,
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   parseWholeNumber,
@@ -16,6 +18,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, messageOf } from '../../api/client.ts'
 import { useProjectsStore } from '../../stores/projects.ts'
+import { useSessionStore } from '../../stores/session.ts'
 import {
   BaseButton,
   BaseDialog,
@@ -30,8 +33,22 @@ import CopyField from '../CopyField.vue'
 import AddressEditor from './AddressEditor.vue'
 import AddressStatus from './AddressStatus.vue'
 import HgPanel from '../HgPanel.vue'
+import StorageEditor from './StorageEditor.vue'
 
 const props = defineProps<{ project: ProjectView }>()
+const session = useSessionStore()
+const isImage = computed(() => props.project.kind === 'image')
+const image = ref(props.project.image ?? '')
+const imageError = computed(() =>
+  isImage.value && !isValidImageRef(image.value.trim())
+    ? 'Enter an image like jellyfin/jellyfin:12.4, lowercase.'
+    : null,
+)
+const imageHint = computed(() =>
+  isValidImageRef(image.value.trim()) && !isPinnedImage(image.value.trim())
+    ? 'No version given, so each update takes whatever is newest. Pin one, like :12.4, to choose when to upgrade.'
+    : 'Update pulls this image. Change the version here, then press Update.',
+)
 const projects = useProjectsStore()
 const router = useRouter()
 const notify = useNotify()
@@ -63,19 +80,25 @@ const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
 )
 
 async function save() {
-  if (portError.value || memoryError.value) return
+  if (portError.value || memoryError.value || imageError.value) return
   busy.value = true
   error.value = null
   try {
     const updated = await api('updateProject', {
       params: { id: props.project.id },
-      body: {
-        branch: branch.value.trim(),
-        rootDir: rootDir.value.trim(),
-        port: portValue.value,
-        memoryLimitMb: memoryValue.value!,
-        triggerMode: triggerMode.value,
-      },
+      body: isImage.value
+        ? {
+            port: portValue.value,
+            memoryLimitMb: memoryValue.value!,
+            ...(session.isAdmin ? { image: image.value.trim() } : {}),
+          }
+        : {
+            branch: branch.value.trim(),
+            rootDir: rootDir.value.trim(),
+            port: portValue.value,
+            memoryLimitMb: memoryValue.value!,
+            triggerMode: triggerMode.value,
+          },
     })
     projects.upsert(updated)
     notify.success(toastCopy.saved, 'Changes apply on the next deploy.')
@@ -117,6 +140,7 @@ async function saveAddresses() {
 // GitHub webhook details, for projects that deploy on push.
 const webhook = ref<{ url: string | null; secret: string } | null>(null)
 onMounted(async () => {
+  if (isImage.value) return
   webhook.value = await api('projectWebhook', { params: { id: props.project.id } }).catch(
     () => null,
   )
@@ -126,10 +150,15 @@ onMounted(async () => {
 const deleting = ref(false)
 const confirmName = ref('')
 const deleteBusy = ref(false)
+/** Kept by default: reinstalling an app of the same name picks its data up again. */
+const deleteData = ref(false)
 async function remove() {
   deleteBusy.value = true
   try {
-    await api('deleteProject', { params: { id: props.project.id } })
+    await api('deleteProject', {
+      params: { id: props.project.id },
+      query: { data: deleteData.value ? 'delete' : 'keep' },
+    })
     projects.remove(props.project.id)
     notify.success(toastCopy.projectDeleted)
     await router.push({ name: 'home' })
@@ -143,14 +172,34 @@ async function remove() {
 
 <template>
   <div class="hg-settings">
-    <HgPanel title="Build and run" description="Changes apply on the next deploy.">
+    <HgPanel
+      :title="isImage ? 'Image and resources' : 'Build and run'"
+      description="Changes apply on the next deploy."
+    >
       <form class="hg-settings-form" @submit.prevent="save">
-        <BaseField label="Branch" for="ps-branch">
-          <BaseInput id="ps-branch" v-model="branch" mono />
-        </BaseField>
-        <BaseField label="Root directory" for="ps-root" help="Leave empty for the repository root.">
-          <BaseInput id="ps-root" v-model="rootDir" mono placeholder="(repository root)" />
-        </BaseField>
+        <div v-if="isImage" class="hg-settings-wide">
+          <BaseField label="Image" for="ps-image" :error="imageError" :help="imageHint">
+            <BaseInput
+              id="ps-image"
+              v-model="image"
+              mono
+              :invalid="!!imageError"
+              :disabled="!session.isAdmin"
+            />
+          </BaseField>
+        </div>
+        <template v-else>
+          <BaseField label="Branch" for="ps-branch">
+            <BaseInput id="ps-branch" v-model="branch" mono />
+          </BaseField>
+          <BaseField
+            label="Root directory"
+            for="ps-root"
+            help="Leave empty for the repository root."
+          >
+            <BaseInput id="ps-root" v-model="rootDir" mono placeholder="(repository root)" />
+          </BaseField>
+        </template>
         <BaseField
           label="Port"
           for="ps-port"
@@ -175,7 +224,7 @@ async function remove() {
             inputmode="numeric"
           />
         </BaseField>
-        <div class="hg-settings-wide">
+        <div v-if="!isImage" class="hg-settings-wide">
           <BaseField
             label="New commits"
             for="ps-trigger"
@@ -193,11 +242,13 @@ async function remove() {
             variant="primary"
             label="Save changes"
             :loading="busy"
-            :disabled="!!portError || !!memoryError"
+            :disabled="!!portError || !!memoryError || !!imageError"
           />
         </div>
       </form>
     </HgPanel>
+
+    <StorageEditor :project="project" />
 
     <HgPanel
       id="addresses"
@@ -292,6 +343,16 @@ async function remove() {
     <BaseDialog v-model:visible="deleting" :title="confirmCopy.deleteProject.title">
       <form class="hg-delete" @submit.prevent="remove">
         <p>{{ confirmCopy.deleteProject.body }}</p>
+        <label v-if="project.volumes.length" class="hg-delete-data">
+          <input v-model="deleteData" type="checkbox" />
+          <span>
+            Also delete its kept folders ({{ project.volumes.map((v) => v.name).join(', ') }})
+            <span class="hg-muted"
+              >Left unticked, they stay on this computer: an app installed again with the same name
+              picks them up.</span
+            >
+          </span>
+        </label>
         <BaseField
           :label="confirmCopy.deleteProject.typeToConfirm(project.name)"
           for="ps-delete-name"
@@ -371,6 +432,15 @@ async function remove() {
 .hg-delete {
   display: grid;
   gap: var(--hg-space-4);
+}
+.hg-delete-data {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hg-space-2);
+  font-size: var(--hg-size-sm);
+}
+.hg-delete-data .hg-muted {
+  display: block;
 }
 .hg-delete-actions {
   display: flex;

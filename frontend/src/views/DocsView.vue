@@ -22,6 +22,7 @@ const ORDER = [
   'how-it-works',
   'tailscale',
   'go-public',
+  'apps',
   'github',
   'sharing',
   'updating',

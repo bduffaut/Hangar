@@ -16,6 +16,10 @@ const paths = {
   play: 'm7 4 13 8-13 8V4Z',
   restart: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  folder: 'M3 6h6l2 2h10v11H3z',
+  database:
+    'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3zM4 6c0 1.7 3.6 3 8 3s8-1.3 8-3M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   download: 'M12 3v12m0 0-4-4m4 4 4-4M4 17v3h16v-3',
   external: 'M14 4h6v6M20 4l-9 9M18 14v6H4V6h6',
   sun: 'M12 4V2M12 22v-2M4.9 4.9 3.5 3.5M20.5 20.5l-1.4-1.4M4 12H2M22 12h-2M4.9 19.1l-1.4 1.4M20.5 3.5l-1.4 1.4M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z',

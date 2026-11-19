@@ -13,6 +13,9 @@ import { deleteExpiredLinks } from '../modules/users/repo.ts'
 import { listProjects } from '../modules/projects/repo.ts'
 import { appImageRepository, ownerBuilderName } from '../platform/names.ts'
 
+/** Versions kept for rolling back an app that runs a published image. */
+const IMAGE_APP_IMAGES_KEPT = 2
+
 /** BuildKit cache unused for a week goes; the rest is capped at 10 GiB. */
 const BUILD_CACHE_UNUSED_HOURS = 24 * 7
 const BUILD_CACHE_MAX_BYTES = 10 * 1024 ** 3
@@ -25,6 +28,8 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
   let removedImages = 0
   for (const project of await listProjects(ctx.db)) {
     const images = await listImages(ctx.db, project.id)
+    // Published images are often large (Jellyfin is over a gigabyte): keep fewer of them.
+    const kept = project.kind === 'image' ? IMAGE_APP_IMAGES_KEPT : IMAGES_KEPT_PER_PROJECT
     // Keep the newest images a rollback could use (ready deployments), the live one, and any an
     // in-flight deployment is building or about to run. Failed builds do not take a slot.
     // A rollback reuses its source's image, so slots count distinct images, not deployments.
@@ -32,9 +37,7 @@ export async function collectGarbage(ctx: Ctx): Promise<void> {
     const rollbackable = new Set<string>()
     for (const image of images) {
       const tag = image.imageTag!
-      const recent =
-        image.status === 'ready' &&
-        (rollbackable.has(tag) || rollbackable.size < IMAGES_KEPT_PER_PROJECT)
+      const recent = image.status === 'ready' && (rollbackable.has(tag) || rollbackable.size < kept)
       if (recent) rollbackable.add(tag)
       if (recent || image.id === project.currentDeploymentId || !isTerminal(image.status)) {
         keep.add(tag)

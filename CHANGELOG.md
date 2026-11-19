@@ -4,6 +4,23 @@ All notable changes to Hangar. The format follows [Keep a Changelog](https://kee
 and versions follow [Semantic Versioning](https://semver.org). Each version is a git tag (`vX.Y.Z`)
 with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 
+## [Unreleased]
+
+### Added
+
+- **Apps from images (D42).** Install ready-made software in one click from **Apps**, starting
+  with **Jellyfin**, or run any published image by name. Apps are private to your Tailscale
+  devices by default and update when you press **Update**.
+- **Storage that survives.** Any app or project can have kept folders: Docker volumes that last
+  across deploys, updates, and restarts, with their size shown. Deleting an app keeps its data
+  unless you choose otherwise; **Settings → Storage** lists and removes what deleted apps left.
+- **Libraries.** Admins share folders from the computer (movies, photos) with apps, read-only by
+  default. Hangar refuses system folders and links, and checks the folder on every deploy.
+- **Graphics chip.** Apps like Jellyfin can use `/dev/dri` for faster video conversion.
+- Apps with storage stop the old version before starting the new one, and start it again if the
+  new one fails.
+- A guide: [Install apps like Jellyfin](docs/guides/apps.md).
+
 ## [0.3.1] - 2026-11-18
 
 ### Changed

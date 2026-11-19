@@ -24,6 +24,8 @@ import { getEnv } from '../modules/env-vars/service.ts'
 import { getProject, listCurrentDeployments, type Project } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/secrets.ts'
+import { needsAdmin } from '../modules/storage/service.ts'
+import { getUser } from '../modules/users/repo.ts'
 import { secretsHash } from '../platform/builder.ts'
 import { appImageRef, ownerBuilderName } from '../platform/names.ts'
 import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
@@ -78,8 +80,19 @@ async function resolveContextDir(sourceDir: string, rootDir: string): Promise<st
 async function resolvePort(ctx: Ctx, project: Project, image: string): Promise<number> {
   if (project.port) return project.port
   const exposed = await ctx.docker.exposedPorts(image)
-  return exposed.length === 1 ? exposed[0]! : DEFAULT_APP_PORT
+  if (exposed.length === 1) return exposed[0]!
+  // A published image that names several ports: guessing would health-check the wrong one.
+  if (project.kind === 'image' && exposed.length > 1) {
+    throw new PipelineError(
+      'container_start_failed',
+      `This image listens on several ports (${exposed.join(', ')}). Set the app's web port in Settings.`,
+    )
+  }
+  return DEFAULT_APP_PORT
 }
+
+/** Published apps can take a while on their first start (setting up their database). */
+const IMAGE_HEALTH_CHECK_TIMEOUT_MS = 3 * 60_000
 
 /**
  * Clone → build → run → health check → switch. Builds have `deployment.trigger !== 'rollback'`;
@@ -113,14 +126,30 @@ export async function runDeployment(
     // Leave `queued` before anything that can fail, so a failure is always recorded on the row.
     if (deployment.trigger === 'rollback') {
       await advance('deploying', { startedAt: new Date() })
-      log.system(`Rolling back to the image of commit ${deployment.commitSha.slice(0, 7)}`)
+      log.system(`Rolling back to the image of ${deployment.commitSha.slice(0, 7)}`)
+    } else if (project.kind === 'image') {
+      await advance('building', { startedAt: new Date() })
     } else {
       // The tag is recorded before building so cleanup never removes the image mid-deploy.
       const imageTag = appImageRef(project.name, deployment.number, deployment.commitSha)
       await advance('building', { startedAt: new Date(), imageTag })
     }
+    // Libraries, the graphics chip, and published images are granted by admins, and checked
+    // again on every deploy: an app keeps none of them once its owner is no longer an admin.
+    if (await needsAdmin(ctx, project)) {
+      const owner = await getUser(ctx.db, project.ownerId)
+      if (owner?.role !== 'admin') {
+        throw new PipelineError(
+          'not_permitted',
+          'This app uses a library, the graphics chip, or a published image, which only an admin can grant',
+        )
+      }
+    }
     const env = await getEnv(ctx, project.id)
-    if (deployment.status === 'building') {
+    if (deployment.status === 'building' && project.kind === 'image') {
+      deployment = { ...deployment, ...(await pull(ctx, project, deployment, buildSignal, log)) }
+      await advance('deploying')
+    } else if (deployment.status === 'building') {
       await build(ctx, project, deployment, env, workDir, buildSignal, log)
       await advance('deploying')
     }
@@ -142,15 +171,38 @@ export async function runDeployment(
       }
       const port = await resolvePort(ctx, project, image)
 
-      log.system(`Starting the app (port ${port}, memory limit ${project.memoryLimitMb} MB)`)
-      const container = await step('container_start_failed', control, () =>
-        startAppContainer(ctx, project, deployment, image, port, env),
-      )
-      containerName = container.name
-      await updateDeployment(ctx.db, deployment.id, { containerId: container.id, port })
+      // Recreate: stop the running version first, so it and the new one never share storage.
+      // It is only stopped, so it can be started again if the new version does not come up.
+      const paused: string[] = []
+      if (project.strategy === 'recreate') {
+        for (const old of await ctx.docker.listManagedApps(project.id)) {
+          if (!old.running) continue
+          log.system('Stopping the running version first, so the two never share storage')
+          await ctx.docker.stopContainer(old.id, CONTAINER_STOP_GRACE_SECONDS)
+          paused.push(old.id)
+        }
+      }
+      try {
+        log.system(`Starting the app (port ${port}, memory limit ${project.memoryLimitMb} MB)`)
+        const container = await step('container_start_failed', control, () =>
+          startAppContainer(ctx, project, deployment, image, port, env),
+        )
+        containerName = container.name
+        await updateDeployment(ctx.db, deployment.id, { containerId: container.id, port })
 
-      await waitUntilHealthy(ctx, log, container.name, port)
-      live = await switchTraffic(ctx, project, deployment, container, port, log)
+        const timeout =
+          project.kind === 'image' ? IMAGE_HEALTH_CHECK_TIMEOUT_MS : HEALTH_CHECK_TIMEOUT_MS
+        await waitUntilHealthy(ctx, log, container.name, port, timeout)
+        live = await switchTraffic(ctx, project, deployment, container, port, log)
+      } finally {
+        if (!live && paused.length) {
+          // The new version must be gone before the old one writes to the storage again.
+          if (containerName) await ctx.docker.removeContainer(containerName).catch(() => {})
+          containerName = null
+          for (const id of paused) await ctx.docker.startContainer(id).catch(() => {})
+          log.system('Started the previous version again')
+        }
+      }
     })
     if (!live) throw new Preempted()
     await ctx.queue.send('gc', {})
@@ -166,6 +218,35 @@ export async function runDeployment(
     }
     await rm(workDir, { recursive: true, force: true })
   }
+}
+
+/**
+ * Pulls an image app's image and names it after the deployment (`hangar/<app>:<n>-<digest>`), so
+ * rollbacks and cleanup treat it like any build. The digest stands in for a commit.
+ */
+async function pull(
+  ctx: Ctx,
+  project: Project,
+  deployment: Deployment,
+  signal: AbortSignal,
+  log: DeploymentLog,
+): Promise<Pick<Deployment, 'imageTag' | 'commitSha' | 'commitMessage'>> {
+  const ref = project.image!
+  log.system(`Pulling ${ref}`)
+  const id = await step('pull_failed', signal, () =>
+    ctx.docker.pullImage(ref, (line) => log.write('stdout', line), signal),
+  )
+  const digest = id.replace(/^sha256:/, '')
+  const patch = {
+    imageTag: appImageRef(project.name, deployment.number, digest),
+    commitSha: digest,
+    commitMessage: ref,
+  }
+  // Recorded before the name is added, so cleanup never removes it mid-deploy.
+  await updateDeployment(ctx.db, deployment.id, patch)
+  await step('pull_failed', signal, () => ctx.docker.tagImage(id, patch.imageTag))
+  log.system(`Pulled ${ref} (${digest.slice(0, 12)})`)
+  return patch
 }
 
 /** Clones the deployment's commit and builds it into `deployment.imageTag`. */
@@ -242,14 +323,13 @@ async function waitUntilHealthy(
   log: DeploymentLog,
   containerName: string,
   port: number,
+  timeoutMs: number,
 ): Promise<void> {
   const url = `http://${containerName}:${port}/`
   const started = Date.now()
-  log.system(
-    `Waiting for the app to answer on port ${port} (up to ${HEALTH_CHECK_TIMEOUT_MS / 1000} s)`,
-  )
+  log.system(`Waiting for the app to answer on port ${port} (up to ${timeoutMs / 1000} s)`)
 
-  while (Date.now() - started < HEALTH_CHECK_TIMEOUT_MS) {
+  while (Date.now() - started < timeoutMs) {
     const state = await ctx.docker.containerState(containerName)
     if (!state || !state.running || state.restarting || state.restartCount > 0) {
       log.system('The app stopped while starting. Its last output:')
@@ -276,7 +356,7 @@ async function waitUntilHealthy(
   }
   throw new PipelineError(
     'health_check_failed',
-    `The app did not answer on port ${port} within ${HEALTH_CHECK_TIMEOUT_MS / 1000} seconds. ` +
+    `The app did not answer on port ${port} within ${timeoutMs / 1000} seconds. ` +
       `Make sure it listens on 0.0.0.0 and on the port in the PORT variable.`,
   )
 }

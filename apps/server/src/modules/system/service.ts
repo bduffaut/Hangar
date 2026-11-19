@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import type { Ctx } from '../../context.ts'
+import { hasGpu } from '../../platform/host.ts'
 
 /** Answers only when the database does, so Docker's health check notices a lost connection. */
 export async function health(ctx: Ctx) {
@@ -8,10 +9,11 @@ export async function health(ctx: Ctx) {
 }
 
 export async function systemInfo(ctx: Ctx) {
-  const [imageDiskBytes, host, machine] = await Promise.all([
+  const [imageDiskBytes, host, machine, gpu] = await Promise.all([
     ctx.docker.imageDiskUsage(),
     ctx.hostMetrics.info(),
     ctx.docker.hostInfo().catch(() => null),
+    hasGpu(ctx),
   ])
   return {
     version: ctx.config.version,
@@ -19,6 +21,7 @@ export async function systemInfo(ctx: Ctx) {
     ...host,
     hostname: machine?.hostname ?? null,
     os: machine?.os ?? null,
+    gpu,
   }
 }
 

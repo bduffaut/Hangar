@@ -99,12 +99,24 @@ export async function queueDeployment(
   })
 }
 
-/** Queues a build of the tip of the project's branch. */
+/**
+ * Queues a deploy of what the project follows: the tip of its branch, or for an image app the
+ * image as it is now (pulled when the deployment runs, so its digest is recorded then).
+ */
 export async function queueBranchHead(
   ctx: Ctx,
   project: Project,
   trigger: Exclude<DeploymentTrigger, 'rollback'>,
 ): Promise<Deployment> {
+  if (project.kind === 'image') {
+    return enqueue(ctx, {
+      projectId: project.id,
+      commitSha: '',
+      commitMessage: project.image,
+      branch: '',
+      trigger,
+    })
+  }
   const token = await getGithubToken(ctx, project.ownerId)
   const sha = await ctx.git.headOf(project.repoUrl, project.branch, token)
   if (!sha)

@@ -10,6 +10,8 @@ import {
 } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getTunnelToken } from '../modules/settings/secrets.ts'
+import { needsAdmin } from '../modules/storage/service.ts'
+import { getUser } from '../modules/users/repo.ts'
 import { LABELS } from '../platform/docker.ts'
 import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
@@ -170,6 +172,16 @@ async function reconcileProject(ctx: Ctx, projectId: string): Promise<void> {
     await ctx.docker.startContainer(name)
     ctx.log.info({ container: name }, 'Started stopped app container')
   } else if (!state) {
+    if (
+      (await needsAdmin(ctx, project)) &&
+      (await getUser(ctx.db, project.ownerId))?.role !== 'admin'
+    ) {
+      ctx.log.warn(
+        { project: project.name },
+        'Not recreating an app whose owner is no longer an admin',
+      )
+      return
+    }
     if (!deployment.imageTag || !(await ctx.docker.imageExists(deployment.imageTag))) {
       ctx.log.error({ project: project.name }, 'Current deployment image is missing')
       return

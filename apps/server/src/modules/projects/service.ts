@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import {
   appHostname,
+  catalogApp,
   checkMemberHostname,
   checkProjectName,
   checkPublicHostname,
@@ -9,12 +10,14 @@ import {
   githubRepoSlug,
   hooksHostname,
   isValidBranchName,
+  isValidImageRef,
   isPublicRepoHost,
   isValidRepoUrl,
   MAX_PROJECTS_PER_MEMBER,
   normalizeRootDir,
   type PublicHostnameProblem,
   type ProjectView,
+  type DeployStrategy,
   type TriggerMode,
   type UserRole,
 } from '@hangar/shared'
@@ -33,6 +36,9 @@ import { cancelAllActive } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { getSettings } from '../settings/repo.ts'
 import { getGithubToken } from '../settings/secrets.ts'
+import { setEnv } from '../env-vars/service.ts'
+import { listAppLibraries, listAppVolumes, replaceAppStorage } from '../storage/repo.ts'
+import { cleanStorage, deleteAppVolumes, type StorageInput } from '../storage/service.ts'
 import {
   deleteProject as deleteProjectRow,
   getProject,
@@ -65,7 +71,14 @@ export interface ProjectSettings {
   memoryLimitMb?: number
   triggerMode?: TriggerMode
   hostnames?: string[]
+  strategy?: DeployStrategy
 }
+
+/** The settings an update may also change: storage, hardware, and an image app's image. */
+export type ProjectPatch = ProjectSettings & StorageInput & { image?: string }
+
+const IMAGE_PROBLEM =
+  'Enter an image like jellyfin/jellyfin:12.4 or ghcr.io/owner/app:1.2 (lowercase, with a version tag).'
 
 /** Validates and normalizes settings shared by create and update. */
 function cleanSettings(settings: ProjectSettings): ProjectSettings {
@@ -236,16 +249,107 @@ export async function createProject(
   return { project: (await getProject(ctx.db, project.id))!, headSha }
 }
 
+/**
+ * Installs an app that runs a published image (D42): admins only, since an image can be any
+ * software at all. It is private (on the Tailscale network) unless given public addresses, and
+ * deploys by hand: "Update" pulls the image again.
+ */
+export async function createImageApp(
+  ctx: Ctx,
+  owner: ProjectOwner,
+  input: ProjectSettings &
+    StorageInput & {
+      name: string
+      image: string
+      env?: Record<string, string>
+      catalogId?: string
+    },
+): Promise<Project> {
+  if (owner.role !== 'admin') {
+    throw new UserError(403, 'admin_only', 'Only an admin can install apps from an image.')
+  }
+  const problem = checkProjectName(input.name)
+  if (problem) throw new ProjectError(NAME_PROBLEMS[problem])
+  if (!isValidImageRef(input.image)) throw new ProjectError(IMAGE_PROBLEM)
+  if (input.catalogId && !catalogApp(input.catalogId)) {
+    throw new ProjectError('That app is not in the catalog.')
+  }
+  const settings = cleanSettings({ port: input.port, memoryLimitMb: input.memoryLimitMb })
+  const hostnames = cleanSettings({ hostnames: input.hostnames ?? [] }).hostnames!
+  await checkHostnames(ctx, owner.role, null, hostnames)
+  const storage = await cleanStorage(ctx, owner.role, input)
+  const hasStorage = Boolean(storage.volumes?.length || storage.libraries?.length)
+
+  let project: Project
+  try {
+    project = await insertProject(ctx.db, {
+      ...settings,
+      ownerId: owner.id,
+      name: input.name,
+      kind: 'image',
+      image: input.image,
+      catalogId: input.catalogId ?? null,
+      // Two copies of an app must never write to the same storage at once.
+      strategy: input.strategy ?? (hasStorage ? 'recreate' : 'rolling'),
+      gpu: storage.gpu ?? false,
+      repoUrl: '',
+      branch: '',
+      triggerMode: 'manual',
+      hostnames,
+    })
+  } catch (error) {
+    if ((error as { cause?: { code?: string } }).cause?.code === '23505') {
+      throw new UserError(409, 'name_taken', `An app named "${input.name}" already exists.`)
+    }
+    throw error
+  }
+  await replaceAppStorage(ctx.db, project.id, storage)
+  if (input.env && Object.keys(input.env).length) await setEnv(ctx, project.id, input.env)
+  return project
+}
+
 /** Changes take effect on the next deploy. */
 export async function updateProjectSettings(
   ctx: Ctx,
   role: UserRole,
   project: Project,
-  settings: ProjectSettings,
+  patch: ProjectPatch,
 ): Promise<Project> {
+  const { volumes, libraries, gpu, image, ...settings } = patch
   const clean = cleanSettings(settings)
   if (clean.hostnames) await checkHostnames(ctx, role, project.id, clean.hostnames)
-  await updateProject(ctx.db, project.id, clean)
+  if (project.kind === 'image') {
+    // An image app has no branch to follow; it updates when asked.
+    delete clean.branch
+    delete clean.rootDir
+    if (clean.triggerMode && clean.triggerMode !== 'manual') {
+      throw new ProjectError('Apps from an image update when you press Update.')
+    }
+  } else if (image !== undefined) {
+    throw new ProjectError('This project is built from its repository, not an image.')
+  }
+  if (image !== undefined) {
+    if (role !== 'admin') {
+      throw new UserError(403, 'admin_only', 'Only an admin can change the image an app runs.')
+    }
+    if (!isValidImageRef(image)) throw new ProjectError(IMAGE_PROBLEM)
+  }
+  const current = {
+    libraryIds: (await listAppLibraries(ctx.db, [project.id])).map((l) => l.libraryId),
+    gpu: project.gpu,
+  }
+  const storage = await cleanStorage(ctx, role, { volumes, libraries, gpu }, current)
+  // Storage added to an app that starts its new version first: stop the old one first instead,
+  // unless this change chose the strategy itself.
+  if (storage.volumes?.length && clean.strategy === undefined && project.strategy === 'rolling') {
+    clean.strategy = 'recreate'
+  }
+  await updateProject(ctx.db, project.id, {
+    ...clean,
+    ...(image !== undefined ? { image } : {}),
+    ...(storage.gpu !== undefined ? { gpu: storage.gpu } : {}),
+  })
+  await replaceAppStorage(ctx.db, project.id, storage)
   // Addresses are routes, so they apply right away rather than on the next deploy.
   if (clean.hostnames) {
     await syncRouting(ctx)
@@ -255,8 +359,15 @@ export async function updateProjectSettings(
   return (await getProject(ctx.db, project.id))!
 }
 
-/** Removes the project's containers, images, and records, cancelling any build in progress. */
-export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
+/**
+ * Removes the project's containers, images, and records, cancelling any build in progress. Its
+ * storage is kept unless `data` is `delete`: reinstalling an app of the same name picks it up.
+ */
+export async function deleteProject(
+  ctx: Ctx,
+  project: Project,
+  data: 'keep' | 'delete' = 'keep',
+): Promise<void> {
   // A running build would otherwise finish and leave an image behind (cleanup removes images of
   // deleted projects later, but cancelling stops the work now).
   await cancelAllActive(ctx, project)
@@ -266,6 +377,7 @@ export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
     for (const container of await ctx.docker.listManagedApps(project.id)) {
       await ctx.docker.removeContainer(container.id)
     }
+    if (data === 'delete') await deleteAppVolumes(ctx, project)
     await deleteProjectRow(ctx.db, project.id)
   })
   await syncRouting(ctx)
@@ -273,6 +385,10 @@ export async function deleteProject(ctx: Ctx, project: Project): Promise<void> {
     await ctx.docker.removeImage(tag).catch((error: unknown) => {
       ctx.log.warn({ err: error, image: tag }, 'Could not remove image of deleted project')
     })
+  }
+  // The image as pulled (jellyfin/jellyfin:12.4), unless another app runs it too.
+  if (project.image && !(await listProjects(ctx.db)).some((p) => p.image === project.image)) {
+    await ctx.docker.untagImage(project.image).catch(() => {})
   }
   await ctx.queue.send('gc', {})
 }
@@ -345,11 +461,13 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
   const settings = await getSettings(ctx.db)
   const ids = projects.map((p) => p.id)
   const currentIds = projects.flatMap((p) => (p.currentDeploymentId ? [p.currentDeploymentId] : []))
-  const [latest, current, recent, checks] = await Promise.all([
+  const [latest, current, recent, checks, volumes, libraries] = await Promise.all([
     listLatestDeployments(ctx.db, ids),
     listDeploymentsById(ctx.db, currentIds),
     listRecentStatuses(ctx.db, ids, RUNWAY_LIGHTS),
     listAddressChecks(ctx, ids),
+    listAppVolumes(ctx.db, ids),
+    listAppLibraries(ctx.db, ids),
   ])
   return projects.map((p) => {
     const latestRow = latest.find((d) => d.projectId === p.id)
@@ -357,6 +475,22 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
     return {
       id: p.id,
       name: p.name,
+      kind: p.kind,
+      image: p.image,
+      catalogId: p.catalogId,
+      strategy: p.strategy,
+      gpu: p.gpu,
+      volumes: volumes
+        .filter((v) => v.projectId === p.id)
+        .map(({ name, mountPath }) => ({ name, mountPath })),
+      libraries: libraries
+        .filter((l) => l.projectId === p.id)
+        .map((l) => ({
+          libraryId: l.libraryId,
+          name: l.name,
+          mountPath: l.mountPath,
+          readOnly: !(l.writable && l.libraryWritable),
+        })),
       repoUrl: p.repoUrl,
       branch: p.branch,
       rootDir: p.rootDir,

@@ -15,6 +15,7 @@ import { useRoute } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
+import LibrariesPanel from '../components/LibrariesPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { cleanCpuModel, formatBytes } from '../lib/format.ts'
@@ -361,6 +362,8 @@ const saveTunnel = (token: string | null) =>
           </section>
         </div>
       </HgPanel>
+
+      <LibrariesPanel v-if="section === 'storage'" />
 
       <template v-if="section === 'system'">
         <HgPanel title="This machine" :live="info ? 'on' : 'off'">

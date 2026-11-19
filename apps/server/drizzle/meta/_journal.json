@@ -71,6 +71,13 @@
       "when": 1794963384631,
       "tag": "0009_remove_central_site",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795031681693,
+      "tag": "0010_image_apps",
+      "breakpoints": true
     }
   ]
 }

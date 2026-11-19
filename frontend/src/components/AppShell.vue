@@ -60,6 +60,7 @@ async function signOut() {
           navCopy.overview
         }}</RouterLink>
         <RouterLink :to="{ name: 'publish' }" data-tour="publish">{{ navCopy.publish }}</RouterLink>
+        <RouterLink v-if="session.isAdmin" :to="{ name: 'apps' }">{{ navCopy.apps }}</RouterLink>
         <RouterLink v-if="showStart" :to="{ name: 'start' }">{{ navCopy.getStarted }}</RouterLink>
         <RouterLink v-if="session.isAdmin" :to="{ name: 'users' }">{{ navCopy.users }}</RouterLink>
         <RouterLink

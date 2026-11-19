@@ -8,6 +8,7 @@ import { githubRoutes } from './modules/github/routes.ts'
 import { metricsRoutes } from './modules/metrics/routes.ts'
 import { projectRoutes } from './modules/projects/routes.ts'
 import { settingsRoutes } from './modules/settings/routes.ts'
+import { storageRoutes } from './modules/storage/routes.ts'
 import { systemRoutes } from './modules/system/routes.ts'
 import { userRoutes } from './modules/users/routes.ts'
 import { webhookRoutes } from './modules/webhooks/routes.ts'
@@ -26,6 +27,7 @@ export function buildApp(ctx: Ctx) {
     projectRoutes(scoped)
     deploymentRoutes(scoped)
     envVarRoutes(scoped)
+    storageRoutes(scoped)
     metricsRoutes(scoped)
     webhookRoutes(scoped)
     await serveDashboard(scoped)

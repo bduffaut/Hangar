@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   addressCopy,
+  catalogApp,
   confirmCopy,
   projectTabsCopy,
   toastCopy,
@@ -115,6 +116,41 @@ async function toggleRunning() {
   }
 }
 
+// A catalog app's first steps, shown on its page until dismissed.
+const template = computed(() =>
+  project.value?.catalogId ? catalogApp(project.value.catalogId) : null,
+)
+const stepsKey = computed(() => `hangar.firstSteps.${project.value?.id}`)
+const firstStepsDone = ref(false)
+watch(
+  stepsKey,
+  (key) => {
+    try {
+      firstStepsDone.value = localStorage.getItem(key) === 'done'
+    } catch {
+      firstStepsDone.value = false
+    }
+  },
+  { immediate: true },
+)
+function dismissFirstSteps() {
+  firstStepsDone.value = true
+  try {
+    localStorage.setItem(stepsKey.value, 'done')
+  } catch {
+    // Private browsing: the steps show again next time, which is harmless.
+  }
+}
+const storageSummary = computed(() => {
+  const p = project.value
+  if (!p) return ''
+  const kept = p.volumes.length
+    ? `${p.volumes.length} kept ${p.volumes.length === 1 ? 'folder' : 'folders'}`
+    : ''
+  const parts = [kept, ...p.libraries.map((l) => l.name)].filter(Boolean)
+  return parts.length ? parts.join(', ') : 'None'
+})
+
 const running = computed(
   () => project.value?.desiredState === 'running' && project.value.current !== null,
 )
@@ -153,7 +189,11 @@ const running = computed(
               <BaseIcon name="globe" :size="14" />
             </a>
           </template>
-          <span class="hg-muted hg-project-repo">
+          <span v-if="project.kind === 'image'" class="hg-muted hg-project-repo">
+            <BaseIcon name="server" :size="14" />
+            <code>{{ project.image }}</code>
+          </span>
+          <span v-else class="hg-muted hg-project-repo">
             <BaseIcon name="branch" :size="14" />
             {{ project.repoUrl.replace(/^https:\/\/(www\.)?/, '') }}, {{ project.branch }}
           </span>
@@ -162,8 +202,8 @@ const running = computed(
       <template #actions>
         <BaseButton
           variant="primary"
-          icon="rocket"
-          label="Deploy"
+          :icon="project.kind === 'image' ? 'download' : 'rocket'"
+          :label="project.kind === 'image' ? 'Update' : 'Deploy'"
           :loading="busy === 'deploy'"
           :disabled="busy !== null"
           @click="deploy"
@@ -203,7 +243,11 @@ const running = computed(
           project.current?.finishedAt ? relativeTime(project.current.finishedAt, now) : '–'
         }}</span>
       </div>
-      <div class="hg-summary-item">
+      <div v-if="project.kind === 'image'" class="hg-summary-item">
+        <span class="hg-summary-label">Storage</span>
+        <span>{{ storageSummary }}</span>
+      </div>
+      <div v-else class="hg-summary-item">
         <span class="hg-summary-label">New commits</span>
         <span>{{ triggerModeCopy[project.triggerMode].label }}</span>
       </div>
@@ -211,6 +255,23 @@ const running = computed(
         <span class="hg-summary-label">Recent deployments</span>
         <RunwayLights :recent="project.recent" />
       </div>
+    </section>
+
+    <section
+      v-if="template && project.current && !firstStepsDone"
+      class="hg-first-steps"
+      aria-labelledby="first-steps-title"
+    >
+      <div class="hg-first-steps-head">
+        <h2 id="first-steps-title">Getting started with {{ template.name }}</h2>
+        <BaseButton size="sm" variant="ghost" label="Done" @click="dismissFirstSteps" />
+      </div>
+      <ol>
+        <li v-for="step in template.firstSteps" :key="step">{{ step }}</li>
+      </ol>
+      <a v-if="project.url" :href="project.url" target="_blank" rel="noopener">
+        Open {{ template.name }} <BaseIcon name="external" :size="14" />
+      </a>
     </section>
 
     <BaseTabs :key="project.id" v-model="tab" :tabs="TABS">
@@ -290,6 +351,38 @@ const running = computed(
 .hg-summary-label {
   color: var(--hg-ink-muted);
   font-size: var(--hg-size-xs);
+}
+.hg-first-steps {
+  display: grid;
+  gap: var(--hg-space-3);
+  padding: var(--hg-space-4) var(--hg-space-5);
+  margin-bottom: var(--hg-space-5);
+  border: 1px solid color-mix(in srgb, var(--hg-accent) 40%, var(--hg-line));
+  border-left: 2px solid var(--hg-accent);
+  background: var(--hg-panel);
+}
+.hg-first-steps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hg-space-3);
+}
+.hg-first-steps h2 {
+  font-size: var(--hg-size-md);
+}
+.hg-first-steps ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  display: grid;
+  gap: var(--hg-space-2);
+  font-size: var(--hg-size-sm);
+}
+.hg-first-steps a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hg-space-1);
+  font-size: var(--hg-size-sm);
+  font-weight: var(--hg-weight-bold);
 }
 .hg-project-loading {
   display: grid;

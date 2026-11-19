@@ -136,6 +136,11 @@ export function createHarness() {
         }
         await deleteProject(ctx.db, project.id)
       }
+      // Kept data outlives an app by design; a test run leaves none behind.
+      const names = new Set(projects.map((p) => p.name))
+      for (const volume of await ctx.docker.listDataVolumes()) {
+        if (volume.app && names.has(volume.app)) await ctx.docker.removeVolume(volume.name)
+      }
       if (ownerId) {
         await ctx.db.delete(users).where(eq(users.id, ownerId))
         removeOwnerBuilder(ownerId)
