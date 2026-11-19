@@ -65,6 +65,9 @@ export const USERNAME_PATTERN = /^[a-z0-9][a-z0-9_.-]{2,31}$/
 export const PASSWORD_MIN_LENGTH = 10
 export const PASSWORD_MAX_LENGTH = 256
 
+export const BUILD_TIMEOUT_MIN_MINUTES = 1
+export const BUILD_TIMEOUT_MAX_MINUTES = 120
+
 export const MEMORY_LIMIT_MIN_MB = 64
 export const MEMORY_LIMIT_MAX_MB = 65536
 

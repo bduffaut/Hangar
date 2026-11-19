@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import {
   appHostname,
+  BUILD_TIMEOUT_MAX_MINUTES,
+  BUILD_TIMEOUT_MIN_MINUTES,
   catalogApp,
   checkMemberHostname,
   checkProjectName,
@@ -69,6 +71,7 @@ export interface ProjectSettings {
   /** null means auto-detect. */
   port?: number | null
   memoryLimitMb?: number
+  buildTimeoutMinutes?: number
   triggerMode?: TriggerMode
   hostnames?: string[]
   strategy?: DeployStrategy
@@ -106,6 +109,16 @@ function cleanSettings(settings: ProjectSettings): ProjectSettings {
     (!Number.isInteger(clean.memoryLimitMb) || clean.memoryLimitMb < 64)
   ) {
     throw new ProjectError('The memory limit must be at least 64 MB.')
+  }
+  if (
+    clean.buildTimeoutMinutes !== undefined &&
+    (!Number.isInteger(clean.buildTimeoutMinutes) ||
+      clean.buildTimeoutMinutes < BUILD_TIMEOUT_MIN_MINUTES ||
+      clean.buildTimeoutMinutes > BUILD_TIMEOUT_MAX_MINUTES)
+  ) {
+    throw new ProjectError(
+      `The build time limit must be from ${BUILD_TIMEOUT_MIN_MINUTES} to ${BUILD_TIMEOUT_MAX_MINUTES} minutes.`,
+    )
   }
   if (clean.hostnames !== undefined) {
     clean.hostnames = [
@@ -274,7 +287,11 @@ export async function createImageApp(
   if (input.catalogId && !catalogApp(input.catalogId)) {
     throw new ProjectError('That app is not in the catalog.')
   }
-  const settings = cleanSettings({ port: input.port, memoryLimitMb: input.memoryLimitMb })
+  const settings = cleanSettings({
+    port: input.port,
+    memoryLimitMb: input.memoryLimitMb,
+    buildTimeoutMinutes: input.buildTimeoutMinutes,
+  })
   const hostnames = cleanSettings({ hostnames: input.hostnames ?? [] }).hostnames!
   await checkHostnames(ctx, owner.role, null, hostnames)
   const storage = await cleanStorage(ctx, owner.role, input)
@@ -496,6 +513,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       rootDir: p.rootDir,
       port: p.port,
       memoryLimitMb: p.memoryLimitMb,
+      buildTimeoutMinutes: p.buildTimeoutMinutes,
       triggerMode: p.triggerMode,
       desiredState: p.desiredState,
       url: settings.lanDomain ? `http://${appHostname(p.name, settings.lanDomain)}` : null,

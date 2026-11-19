@@ -58,8 +58,8 @@ export const failureCopy: Record<FailureCode, FailureCopy> = {
     fix: 'Read the last lines of the build log below; they usually name the problem.',
   },
   build_timeout: {
-    explanation: 'The build took longer than 15 minutes and was stopped.',
-    fix: 'Look for a step that hangs, such as one waiting for input, or make the build lighter.',
+    explanation: "The build took longer than the app's build time limit and was stopped.",
+    fix: 'Look for a step that hangs, such as one waiting for input. If the build is simply big, raise the build time limit in Settings.',
   },
   image_missing: {
     explanation: 'The image for this version was cleaned up, so it cannot be started again.',

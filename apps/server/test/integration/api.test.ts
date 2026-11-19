@@ -511,6 +511,24 @@ describe('projects and env vars', () => {
     await settings({ publicDomains: [] })
   })
 
+  it('keeps a build time limit per app, within bounds', async () => {
+    const patch = (buildTimeoutMinutes: unknown) =>
+      call({
+        method: 'PATCH',
+        url: `/api/projects/${projectId}`,
+        body: { buildTimeoutMinutes },
+        cookie,
+        csrf,
+      })
+    const before = await call({ url: `/api/projects/${projectId}`, cookie })
+    expect(before.json().buildTimeoutMinutes).toBe(15)
+    for (const bad of [0, 121, 2.5, 'ten']) expect((await patch(bad)).status).toBe(400)
+    expect((await patch(0)).json().error.message).toContain('from 1 to 120')
+    const raised = await patch(45)
+    expect(raised.status).toBe(200)
+    expect(raised.json().buildTimeoutMinutes).toBe(45)
+  })
+
   it('stores env vars encrypted and lists only keys', async () => {
     const put = await call({
       method: 'PUT',

@@ -3,7 +3,8 @@ export const DEFAULT_APP_PORT = 3000
 export const TUNNEL_SERVICE_URL = 'http://hangar-proxy:8081'
 export const DEFAULT_MEMORY_LIMIT_MB = 512
 
-export const BUILD_TIMEOUT_MS = 15 * 60_000
+/** How long a build (or an image download) may take, unless the app's settings say otherwise. */
+export const DEFAULT_BUILD_TIMEOUT_MINUTES = 15
 export const HEALTH_CHECK_TIMEOUT_MS = 60_000
 export const POLL_INTERVAL_MS = 60_000
 

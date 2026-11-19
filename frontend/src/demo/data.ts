@@ -206,6 +206,7 @@ function buildProjects(): ProjectRecord[] {
         rootDir: '',
         port: seed.image ? 8096 : null,
         memoryLimitMb: seed.image ? 2048 : 512,
+        buildTimeoutMinutes: 15,
         triggerMode: seed.image ? 'manual' : index === 1 ? 'webhook' : 'poll',
         desiredState: seed.stopped ? 'stopped' : 'running',
         url: `http://${seed.name}.${LAN_DOMAIN}`,

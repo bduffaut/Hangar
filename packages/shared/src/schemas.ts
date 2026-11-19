@@ -24,6 +24,8 @@ import { ENV_KEY_PATTERN, MAX_PROJECT_HOSTNAMES, MAX_PUBLIC_DOMAINS } from './co
 import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
+  BUILD_TIMEOUT_MAX_MINUTES,
+  BUILD_TIMEOUT_MIN_MINUTES,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   USERNAME_PATTERN,
@@ -45,6 +47,7 @@ export const errorBody = z.object({
 })
 export type ErrorBody = z.infer<typeof errorBody>
 
+const BUILD_TIMEOUT_PROBLEM = `The build time limit must be a whole number of minutes from ${BUILD_TIMEOUT_MIN_MINUTES} to ${BUILD_TIMEOUT_MAX_MINUTES}.`
 const MEMORY_LIMIT_PROBLEM = `The memory limit must be a whole number of MB from ${MEMORY_LIMIT_MIN_MB} to ${MEMORY_LIMIT_MAX_MB}.`
 
 // Auth and setup
@@ -316,6 +319,13 @@ export const projectInput = z.object({
     .max(MEMORY_LIMIT_MAX_MB)
     .optional(),
   triggerMode: z.enum(TRIGGER_MODES).optional(),
+  /** How long a build may run before it is stopped. */
+  buildTimeoutMinutes: z
+    .number({ error: BUILD_TIMEOUT_PROBLEM })
+    .int({ error: BUILD_TIMEOUT_PROBLEM })
+    .min(BUILD_TIMEOUT_MIN_MINUTES, { error: BUILD_TIMEOUT_PROBLEM })
+    .max(BUILD_TIMEOUT_MAX_MINUTES, { error: BUILD_TIMEOUT_PROBLEM })
+    .optional(),
   /**
    * Public addresses, each the root of one of the owner's domains or one name under it. Omit for
    * the default, `<name>.<default domain>`; an empty list keeps the app on the network only.
@@ -366,6 +376,7 @@ export const projectPatch = projectInput
     port: true,
     memoryLimitMb: true,
     triggerMode: true,
+    buildTimeoutMinutes: true,
     hostnames: true,
   })
   .extend({
@@ -381,6 +392,7 @@ export const imageAppInput = z.object({
   image: z.string().trim().max(255, { error: 'That image name is too long.' }),
   port: port.nullable().optional(),
   memoryLimitMb: projectInput.shape.memoryLimitMb,
+  buildTimeoutMinutes: projectInput.shape.buildTimeoutMinutes,
   hostnames: projectInput.shape.hostnames,
   /** Initial env vars, such as a template's. More can be set later like any project's. */
   env: z.record(z.string().regex(ENV_KEY_PATTERN), z.string().max(4096)).optional(),
@@ -504,6 +516,7 @@ export const projectView = z.object({
   rootDir: z.string(),
   port: z.number().int().nullable(),
   memoryLimitMb: z.number().int(),
+  buildTimeoutMinutes: z.number().int(),
   triggerMode: z.enum(TRIGGER_MODES),
   desiredState: z.enum(DESIRED_STATES),
   url: z.string().nullable(),

@@ -276,13 +276,13 @@ Every change goes through `transition(id, from, to, patch)`, which performs
 
 ### Queues
 
-| Queue       | Concurrency                                  | Purpose                                                               |
-| ----------- | -------------------------------------------- | --------------------------------------------------------------------- |
-| `build`     | 1 globally                                   | Full pipeline for push, poll, and manual triggers. 15-minute timeout. |
-| `deploy`    | 1 globally                                   | Rollbacks: skips clone and build, uses an existing image.             |
-| `poll`      | scheduled every 60 s                         | Runs `ls-remote` for polled projects.                                 |
-| `gc`        | scheduled hourly and after each ready deploy | Retention and cleanup.                                                |
-| `reconcile` | on boot, on settings change, on demand       | Converges Docker and Traefik to the database.                         |
+| Queue       | Concurrency                                  | Purpose                                                                                                                                                      |
+| ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `build`     | 1 globally                                   | Full pipeline for push, poll, and manual triggers. Each app's build time limit (15 minutes by default, 1 to 120); the job expires after the longest allowed. |
+| `deploy`    | 1 globally                                   | Rollbacks: skips clone and build, uses an existing image.                                                                                                    |
+| `poll`      | scheduled every 60 s                         | Runs `ls-remote` for polled projects.                                                                                                                        |
+| `gc`        | scheduled hourly and after each ready deploy | Retention and cleanup.                                                                                                                                       |
+| `reconcile` | on boot, on settings change, on demand       | Converges Docker and Traefik to the database.                                                                                                                |
 
 Jobs carry only IDs. The handler always re-reads the database row and checks its status before acting.
 
@@ -320,7 +320,7 @@ Each step receives an `AbortSignal` that fires on timeout or cancel.
 
 Steps 3–6 run under a per-project advisory lock (`project:<id>`, always taken before `routing`), which the reconciler also takes, so container changes for one project never interleave. A deployment numbered lower than the live one fails with `superseded` instead of going live, so a slow build cannot undo a later rollback.
 
-A cancel only takes effect while `building`; the 15-minute timeout covers clone and build. When the worker shuts down mid-build it kills the build and records `interrupted`.
+A cancel only takes effect while `building`; the app's build time limit (`projects.build_timeout_minutes`, 15 by default) covers clone and build, or an image app's pull. When the worker shuts down mid-build it kills the build and records `interrupted`.
 
 ### Rollback
 

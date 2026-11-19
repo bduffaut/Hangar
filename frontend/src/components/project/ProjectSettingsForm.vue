@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
   confirmCopy,
+  BUILD_TIMEOUT_MAX_MINUTES,
+  BUILD_TIMEOUT_MIN_MINUTES,
   errorCopy,
   isPinnedImage,
   isValidImageRef,
@@ -68,6 +70,15 @@ const memoryValue = computed(() =>
   parseWholeNumber(memory.value, MEMORY_LIMIT_MIN_MB, MEMORY_LIMIT_MAX_MB),
 )
 const memoryError = computed(() => (memoryValue.value === null ? errorCopy.memory : null))
+const buildTimeout = ref(String(props.project.buildTimeoutMinutes))
+const buildTimeoutValue = computed(() =>
+  parseWholeNumber(buildTimeout.value, BUILD_TIMEOUT_MIN_MINUTES, BUILD_TIMEOUT_MAX_MINUTES),
+)
+const buildTimeoutError = computed(() =>
+  buildTimeoutValue.value === null
+    ? `Enter a whole number of minutes from ${BUILD_TIMEOUT_MIN_MINUTES} to ${BUILD_TIMEOUT_MAX_MINUTES}.`
+    : null,
+)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
@@ -80,7 +91,7 @@ const triggerOptions = computed<SelectOption<TriggerMode>[]>(() =>
 )
 
 async function save() {
-  if (portError.value || memoryError.value || imageError.value) return
+  if (portError.value || memoryError.value || imageError.value || buildTimeoutError.value) return
   busy.value = true
   error.value = null
   try {
@@ -90,6 +101,7 @@ async function save() {
         ? {
             port: portValue.value,
             memoryLimitMb: memoryValue.value!,
+            buildTimeoutMinutes: buildTimeoutValue.value!,
             ...(session.isAdmin ? { image: image.value.trim() } : {}),
           }
         : {
@@ -97,6 +109,7 @@ async function save() {
             rootDir: rootDir.value.trim(),
             port: portValue.value,
             memoryLimitMb: memoryValue.value!,
+            buildTimeoutMinutes: buildTimeoutValue.value!,
             triggerMode: triggerMode.value,
           },
     })
@@ -224,6 +237,24 @@ async function remove() {
             inputmode="numeric"
           />
         </BaseField>
+        <BaseField
+          :label="isImage ? 'Download time limit (minutes)' : 'Build time limit (minutes)'"
+          for="ps-build-timeout"
+          :error="buildTimeoutError"
+          :help="
+            isImage
+              ? 'How long downloading the image may take before Hangar stops it.'
+              : 'How long a build may run before Hangar stops it. Raise it for big builds.'
+          "
+        >
+          <BaseInput
+            id="ps-build-timeout"
+            v-model="buildTimeout"
+            :invalid="!!buildTimeoutError"
+            mono
+            inputmode="numeric"
+          />
+        </BaseField>
         <div v-if="!isImage" class="hg-settings-wide">
           <BaseField
             label="New commits"
@@ -242,7 +273,7 @@ async function remove() {
             variant="primary"
             label="Save changes"
             :loading="busy"
-            :disabled="!!portError || !!memoryError || !!imageError"
+            :disabled="!!portError || !!memoryError || !!imageError || !!buildTimeoutError"
           />
         </div>
       </form>

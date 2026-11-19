@@ -1,5 +1,4 @@
 import {
-  BUILD_TIMEOUT_MS,
   CONTAINER_STOP_GRACE_SECONDS,
   DEFAULT_APP_PORT,
   type DeploymentStatus,
@@ -111,7 +110,10 @@ export async function runDeployment(
 
   const log = createDeploymentLog(ctx, deploymentId)
   const workDir = path.join(ctx.config.buildDir, deploymentId)
-  const buildSignal = AbortSignal.any([control, AbortSignal.timeout(BUILD_TIMEOUT_MS)])
+  const buildSignal = AbortSignal.any([
+    control,
+    AbortSignal.timeout(project.buildTimeoutMinutes * 60_000),
+  ])
   let deployment: Deployment = queued
   let containerName: string | null = null
   let live = false
@@ -209,7 +211,15 @@ export async function runDeployment(
     await ctx.queue.send('addresses', { projectId: project.id })
   } catch (error) {
     if (error instanceof Preempted) return
-    await fail(ctx, deployment, control, buildSignal, error, log)
+    await fail(
+      ctx,
+      deployment,
+      control,
+      buildSignal,
+      project.buildTimeoutMinutes * 60_000,
+      error,
+      log,
+    )
   } finally {
     if (containerName && !live) {
       await ctx.docker.removeContainer(containerName).catch((error: unknown) => {
@@ -410,6 +420,7 @@ async function fail(
   deployment: Deployment,
   control: AbortSignal,
   buildSignal: AbortSignal,
+  timeoutMs: number,
   error: unknown,
   log: DeploymentLog,
 ): Promise<void> {
@@ -433,7 +444,8 @@ async function fail(
     reason = 'Hangar shut down while this deployment was in progress'
   } else if (from === 'building' && buildSignal.aborted) {
     code = 'build_timeout'
-    reason = `The build took longer than ${BUILD_TIMEOUT_MS / 60_000} minutes and was stopped`
+    const minutes = Math.round(timeoutMs / 60_000)
+    reason = `The build took longer than ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}, this app's build time limit, and was stopped`
   } else if (error instanceof PipelineError) {
     code = error.code
   } else {

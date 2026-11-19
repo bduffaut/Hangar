@@ -1,4 +1,4 @@
-import { BUILD_TIMEOUT_MS } from '@hangar/shared'
+import { BUILD_TIMEOUT_MAX_MINUTES } from '@hangar/shared'
 import { PgBoss } from 'pg-boss'
 import type { Logger } from '../logger.ts'
 
@@ -16,8 +16,9 @@ export interface JobMap {
 export type JobName = keyof JobMap
 
 const QUEUE_OPTIONS: Record<JobName, { expireInSeconds: number }> = {
-  // The pipeline enforces the 15-minute build limit itself; the margin covers deploy and cleanup.
-  build: { expireInSeconds: BUILD_TIMEOUT_MS / 1000 + 300 },
+  // The pipeline enforces each app's build time limit itself. The queue only gives up after the
+  // longest one allowed, plus a margin for starting, health checks, and cleanup.
+  build: { expireInSeconds: BUILD_TIMEOUT_MAX_MINUTES * 60 + 600 },
   deploy: { expireInSeconds: 300 },
   gc: { expireInSeconds: 600 },
   reconcile: { expireInSeconds: 300 },
@@ -39,6 +40,8 @@ export function createQueue(options: { connectionString: string; log: Logger }) 
       for (const [name, queueOptions] of Object.entries(QUEUE_OPTIONS)) {
         // A failed pipeline already marked its deployment failed; retrying would only repeat it.
         await boss.createQueue(name, { ...queueOptions, retryLimit: 0 })
+        // createQueue leaves an existing queue as it was; carry changed limits to older installs.
+        await boss.updateQueue(name, { ...queueOptions, retryLimit: 0 })
       }
     })()
     return started

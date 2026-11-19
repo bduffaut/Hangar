@@ -197,7 +197,7 @@ hangar/
 | `copy.ts`                                | **All user-facing wording** in one place: the brand name, the themed status labels and their plain meanings, failure explanations and fixes, empty states, the setup checklist, the guide, and the tour.                    |
 | `statuses.ts`, `failures.ts`, `enums.ts` | The lists of deployment statuses, failure reasons, and other fixed choices.                                                                                                                                                 |
 | `validation.ts`, `hostnames.ts`          | Rules for valid branch names, repository URLs, domains, folder paths, and project names (including reserved names like `tower`).                                                                                            |
-| `constants.ts`                           | Limits and defaults: build timeout (15 minutes), health check (60 seconds), memory (512 MB), images kept (5), and the test flight's source.                                                                                 |
+| `constants.ts`                           | Limits and defaults: build time limit (15 minutes by default; each app can set 1 to 120 in its Settings), health check (60 seconds), memory (512 MB), images kept (5), and the test flight's source.                        |
 | `settings.ts`                            | The list of server settings and their types.                                                                                                                                                                                |
 
 ### `apps/server` (the backend)

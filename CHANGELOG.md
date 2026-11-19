@@ -20,6 +20,8 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - Apps with storage stop the old version before starting the new one, and start it again if the
   new one fails.
 - A guide: [Install apps like Jellyfin](docs/guides/apps.md).
+- **A build time limit per app**, in its Settings: 15 minutes by default, from 1 to 120. For an
+  app from an image it limits the download.
 
 ## [0.3.1] - 2026-11-18
 

@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "build_timeout_minutes" integer DEFAULT 15 NOT NULL;

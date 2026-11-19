@@ -10,6 +10,7 @@ import {
   LOG_STREAMS,
   TRIGGER_MODES,
   USER_ROLES,
+  DEFAULT_BUILD_TIMEOUT_MINUTES,
   DEFAULT_MEMORY_LIMIT_MB,
 } from '@hangar/shared'
 import { sql } from 'drizzle-orm'
@@ -137,6 +138,8 @@ export const projects = pgTable(
     rootDir: text().notNull().default(''),
     port: integer(), // null = auto-detect
     memoryLimitMb: integer().notNull().default(DEFAULT_MEMORY_LIMIT_MB),
+    /** How long a build or an image download may run before it is stopped. */
+    buildTimeoutMinutes: integer().notNull().default(DEFAULT_BUILD_TIMEOUT_MINUTES),
     triggerMode: triggerMode().notNull().default('poll'),
     webhookSecret: text(), // encrypted
     lastSeenSha: text(),
