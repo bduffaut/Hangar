@@ -82,6 +82,41 @@ during a deploy, how long it will likely take and whether it fits the limit.
 - Record per-step timings on each deployment (queued, building, deploying, health check) so the
   estimates have data; today only the start and end of the whole deployment are kept.
 
+### To do: stress testing
+
+A way to find out how much a Hangar computer can handle before it falls over, and where it
+breaks first. It should run either system-wide or on the pieces you pick, with the limits set in
+one place.
+
+**What it can stress, each one on its own or all together:**
+
+- **Deploys:** many builds and image downloads queued at once, back to back, including uncached
+  builds and large images.
+- **Running apps:** many containers started at once, then CPU, memory, and disk pressure from
+  inside them (a set of small load apps Hangar deploys for the test).
+- **Traffic:** requests per second through Traefik to apps, and through the Cloudflare tunnel to
+  public addresses.
+- **The dashboard and API:** many signed-in sessions, live streams (status, logs, metrics), and
+  API calls.
+- **Storage:** writes to kept folders and libraries, and how disk fills.
+- **Network:** a download that fills the link, to see how the tunnels and other sites on the
+  computer cope (the problem seen while shipping, now noted in CLAUDE.md).
+
+**What can be configured:** which pieces, how hard (counts, rates, sizes), how long, how quickly
+it ramps up, and stop conditions (CPU, memory, disk, or temperature above a threshold, an app
+failing its health check, any other site on the computer slowing down).
+
+**What it reports:** a timeline of the machine's readings, deploy times, request latency and
+errors, the first thing that failed and at what load, and a plain summary ("This computer handled
+6 builds at once and about 400 requests a second before memory ran out").
+
+**Safety:** admins only; it runs in its own account and network, labels everything it creates,
+cleans all of it up afterwards (also after a crash), never touches containers Hangar did not
+create, and stops at once on a stop condition or when the admin presses Stop. Production apps
+keep running; a warning before starting says what may slow down.
+
+Where it lives (a dashboard page, `hangar-admin stress`, or both) is to be decided.
+
 ### Phase 2, first steps
 
 1. **Server-side templates.** Installing with a `catalogId` takes the image, ports, and storage
