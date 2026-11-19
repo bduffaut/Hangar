@@ -454,6 +454,8 @@ export const storageView = z.object({
     z.object({
       name: z.string(),
       mountPath: z.string(),
+      /** The stack service it belongs to (D44), or null for the app's own container. */
+      service: z.string().nullable(),
       dockerName: z.string(),
       sizeBytes: z.number().nullable(),
     }),

@@ -9,6 +9,16 @@ export function ownerNetworkName(ownerId: string): string {
   return `hangar-apps-${ownerId}`
 }
 
+/** The private network of one stack (D44): the app and its services, nothing else. */
+export function stackNetworkName(projectId: string): string {
+  return `hangar-stack-${projectId}`
+}
+
+/** A stack service's container, e.g. `hangar-svc-photos-database`. */
+export function serviceContainerName(projectName: string, service: string): string {
+  return `hangar-svc-${projectName}-${service}`
+}
+
 /** The BuildKit builder of one account. */
 export function ownerBuilderName(ownerId: string): string {
   return `hangar-builder-${ownerId}`

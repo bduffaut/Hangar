@@ -2,7 +2,16 @@
 // the dev database, the worker inside hangar-core runs them, and the tests check the results
 // through Traefik on port 80, exactly as a browser would.
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { request } from 'node:http'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -17,6 +26,7 @@ import { type Deployment, getDeployment } from '../../src/modules/deployments/re
 import { deleteProject, insertProject, type Project } from '../../src/modules/projects/repo.ts'
 import { getSettings } from '../../src/modules/settings/repo.ts'
 import { appImageRepository, ownerBuilderName } from '../../src/platform/names.ts'
+import { removeStack } from '../../src/worker/stack.ts'
 
 export const REPO_ROOT = path.resolve(import.meta.dirname, '../../../..')
 /** Where hangar-core sees the repository (docker/compose.dev.yml bind mount). */
@@ -35,6 +45,9 @@ export function createHarness() {
   const config = loadConfig({
     ...coreEnv,
     DATABASE_URL: DEV_DATABASE_URL,
+    // Routing written from here (stopping or deleting an app in a test) goes to a folder of its
+    // own: only hangar-core can write Traefik's, and it rewrites that from the database anyway.
+    HANGAR_TRAEFIK_DYNAMIC_DIR: mkdtempSync(path.join(tmpdir(), 'hangar-it-routing-')),
   })
   const { ctx, close } = createContext(config, createLogger({ ...config, logLevel: 'warn' }))
   const runId = Date.now().toString(36).slice(-5)
@@ -61,6 +74,12 @@ export function createHarness() {
       if (!healthy?.ok) throw new Error('The dev stack is not running. Start it with: pnpm dev')
       await ctx.queue.start()
     },
+
+    /** The admin account test projects belong to. */
+    ownerId: () => testOwner(),
+
+    /** A name unique to this run, as createProject gives. */
+    appName: (name: string) => `it-${runId}-${name}`,
 
     async createProject(name: string, values: Partial<Project> & { repoUrl: string }) {
       const project = await insertProject(ctx.db, {
@@ -131,6 +150,7 @@ export function createHarness() {
         for (const container of await ctx.docker.listManagedApps(project.id)) {
           await ctx.docker.removeContainer(container.id)
         }
+        await removeStack(ctx, project.id)
         for (const tag of await ctx.docker.listTags(appImageRepository(project.name))) {
           await ctx.docker.removeImage(tag).catch(() => {})
         }
@@ -154,9 +174,13 @@ export function createHarness() {
 /** Builders are recorded inside hangar-core, so only it can remove them. */
 export function removeOwnerBuilder(ownerId: string): void {
   const builder = ownerBuilderName(ownerId)
-  execFileSync('docker', ['exec', 'hangar-core', 'docker', 'buildx', 'rm', '-f', builder], {
-    stdio: 'ignore',
-  })
+  try {
+    execFileSync('docker', ['exec', 'hangar-core', 'docker', 'buildx', 'rm', '-f', builder], {
+      stdio: 'ignore',
+    })
+  } catch {
+    // No builder: this run built nothing (apps from images only).
+  }
 }
 
 /**

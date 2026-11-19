@@ -271,14 +271,15 @@ Each feature in `src/modules/` is split the same way:
 
 ### Background work (`src/worker/`)
 
-| File                                    | Job                                                                                                                                                                                   |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pipeline.ts`                           | The deploy steps from section 5.                                                                                                                                                      |
-| `jobs.ts`                               | Starts the worker: crash recovery first, then handles queue jobs (build, deploy, cleanup, reconcile, poll) and cancel requests.                                                       |
-| `reconciler.ts`                         | Makes Docker and Traefik match the database: restarts or recreates missing app containers, writes the routing file, runs the Cloudflare tunnel when configured. Safe to run any time. |
-| `poller.ts`                             | Every minute, checks each project's branch with `git ls-remote` and deploys new commits. Backs off when a repository is unreachable.                                                  |
-| `gc.ts`                                 | Cleanup: old images, old build logs, leftover build folders, expired sessions.                                                                                                        |
-| `app-container.ts`, `deployment-log.ts` | Starting an app container; writing build output in batches.                                                                                                                           |
+| File                                    | Job                                                                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pipeline.ts`                           | The deploy steps from section 5.                                                                                                                                                           |
+| `jobs.ts`                               | Starts the worker: crash recovery first, then handles queue jobs (build, deploy, cleanup, reconcile, poll) and cancel requests.                                                            |
+| `reconciler.ts`                         | Makes Docker and Traefik match the database: restarts or recreates missing app containers, writes the routing file, runs the Cloudflare tunnel when configured. Safe to run any time.      |
+| `poller.ts`                             | Every minute, checks each project's branch with `git ls-remote` and deploys new commits. Backs off when a repository is unreachable.                                                       |
+| `gc.ts`                                 | Cleanup: old images, old build logs, leftover build folders, expired sessions.                                                                                                             |
+| `app-container.ts`, `deployment-log.ts` | Starting an app container; writing build output in batches.                                                                                                                                |
+| `stack.ts`                              | A stack's supporting services (D44): starts them in order on the app's private network before the app, keeps them running, replaces one whose settings changed, removes them with the app. |
 
 ### How the parts communicate
 
@@ -295,7 +296,7 @@ Each feature in `src/modules/` is split the same way:
 | `sessions`        | Signed-in browsers (only a hash of each session token).                                                                                                                                                              |
 | `settings`        | Server address, public domain, encrypted GitHub and tunnel tokens, the setup code's hash.                                                                                                                            |
 | `projects`        | One row per app: `kind` (built from a repository, or a published `image`), repository, branch, folder, port, memory limit, how it deploys (`strategy`), the graphics chip, custom domains, which deployment is live. |
-| `app_volumes`     | Each app's kept folders: a name and where it is mounted.                                                                                                                                                             |
+| `app_volumes`     | Each app's kept folders: a name, where it is mounted, and for a stack, which of its services uses it.                                                                                                                |
 | `libraries`       | Folders on the computer an admin shared with apps, and whether apps may write to them.                                                                                                                               |
 | `app_libraries`   | Which app uses which library, mounted where, and whether it may write.                                                                                                                                               |
 | `deployments`     | One row per attempt: number, commit, status, failure reason, image, timings.                                                                                                                                         |
@@ -404,6 +405,8 @@ This builds Hangar's image on this PC, copies it to the laptop over your SSH con
 | `pnpm lint`, `pnpm typecheck` | Code style and type mistakes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Nothing.                                                                                                    |
 
 GitHub runs the lint, type, unit, and integration checks on every push.
+
+The integration tests include a small test stack (`stack-test` in `apps/server/src/modules/catalog/templates.ts`), which only exists when `HANGAR_TEST_TEMPLATES=1` outside production, as the dev stack sets. To try real catalog apps end to end, name them: `HANGAR_TEST_CATALOG=immich,mealie pnpm vitest run --project integration catalog` (they download the real images).
 
 ---
 

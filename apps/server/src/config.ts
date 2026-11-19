@@ -40,6 +40,8 @@ const envSchema = z.object({
   // '1' when `tailscale serve` gives that name HTTPS; otherwise it answers on plain HTTP over
   // Tailscale (still encrypted by Tailscale itself).
   HANGAR_TAILSCALE_HTTPS: z.enum(['0', '1', '']).default(''),
+  /** Test-only catalog templates, for the integration tests. Ignored in production. */
+  HANGAR_TEST_TEMPLATES: z.enum(['0', '1', '']).default(''),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.string().default('development'),
 })
@@ -87,6 +89,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     tailscaleHttps: e.HANGAR_TAILSCALE_HTTPS === '1',
     logLevel: e.LOG_LEVEL,
     isProduction: e.NODE_ENV === 'production',
+    testTemplates: e.NODE_ENV !== 'production' && e.HANGAR_TEST_TEMPLATES === '1',
   }
 }
 

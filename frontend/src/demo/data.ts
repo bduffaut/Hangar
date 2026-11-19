@@ -293,6 +293,7 @@ export function demoStorage(projectId: string): StorageView {
   return {
     volumes: project.volumes.map((v) => ({
       ...v,
+      service: null,
       dockerName: `hangar-data-${project.name}-${v.name}`,
       sizeBytes: sizes[v.name] ?? 12 * 1024 ** 2,
     })),

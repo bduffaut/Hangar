@@ -147,6 +147,28 @@ export const libraryPathProblemCopy: Record<LibraryPathProblem, string> = {
 
 // The catalog (D42, D43): templates the server installs as written; see docs/ROADMAP.md
 
+/**
+ * A supporting container of a stack (D44): a database, a cache, a worker. It runs on the app's
+ * own private network, reachable from the app at its `name`, and is never routed.
+ */
+export interface CatalogService {
+  /** Also its address inside the stack, e.g. `database` or `redis`. */
+  name: string
+  /**
+   * A pinned image. `{version}` stands for the app's own version (its image tag), for parts that
+   * must match the app, like Immich's machine learning.
+   */
+  image: string
+  memoryLimitMb: number
+  /** Env vars. `${NAME}` is replaced by the app's env var of that name, such as a secret. */
+  env: Record<string, string>
+  volumes: { name: string; mountPath: string; purpose: string; backup: boolean }[]
+  /** A shell command Docker runs to check it, when the image has no health check of its own. */
+  healthCommand?: string
+  /** Shared memory, for databases that need more than Docker's 64 MB. */
+  shmSizeMb?: number
+}
+
 export interface CatalogApp {
   id: string
   name: string
@@ -158,12 +180,18 @@ export interface CatalogApp {
   image: string
   port: number
   memoryLimitMb: number
+  /** A longer download time limit than the default, for large apps (minutes). */
+  buildTimeoutMinutes?: number
   volumes: { name: string; mountPath: string; purpose: string; backup: boolean }[]
   /** A library to ask for at install: the folder of files the app serves. */
   library?: { label: string; mountPath: string; hint: string; writable: boolean }
   /** Offer the graphics chip when the computer has one. */
   gpu?: { hint: string }
   env: Record<string, string>
+  /** Env vars generated at install, a long random value each, kept encrypted like any env var. */
+  secrets?: string[]
+  /** Supporting containers, started in this order before the app (D44). */
+  services?: CatalogService[]
   /**
    * Whoever opens it first becomes its admin (or it starts with a well-known password). Such an
    * app gets no public address at install: its owner finishes the setup first, then adds one.
@@ -219,6 +247,83 @@ export const CATALOG: CatalogApp[] = [
       'Install the Jellyfin app on your phone or TV and sign in with this address.',
     ],
     tier: 'elevated',
+  },
+  {
+    id: 'immich',
+    name: 'Immich',
+    category: 'photos',
+    summary: 'Back up the photos and videos on your phone, like your own Google Photos.',
+    description:
+      'Immich backs up your phone’s camera roll automatically, then lets you browse it by date, place, and person, and search it by what is in the picture. It runs as four parts on this computer (the app, its database, a cache, and machine learning for faces and search), and Hangar keeps them together.',
+    website: 'https://immich.app',
+    image: 'ghcr.io/immich-app/immich-server:v3.4.2',
+    port: 2283,
+    memoryLimitMb: 2048,
+    // Four images, several gigabytes in all on a first install.
+    buildTimeoutMinutes: 45,
+    volumes: [
+      {
+        name: 'library',
+        mountPath: '/data',
+        purpose: 'Your photos and videos',
+        backup: true,
+      },
+    ],
+    env: { DB_USERNAME: 'postgres', DB_DATABASE_NAME: 'immich' },
+    secrets: ['DB_PASSWORD'],
+    services: [
+      {
+        name: 'database',
+        image:
+          'ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23',
+        memoryLimitMb: 1024,
+        env: {
+          POSTGRES_PASSWORD: '${DB_PASSWORD}',
+          POSTGRES_USER: 'postgres',
+          POSTGRES_DB: 'immich',
+          POSTGRES_INITDB_ARGS: '--data-checksums',
+        },
+        volumes: [
+          {
+            name: 'database',
+            mountPath: '/var/lib/postgresql/data',
+            purpose: 'Albums, people, and where each photo is',
+            backup: true,
+          },
+        ],
+        shmSizeMb: 128,
+      },
+      {
+        name: 'redis',
+        image:
+          'valkey/valkey:9@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd',
+        memoryLimitMb: 256,
+        env: {},
+        volumes: [],
+        healthCommand: 'redis-cli ping | grep -q PONG',
+      },
+      {
+        name: 'immich-machine-learning',
+        image: 'ghcr.io/immich-app/immich-machine-learning:{version}',
+        memoryLimitMb: 3072,
+        env: { MACHINE_LEARNING_MODEL_REVISION: 'v2' },
+        volumes: [
+          {
+            name: 'model-cache',
+            mountPath: '/cache',
+            purpose: 'Face and search models, downloaded once',
+            backup: false,
+          },
+        ],
+      },
+    ],
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create the admin account.',
+      'Install the Immich app on your phone, sign in with this address, and turn on backup.',
+      'Faces and search start working after the first photos arrive: the models download once, which takes a few minutes.',
+    ],
+    tier: 'standard',
   },
   {
     id: 'navidrome',
@@ -376,6 +481,24 @@ export const CATALOG: CatalogApp[] = [
     tier: 'standard',
   },
 ]
+
+/** The image a service runs for an app at `appImage`: `{version}` becomes the app's tag. */
+export function serviceImage(service: CatalogService, appImage: string): string {
+  return service.image.replaceAll('{version}', imageTag(appImage) ?? 'latest')
+}
+
+/** Fills `${NAME}` in a service's env from the app's env vars; unknown names become empty. */
+export function serviceEnv(
+  service: CatalogService,
+  appEnv: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(service.env).map(([key, value]) => [
+      key,
+      value.replace(/\$\{([A-Z0-9_]+)\}/g, (_, name: string) => appEnv[name] ?? ''),
+    ]),
+  )
+}
 
 export function catalogApp(id: string): CatalogApp | null {
   return CATALOG.find((app) => app.id === id) ?? null

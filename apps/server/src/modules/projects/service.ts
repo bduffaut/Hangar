@@ -3,7 +3,6 @@ import {
   appHostname,
   BUILD_TIMEOUT_MAX_MINUTES,
   BUILD_TIMEOUT_MIN_MINUTES,
-  catalogApp,
   checkMemberHostname,
   checkProjectName,
   checkPublicHostname,
@@ -31,6 +30,8 @@ import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository } from '../../platform/names.ts'
 import { addressViews, listAddressChecks, pruneAddressChecks } from '../addresses/service.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
+import { removeStack } from '../../worker/stack.ts'
+import { findTemplate } from '../catalog/templates.ts'
 import {
   listDeploymentsById,
   listLatestDeployments,
@@ -41,7 +42,12 @@ import { deploymentView } from '../deployments/views.ts'
 import { getSettings } from '../settings/repo.ts'
 import { getGithubToken } from '../settings/secrets.ts'
 import { setEnv } from '../env-vars/service.ts'
-import { listAppLibraries, listAppVolumes, replaceAppStorage } from '../storage/repo.ts'
+import {
+  insertServiceVolumes,
+  listAppLibraries,
+  listAppVolumes,
+  replaceAppStorage,
+} from '../storage/repo.ts'
 import { cleanStorage, deleteAppVolumes, type StorageInput } from '../storage/service.ts'
 import {
   deleteProject as deleteProjectRow,
@@ -286,7 +292,7 @@ export async function createImageApp(
   if (owner.role !== 'admin') {
     throw new UserError(403, 'admin_only', 'Only an admin can install apps from an image.')
   }
-  if (input.catalogId && !catalogApp(input.catalogId)) {
+  if (input.catalogId && !findTemplate(ctx, input.catalogId)) {
     throw new ProjectError('That app is not in the catalog.')
   }
   return insertImageApp(ctx, owner, input)
@@ -303,7 +309,7 @@ export async function installCatalogApp(
   catalogId: string,
   input: CatalogInstall,
 ): Promise<Project> {
-  const template = catalogApp(catalogId)
+  const template = findTemplate(ctx, catalogId)
   if (!template) throw new UserError(404, 'not_found', 'That app is not in the catalog.')
   if (template.tier !== 'standard' && owner.role !== 'admin') {
     throw new UserError(
@@ -324,6 +330,7 @@ export async function installCatalogApp(
     image: template.image,
     port: template.port,
     memoryLimitMb: input.memoryLimitMb ?? template.memoryLimitMb,
+    ...(template.buildTimeoutMinutes ? { buildTimeoutMinutes: template.buildTimeoutMinutes } : {}),
     hostnames: input.hostnames,
     env: template.env,
     catalogId: template.id,
@@ -384,7 +391,22 @@ async function insertImageApp(
     throw error
   }
   await replaceAppStorage(ctx.db, project.id, storage)
-  if (input.env && Object.keys(input.env).length) await setEnv(ctx, project.id, input.env)
+  // A stack template (D44): its services' kept folders, and secrets made for this install only.
+  const template = input.catalogId ? findTemplate(ctx, input.catalogId) : null
+  await insertServiceVolumes(
+    ctx.db,
+    project.id,
+    (template?.services ?? []).flatMap((service) =>
+      service.volumes.map((v) => ({ service: service.name, name: v.name, mountPath: v.mountPath })),
+    ),
+  )
+  const env = {
+    ...input.env,
+    ...Object.fromEntries(
+      (template?.secrets ?? []).map((key) => [key, randomBytes(24).toString('hex')]),
+    ),
+  }
+  if (Object.keys(env).length) await setEnv(ctx, project.id, env)
   return project
 }
 
@@ -426,6 +448,15 @@ export async function updateProjectSettings(
     gpu: project.gpu,
   }
   const storage = await cleanStorage(ctx, role, { volumes, libraries, gpu }, current)
+  if (storage.volumes) {
+    const taken = (await listAppVolumes(ctx.db, [project.id])).filter((v) => v.service)
+    const clash = storage.volumes.find((v) => taken.some((t) => t.name === v.name))
+    if (clash) {
+      throw new ProjectError(
+        `"${clash.name}" is the name of storage that a part of this app uses. Pick another name.`,
+      )
+    }
+  }
   // Storage added to an app that starts its new version first: stop the old one first instead,
   // unless this change chose the strategy itself.
   if (storage.volumes?.length && clean.strategy === undefined && project.strategy === 'rolling') {
@@ -464,6 +495,8 @@ export async function deleteProject(
     for (const container of await ctx.docker.listManagedApps(project.id)) {
       await ctx.docker.removeContainer(container.id)
     }
+    // A stack's services stop gracefully: a database whose data is kept must shut down cleanly.
+    await removeStack(ctx, project.id)
     if (data === 'delete') await deleteAppVolumes(ctx, project)
     await deleteProjectRow(ctx.db, project.id)
   })
@@ -568,7 +601,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       strategy: p.strategy,
       gpu: p.gpu,
       volumes: volumes
-        .filter((v) => v.projectId === p.id)
+        .filter((v) => v.projectId === p.id && !v.service)
         .map(({ name, mountPath }) => ({ name, mountPath })),
       libraries: libraries
         .filter((l) => l.projectId === p.id)

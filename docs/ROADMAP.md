@@ -8,7 +8,7 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 | Phase                               | State                                                                                                                        |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release. |
-| 2. The app catalog                  | **In progress.** Step 1 (server-side templates, D43) done, plus five single-container templates. Stacks next.                |
+| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; seven templates including Immich. Launcher next.         |
 | 3. Smart home, games, private HTTPS | Planned.                                                                                                                     |
 | 4. For students and projects        | Planned.                                                                                                                     |
 | 5. See everything                   | Planned.                                                                                                                     |
@@ -134,14 +134,27 @@ Where it lives (a dashboard page, `hangar-admin stress`, or both) is to be decid
   image so updating is one click; a "set up now" reminder on apps whose first visitor is admin
   until their first steps are dismissed.
 
+- **Stacks: done (D44).** A template's `services` run as `hangar-svc-<app>-<service>` on a private
+  network per app (`hangar-stack-<appId>`) that only the app also joins; `apps/server/src/worker/
+stack.ts`. No `services` table: the template is the source of truth (a stored spec can come with
+  compose import). Secrets per install (`secrets`), `${NAME}` in service env, `{version}` in a
+  service image to follow the app. Service storage is `app_volumes` rows with `service` set,
+  shown read-only in the app's Storage panel. Integration test: `stack-test`, a dev-only template
+  (`HANGAR_TEST_TEMPLATES=1`); real templates: `HANGAR_TEST_CATALOG=immich pnpm vitest run
+--project integration catalog`.
+- **Immich** is the first stack (server, Postgres with vector search, Valkey, machine learning;
+  v3.4.2). Templates can set a longer download limit (`buildTimeoutMinutes`, Immich 45).
+- Known limits of stacks: the runtime logs and metrics show the app's own container only; a
+  rollback keeps services at the current version (Immich's machine learning follows the app's
+  configured version, not the rolled-back one); services' memory is not in the home screen's
+  totals.
+
 ### Phase 2, next steps
 
-1. **Stacks.** A `services` table (one row per container of an app); the pipeline starts them in
-   `dependsOn` order on an internal network per stack; only the primary service is routed.
-   Generated secrets per install, stored encrypted like env vars.
-2. **Templates that need stacks:** Immich (the stack proof), Paperless-ngx. Vaultwarden needs
+1. **Templates that need stacks:** Paperless-ngx (Redis + its own Postgres). Vaultwarden needs
    phase 3's private HTTPS and can wait.
-3. **The app launcher** widget on the home screen.
+2. **The app launcher** widget on the home screen.
+3. Each part's status and logs on a stack app's page.
 4. Tour data for the new templates, catalog screenshots, and a guide per category.
 
 ## The goal

@@ -7,6 +7,8 @@ import {
   imageRepository,
   imageTag,
   isMemberCatalogApp,
+  serviceEnv,
+  serviceImage,
   isPinnedImage,
   isValidImageRef,
   VOLUME_NAME_PATTERN,
@@ -124,8 +126,59 @@ describe('the catalog', () => {
       expect(app.firstSteps.length).toBeGreaterThan(0)
     }
   })
+  it('has consistent stacks (D44)', () => {
+    for (const app of CATALOG) {
+      const names = new Set(app.volumes.map((v) => v.name))
+      const known = new Set([...Object.keys(app.env), ...(app.secrets ?? [])])
+      const services = new Set<string>()
+      for (const service of app.services ?? []) {
+        // Its name is its address on the stack network.
+        expect(VOLUME_NAME_PATTERN.test(service.name)).toBe(true)
+        expect(services.has(service.name)).toBe(false)
+        services.add(service.name)
+        const image = serviceImage(service, app.image)
+        expect([service.name, isValidImageRef(image)]).toEqual([service.name, true])
+        expect([service.name, isPinnedImage(image)]).toEqual([service.name, true])
+        expect(service.memoryLimitMb).toBeGreaterThan(0)
+        for (const volume of service.volumes) {
+          // Kept folders share one namespace per app (they become hangar-data-<app>-<name>).
+          expect(names.has(volume.name)).toBe(false)
+          names.add(volume.name)
+          expect(VOLUME_NAME_PATTERN.test(volume.name)).toBe(true)
+          expect(checkMountPath(volume.mountPath)).toBeNull()
+        }
+        // Every ${NAME} refers to the app's env or a generated secret.
+        for (const value of Object.values(service.env)) {
+          for (const [, name] of value.matchAll(/\$\{([A-Z0-9_]+)\}/g)) {
+            expect([service.name, name, known.has(name!)]).toEqual([service.name, name, true])
+          }
+        }
+      }
+    }
+  })
   it('offers members at least one app', () => {
     expect(CATALOG.some((app) => app.tier === 'standard')).toBe(true)
+  })
+})
+
+describe('stack services', () => {
+  const service = {
+    name: 'ml',
+    image: 'ghcr.io/x/ml:{version}',
+    memoryLimitMb: 1,
+    env: { PASSWORD: '${DB_PASSWORD}', PLAIN: 'v', BOTH: 'a-${A}-${MISSING}' },
+    volumes: [],
+  }
+  it('follows the app version where asked', () => {
+    expect(serviceImage(service, 'ghcr.io/x/server:v3.4.2')).toBe('ghcr.io/x/ml:v3.4.2')
+    expect(serviceImage({ ...service, image: 'valkey/valkey:9' }, 'x/y:1')).toBe('valkey/valkey:9')
+  })
+  it('fills env from the app, and nothing else', () => {
+    expect(serviceEnv(service, { DB_PASSWORD: 'secret', A: '1', OTHER: 'x' })).toEqual({
+      PASSWORD: 'secret',
+      PLAIN: 'v',
+      BOTH: 'a-1-',
+    })
   })
 })
 

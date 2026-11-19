@@ -31,6 +31,7 @@ import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
 import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
 import { createDeploymentLog, type DeploymentLog } from './deployment-log.ts'
 import { switchRoute } from './reconciler.ts'
+import { pullStackImages } from './stack.ts'
 
 /** Abort reasons for the controller the worker passes in. */
 export const ABORT_CANCEL = 'cancel'
@@ -187,7 +188,7 @@ export async function runDeployment(
       try {
         log.system(`Starting the app (port ${port}, memory limit ${project.memoryLimitMb} MB)`)
         const container = await step('container_start_failed', control, () =>
-          startAppContainer(ctx, project, deployment, image, port, env),
+          startAppContainer(ctx, project, deployment, image, port, env, (line) => log.system(line)),
         )
         containerName = container.name
         await updateDeployment(ctx.db, deployment.id, { containerId: container.id, port })
@@ -256,6 +257,10 @@ async function pull(
   await updateDeployment(ctx.db, deployment.id, patch)
   await step('pull_failed', signal, () => ctx.docker.tagImage(id, patch.imageTag))
   log.system(`Pulled ${ref} (${digest.slice(0, 12)})`)
+  // A stack's other parts (D44), under the same time limit as the app's own image.
+  await step('pull_failed', signal, () =>
+    pullStackImages(ctx, project, (line) => log.write('stdout', line), signal),
+  )
   return patch
 }
 

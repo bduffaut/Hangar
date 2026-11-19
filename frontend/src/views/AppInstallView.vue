@@ -165,6 +165,16 @@ const blocked = computed(
     memoryValue.value === null,
 )
 
+/** A stack's parts (D44) and the most memory they may use together, for the install page. */
+const parts = computed(() => template.value?.services ?? [])
+const stackMemoryGb = computed(() => {
+  const t = template.value
+  if (!t || !parts.value.length) return null
+  const mb =
+    (memoryValue.value ?? t.memoryLimitMb) + parts.value.reduce((n, p) => n + p.memoryLimitMb, 0)
+  return Math.round((mb / 1024) * 10) / 10
+})
+
 /** Whether this is the template as written: then the server installs it from its own copy. */
 const asWritten = computed(() => {
   const t = template.value
@@ -212,6 +222,7 @@ async function install() {
               image: image.value.trim(),
               port: portValue.value,
               memoryLimitMb: memoryValue.value!,
+              ...(t?.buildTimeoutMinutes ? { buildTimeoutMinutes: t.buildTimeoutMinutes } : {}),
               hostnames,
               volumes: volumes.value.map((v) => ({
                 name: v.name.trim(),
@@ -271,6 +282,12 @@ async function install() {
       <a :href="template.website" target="_blank" rel="noopener" class="hg-install-site">
         {{ template.website.replace(/^https:\/\//, '') }} <BaseIcon name="external" :size="14" />
       </a>
+      <p v-if="parts.length" class="hg-install-parts hg-muted">
+        Runs as {{ parts.length + 1 }} parts that Hangar starts, updates, and stops together:
+        {{ template.name }}, {{ parts.map((p) => p.name).join(', ') }}. Together they may use up to
+        {{ stackMemoryGb }} GB of memory. Only {{ template.name }} gets an address; the other parts
+        are private to it.
+      </p>
     </HgPanel>
 
     <HgPanel v-if="custom" title="Image">
@@ -475,6 +492,11 @@ async function install() {
   align-items: center;
   gap: var(--hg-space-1);
   font-size: var(--hg-size-sm);
+}
+.hg-install-parts {
+  margin: var(--hg-space-3) 0 0;
+  font-size: var(--hg-size-sm);
+  line-height: 1.6;
 }
 .hg-install-group {
   display: grid;

@@ -25,6 +25,9 @@ export const LABELS = {
   tunnelToken: 'hangar.tunnel-token',
   /** On a data volume: the app it was made for (by name), kept after the app is deleted. */
   app: 'hangar.app',
+  /** On a stack service container (D44): its service name, and a hash of how it was made. */
+  service: 'hangar.service',
+  serviceSpec: 'hangar.service-spec',
 } as const
 
 /** One mount of an app container: a Hangar volume, or a library folder from the computer. */
@@ -55,7 +58,28 @@ export interface AppContainerSpec {
   mounts?: AppMount[]
   /** Pass /dev/dri (the graphics chip) through. */
   gpu?: boolean
+  /** More networks to join, such as the app's private stack network. */
+  extraNetworks?: string[]
 }
+
+/** A supporting container of a stack (D44): never routed, only on its stack's network. */
+export interface ServiceContainerSpec {
+  name: string
+  image: string
+  projectId: string
+  service: string
+  /** A hash of image, env, and mounts: a different hash means the container must be replaced. */
+  specHash: string
+  env: Record<string, string>
+  memoryLimitMb: number
+  network: string
+  mounts: AppMount[]
+  healthCommand?: string
+  shmSizeMb?: number
+}
+
+/** Docker's view of a container's health: `none` when it has no health check. */
+export type ContainerHealth = 'starting' | 'healthy' | 'unhealthy' | 'none'
 
 export interface ManagedContainer {
   id: string
@@ -100,6 +124,31 @@ export function createDocker(docker = new Dockerode()) {
     } catch (error) {
       if (isNotFound(error)) return null
       throw error
+    }
+  }
+
+  /** Limits shared by apps and stack services: memory, processes, CPU weight, capabilities. */
+  function appHostConfig(spec: { network: string; memoryLimitMb: number; mounts?: AppMount[] }) {
+    return {
+      NetworkMode: spec.network,
+      RestartPolicy: { Name: 'unless-stopped' },
+      CapDrop: APP_DROPPED_CAPABILITIES,
+      SecurityOpt: ['no-new-privileges'],
+      Memory: spec.memoryLimitMb * 1024 * 1024,
+      // Volumes and library folders. A bind source must already exist: Docker refuses a
+      // missing folder instead of creating it as root (the Mounts API, not -v).
+      Mounts: (spec.mounts ?? []).map((m) => ({
+        Type: m.type,
+        Source: m.source,
+        Target: m.target,
+        ReadOnly: m.readOnly,
+        ...(m.type === 'bind' ? { BindOptions: { Propagation: 'rprivate' as const } } : {}),
+      })),
+      // A runaway app (fork loop, busy loop) must not starve the database or Hangar itself:
+      // cap its processes, and give it half the default CPU weight when the CPU is contended.
+      PidsLimit: APP_PIDS_LIMIT,
+      CpuShares: APP_CPU_SHARES,
+      LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
     }
   }
 
@@ -210,32 +259,83 @@ export function createDocker(docker = new Dockerode()) {
           [LABELS.deployment]: spec.deploymentId,
         },
         HostConfig: {
-          NetworkMode: spec.network,
-          RestartPolicy: { Name: 'unless-stopped' },
-          CapDrop: APP_DROPPED_CAPABILITIES,
-          SecurityOpt: ['no-new-privileges'],
-          Memory: spec.memoryLimitMb * 1024 * 1024,
-          // Volumes and library folders. A bind source must already exist: Docker refuses a
-          // missing folder instead of creating it as root (the Mounts API, not -v).
-          Mounts: (spec.mounts ?? []).map((m) => ({
-            Type: m.type,
-            Source: m.source,
-            Target: m.target,
-            ReadOnly: m.readOnly,
-            ...(m.type === 'bind' ? { BindOptions: { Propagation: 'rprivate' as const } } : {}),
-          })),
+          ...appHostConfig(spec),
           Devices: spec.gpu
             ? [{ PathOnHost: '/dev/dri', PathInContainer: '/dev/dri', CgroupPermissions: 'rwm' }]
             : [],
-          // A runaway app (fork loop, busy loop) must not starve the database or Hangar itself:
-          // cap its processes, and give it half the default CPU weight when the CPU is contended.
-          PidsLimit: APP_PIDS_LIMIT,
-          CpuShares: APP_CPU_SHARES,
-          LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '3' } },
         },
+      })
+      for (const network of spec.extraNetworks ?? []) {
+        await docker.getNetwork(network).connect({ Container: container.id })
+      }
+      await container.start()
+      return container.id
+    },
+
+    /**
+     * Creates and starts a stack service (D44) with the same limits as an app, reachable on its
+     * stack network at its service name. Replaces a leftover with the same name.
+     */
+    async runService(spec: ServiceContainerSpec): Promise<string> {
+      const leftover = await inspectContainer(spec.name)
+      if (leftover) await docker.getContainer(leftover.Id).remove({ force: true, v: true })
+      const container = await docker.createContainer({
+        name: spec.name,
+        Image: spec.image,
+        Env: Object.entries(spec.env).map(([key, value]) => `${key}=${value}`),
+        Labels: {
+          [LABELS.managed]: 'true',
+          [LABELS.kind]: 'service',
+          [LABELS.project]: spec.projectId,
+          [LABELS.service]: spec.service,
+          [LABELS.serviceSpec]: spec.specHash,
+        },
+        ...(spec.healthCommand
+          ? {
+              Healthcheck: {
+                Test: ['CMD-SHELL', spec.healthCommand],
+                Interval: 5e9,
+                Timeout: 5e9,
+                Retries: 5,
+                StartPeriod: 10e9,
+              },
+            }
+          : {}),
+        HostConfig: {
+          ...appHostConfig(spec),
+          ...(spec.shmSizeMb ? { ShmSize: spec.shmSizeMb * 1024 * 1024 } : {}),
+        },
+        NetworkingConfig: { EndpointsConfig: { [spec.network]: { Aliases: [spec.service] } } },
       })
       await container.start()
       return container.id
+    },
+
+    /** A container's health, its image's spec hash label, and whether it runs; null if missing. */
+    async serviceState(
+      name: string,
+    ): Promise<{ running: boolean; health: ContainerHealth; specHash: string | null } | null> {
+      const info = await inspectContainer(name)
+      if (!info) return null
+      return {
+        running: info.State.Running,
+        health: (info.State.Health?.Status as ContainerHealth | undefined) ?? 'none',
+        specHash: info.Config.Labels?.[LABELS.serviceSpec] ?? null,
+      }
+    },
+
+    /** Creates a stack's private network if needed. Only the stack's own containers join it. */
+    async ensureStackNetwork(name: string, projectId: string): Promise<void> {
+      const network = docker.getNetwork(name)
+      await network.inspect().catch(async (error: unknown) => {
+        if (!isNotFound(error)) throw error
+        await docker.createNetwork({
+          Name: name,
+          Driver: 'bridge',
+          Internal: false,
+          Labels: { [LABELS.managed]: 'true', [LABELS.project]: projectId },
+        })
+      })
     },
 
     async containerState(idOrName: string): Promise<ContainerState | null> {
@@ -286,6 +386,7 @@ export function createDocker(docker = new Dockerode()) {
     },
 
     listManagedApps: (projectId?: string) => listManaged('app', projectId),
+    listManagedServices: (projectId?: string) => listManaged('service', projectId),
     listTunnels: () => listManaged('tunnel'),
 
     /** Pulls an image if it is not present yet. */
@@ -533,7 +634,7 @@ export function createDocker(docker = new Dockerode()) {
   return api
 
   async function listManaged(
-    kind: 'app' | 'tunnel',
+    kind: 'app' | 'service' | 'tunnel',
     projectId?: string,
   ): Promise<ManagedContainer[]> {
     const label = [`${LABELS.managed}=true`, `${LABELS.kind}=${kind}`]

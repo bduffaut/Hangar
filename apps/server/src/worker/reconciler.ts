@@ -16,6 +16,7 @@ import { LABELS } from '../platform/docker.ts'
 import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
 import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
+import { ensureStack, stopStack } from './stack.ts'
 
 // There is one routing file, so every write to it is serialized across processes.
 const ROUTING_LOCK = 'routing'
@@ -166,7 +167,18 @@ async function reconcileProject(ctx: Ctx, projectId: string): Promise<void> {
   const state = await ctx.docker.containerState(name)
   if (project.desiredState === 'stopped') {
     if (state?.running) await ctx.docker.stopContainer(name, CONTAINER_STOP_GRACE_SECONDS)
+    await stopStack(ctx, project)
     return
+  }
+  if (state) {
+    // A stack's services (D44) come back first if one stopped or was removed. The app keeps
+    // running meanwhile; a failure is logged and tried again on the next pass.
+    try {
+      await ensureStack(ctx, project)
+    } catch (error) {
+      ctx.log.warn({ err: error, project: project.name }, 'Could not bring a stack service up')
+      return
+    }
   }
   if (state && !state.running && !state.restarting) {
     await ctx.docker.startContainer(name)

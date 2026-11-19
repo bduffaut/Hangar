@@ -3,14 +3,15 @@
 Besides your own code, Hangar runs ready-made apps: software someone else publishes as a Docker
 image. Open **Apps** in the dashboard to pick one:
 
-| App                | What it does                                          | Who can install it |
-| ------------------ | ----------------------------------------------------- | ------------------ |
-| **Jellyfin**       | Movies and shows on any device, like your own Netflix | Admins             |
-| **Navidrome**      | Your music collection, like your own Spotify          | Admins             |
-| **Audiobookshelf** | Audiobooks and podcasts, with progress kept           | Admins             |
-| **Uptime Kuma**    | Watches your sites and tells you when one is down     | Everyone           |
-| **Mealie**         | Recipes, meal plans, and shopping lists               | Everyone           |
-| **File Browser**   | Upload, download, and share files from a browser      | Everyone           |
+| App                | What it does                                              | Who can install it |
+| ------------------ | --------------------------------------------------------- | ------------------ |
+| **Immich**         | Backs up your phone's photos, like your own Google Photos | Everyone           |
+| **Jellyfin**       | Movies and shows on any device, like your own Netflix     | Admins             |
+| **Navidrome**      | Your music collection, like your own Spotify              | Admins             |
+| **Audiobookshelf** | Audiobooks and podcasts, with progress kept               | Admins             |
+| **Uptime Kuma**    | Watches your sites and tells you when one is down         | Everyone           |
+| **Mealie**         | Recipes, meal plans, and shopping lists                   | Everyone           |
+| **File Browser**   | Upload, download, and share files from a browser          | Everyone           |
 
 More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
 
@@ -75,6 +76,14 @@ Open the address on any device with Tailscale and follow Jellyfin's own setup:
 ## The other apps
 
 Each app's page shows its first steps once it is running. In short:
+
+- **Immich** runs as four parts: the app, its database, a cache, and machine learning for faces
+  and search. Hangar starts, updates, and stops them together, makes the database password for
+  you, and keeps the database where only Immich can reach it. The first install downloads several
+  gigabytes, so it can take a while. Open it, create the admin account, then install the Immich
+  phone app, sign in with the app's address, and turn on backup. Photos are kept in the app's
+  storage (`library`), and the database in the storage of its `database` part; both survive
+  updates. Together the parts may use up to about 6 GB of memory.
 
 - **Navidrome** and **Audiobookshelf** work like Jellyfin: add your music or audiobooks folder as
   a library, install, then create the admin account. Navidrome works with any Subsonic app on

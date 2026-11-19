@@ -180,8 +180,13 @@ export const appVolumes = pgTable(
       .references(() => projects.id, { onDelete: 'cascade' }),
     name: text().notNull(),
     mountPath: text().notNull(),
+    /** The stack service it belongs to (D44), or null for the app's own container. */
+    service: text(),
   },
-  (t) => [primaryKey({ columns: [t.projectId, t.name] }), unique().on(t.projectId, t.mountPath)],
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.name] }),
+    unique().on(t.projectId, t.service, t.mountPath).nullsNotDistinct(),
+  ],
 )
 
 /** Libraries mounted into an app. A library in use cannot be removed. */

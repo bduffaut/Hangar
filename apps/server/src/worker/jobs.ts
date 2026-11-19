@@ -2,11 +2,12 @@ import type { Ctx } from '../context.ts'
 import { refreshAddresses } from '../modules/addresses/service.ts'
 import { listDeploymentsByStatus } from '../modules/deployments/repo.ts'
 import { sendJob, transition } from '../modules/deployments/service.ts'
-import { listCurrentDeployments } from '../modules/projects/repo.ts'
+import { listCurrentDeployments, listProjects } from '../modules/projects/repo.ts'
 import { collectGarbage, sweepBuildDirs } from './gc.ts'
 import { ABORT_CANCEL, ABORT_SHUTDOWN, runDeployment } from './pipeline.ts'
 import { pollProjects } from './poller.ts'
 import { reconcile, reconnectOwnerNetworks } from './reconciler.ts'
+import { removeStack } from './stack.ts'
 
 const SHUTDOWN_WAIT_MS = 5_000
 
@@ -29,6 +30,14 @@ export async function recover(ctx: Ctx): Promise<void> {
     if (container.deploymentId && live.has(container.deploymentId)) continue
     await ctx.docker.removeContainer(container.id)
     ctx.log.info({ container: container.name }, 'Removed leftover app container')
+  }
+  // Stack services (D44) of apps that no longer exist.
+  const projectIds = new Set((await listProjects(ctx.db)).map((p) => p.id))
+  for (const container of await ctx.docker.listManagedServices()) {
+    if (container.projectId && projectIds.has(container.projectId)) continue
+    if (container.projectId) await removeStack(ctx, container.projectId)
+    else await ctx.docker.removeContainer(container.id)
+    ctx.log.info({ container: container.name }, 'Removed a leftover stack service')
   }
 
   await sweepBuildDirs(ctx)

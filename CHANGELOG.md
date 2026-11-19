@@ -28,6 +28,11 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   File Browser) are open to every account; the server installs them exactly as the catalog
   describes, and members can change their version. Apps that read a library or use the graphics
   chip stay with admins.
+- **Immich: back up your phone's photos (D44).** The first app made of several parts: the app,
+  its database, a cache, and machine learning for faces and search. Hangar starts, updates, and
+  stops them together, makes the database password for each install, and keeps the parts on a
+  private network only the app can reach.
+- Apps can have a longer download time limit set by their template (Immich: 45 minutes).
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.
 

@@ -50,6 +50,9 @@ is not a hosting service for strangers.
   the server. That is why a repository's code never runs inside core. The one exception to watch
   is `railpack prepare`, which reads a repository from inside core to plan a build. Each account's
   builder is a privileged container, as BuildKit requires, so a BuildKit escape is a server escape.
+- **A stack's parts are private to their app.** The database, cache, and other services of an
+  app like Immich run on a network only that app's container joins: no other app, and no address,
+  reaches them. Their passwords are generated per install and kept encrypted.
 - **Apps are visitors to each other.** Apps cannot connect directly to another account's
   containers, but through the proxy they can reach any routed app, including one with no public
   address, just as a device on your network can. An app should have its own login if it holds

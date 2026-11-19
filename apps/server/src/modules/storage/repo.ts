@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
 import type { Db } from '../../db/client.ts'
 import { appLibraries, appVolumes, libraries, projects } from '../../db/schema.ts'
 
@@ -46,6 +46,15 @@ export async function libraryUsage(db: Db): Promise<Map<string, string[]>> {
   return usage
 }
 
+/** Kept folders of an app's stack services (D44), made at install from the template. */
+export async function insertServiceVolumes(
+  db: Db,
+  projectId: string,
+  volumes: { service: string; name: string; mountPath: string }[],
+): Promise<void> {
+  if (volumes.length) await db.insert(appVolumes).values(volumes.map((v) => ({ ...v, projectId })))
+}
+
 export async function listAppVolumes(db: Db, projectIds: string[]): Promise<AppVolume[]> {
   if (projectIds.length === 0) return []
   return db
@@ -75,7 +84,7 @@ export async function listAppLibraries(db: Db, projectIds: string[]) {
 }
 export type AppLibraryMount = Awaited<ReturnType<typeof listAppLibraries>>[number]
 
-/** Replaces an app's storage and library lists (each only when given). */
+/** Replaces an app's own storage and library lists (each only when given); services keep theirs. */
 export async function replaceAppStorage(
   db: Db,
   projectId: string,
@@ -86,7 +95,9 @@ export async function replaceAppStorage(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     if (storage.volumes) {
-      await tx.delete(appVolumes).where(eq(appVolumes.projectId, projectId))
+      await tx
+        .delete(appVolumes)
+        .where(and(eq(appVolumes.projectId, projectId), isNull(appVolumes.service)))
       if (storage.volumes.length) {
         await tx.insert(appVolumes).values(storage.volumes.map((v) => ({ ...v, projectId })))
       }

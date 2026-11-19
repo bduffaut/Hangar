@@ -60,6 +60,8 @@ const sizeOf = (name: string) => {
   const bytes = storage.value?.volumes.find((v) => v.name === name)?.sizeBytes
   return bytes == null ? null : formatBytes(bytes)
 }
+/** Storage of a stack's other parts (D44): set by its template, shown but not edited here. */
+const partVolumes = computed(() => storage.value?.volumes.filter((v) => v.service) ?? [])
 const libraryOptions = computed(() =>
   known.value.map((l) => ({ label: `${l.name} (${l.path})`, value: l.id })),
 )
@@ -168,6 +170,17 @@ async function save() {
         </div>
         <div>
           <BaseButton size="sm" icon="plus" label="Add a kept folder" @click="addVolume" />
+        </div>
+        <div v-if="partVolumes.length" class="hg-storage-parts">
+          <p class="hg-muted">Kept by the app's other parts, which Hangar runs alongside it:</p>
+          <ul>
+            <li v-for="v in partVolumes" :key="v.name">
+              <span>{{ v.service }}</span> <code>{{ v.mountPath }}</code>
+              <span class="hg-muted">{{
+                v.sizeBytes == null ? '' : formatBytes(v.sizeBytes)
+              }}</span>
+            </li>
+          </ul>
         </div>
         <BaseMessage v-if="removedVolumes.length" tone="info">
           Removing {{ removedVolumes.map((v) => v.name).join(', ') }} here keeps its data. An admin
@@ -314,5 +327,16 @@ async function save() {
     grid-column: 1 / -1;
     text-align: left;
   }
+}
+.hg-storage-parts ul {
+  margin: var(--hg-space-2) 0 0;
+  padding-left: var(--hg-space-5);
+  font-size: var(--hg-size-sm);
+  line-height: 1.8;
+}
+.hg-storage-parts li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hg-space-2);
 }
 </style>

@@ -211,12 +211,20 @@ export async function needsAdmin(ctx: Ctx, project: Project): Promise<boolean> {
 }
 
 /**
- * The mounts for an app's container. Makes sure each storage volume exists and belongs to this
- * app's account, and checks each library folder again (it may have been replaced by a link).
+ * The mounts for an app's container, or for one of its stack services (D44). Makes sure each
+ * storage volume exists and belongs to this app's account, and checks each library folder again
+ * (it may have been replaced by a link). Libraries go to the app's own container only.
  */
-export async function resolveMounts(ctx: Ctx, project: Project): Promise<AppMount[]> {
+export async function resolveMounts(
+  ctx: Ctx,
+  project: Project,
+  service: string | null = null,
+): Promise<AppMount[]> {
   const mounts: AppMount[] = []
-  for (const volume of await listAppVolumes(ctx.db, [project.id])) {
+  const volumes = (await listAppVolumes(ctx.db, [project.id])).filter(
+    (v) => (v.service ?? null) === service,
+  )
+  for (const volume of volumes) {
     const name = dataVolumeName(project.name, volume.name)
     if (!(await ctx.docker.ensureDataVolume(name, project.name, project.ownerId))) {
       throw new StorageError(
@@ -226,6 +234,7 @@ export async function resolveMounts(ctx: Ctx, project: Project): Promise<AppMoun
     }
     mounts.push({ type: 'volume', source: name, target: volume.mountPath, readOnly: false })
   }
+  if (service !== null) return mounts
   for (const library of await listAppLibraries(ctx.db, [project.id])) {
     const found = await checkHostFolder(ctx, library.path)
     if (!found.ok) {
@@ -280,6 +289,7 @@ export async function storageView(ctx: Ctx, project: Project): Promise<StorageVi
       return {
         name: v.name,
         mountPath: v.mountPath,
+        service: v.service,
         dockerName,
         sizeBytes: measured.get(dockerName) ?? null,
       }

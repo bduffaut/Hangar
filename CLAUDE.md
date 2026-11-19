@@ -23,7 +23,8 @@ survives. One private Hangar per person, reachable only over Tailscale (D40).
   library paths, the catalog; `hostnames.ts`; `validation.ts`).
 - `apps/server`: Fastify API and worker. `src/modules/<feature>/{repo,service,routes}.ts`,
   `src/platform/` adapters (Docker, git, Traefik, the host probe), `src/worker/` (the deploy
-  pipeline, reconciler, cleanup, poller). Migrations in `drizzle/`.
+  pipeline, reconciler, cleanup, poller, and `stack.ts` for a stack's supporting services, D44).
+  Migrations in `drizzle/`.
 - `frontend`: Vue 3 dashboard. UI primitives are the `Base*` wrappers in `src/ui/` (PrimeVue is
   imported only there). `VITE_HANGAR_SITE=1` builds the public site, whose tour answers every
   API call from `src/demo/`: new endpoints need a demo answer there.
@@ -63,6 +64,11 @@ Testing notes:
 - Sign-in and invite redemption are rate limited per address; tests that need a fresh account
   pass `remoteAddress` to `call()`.
 - Long integration runs take minutes; run them in the background.
+- `HANGAR_TEST_TEMPLATES=1` (set in `docker/compose.dev.yml`, ignored in production) adds the
+  small `stack-test` template the integration tests use. After adding a catalog template or
+  changing its version, run it for real: `HANGAR_TEST_CATALOG=<id> pnpm vitest run --project
+integration catalog`.
+- Pipe test output to a file, not straight into `tail`: a pipe hides the exit code.
 
 ## Shipping
 

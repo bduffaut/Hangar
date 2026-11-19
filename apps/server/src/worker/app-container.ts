@@ -4,6 +4,7 @@ import { getEnv } from '../modules/env-vars/service.ts'
 import type { Project } from '../modules/projects/repo.ts'
 import { resolveMounts } from '../modules/storage/service.ts'
 import { appContainerName, ownerNetworkName } from '../platform/names.ts'
+import { ensureStack } from './stack.ts'
 
 /** Makes sure an account's network exists, with Traefik and core attached to reach its apps. */
 export async function ensureOwnerNetwork(ctx: Ctx, ownerId: string): Promise<string> {
@@ -16,7 +17,8 @@ export async function ensureOwnerNetwork(ctx: Ctx, ownerId: string): Promise<str
 /**
  * Starts the container for a deployment with the project's env vars (current ones unless given),
  * `PORT`, memory limit, storage, libraries, the graphics chip if granted, and managed labels. It
- * is not routed until the routing file says so.
+ * is not routed until the routing file says so. A stack's services (D44) are brought up first,
+ * and the container joins their private network.
  */
 export async function startAppContainer(
   ctx: Ctx,
@@ -25,11 +27,13 @@ export async function startAppContainer(
   image: string,
   port: number,
   env?: Record<string, string>,
+  log?: (line: string) => void,
 ): Promise<{ name: string; id: string }> {
   const name = appContainerName(project.name, deployment.number)
   env ??= await getEnv(ctx, project.id)
   const network = await ensureOwnerNetwork(ctx, project.ownerId)
   const mounts = await resolveMounts(ctx, project)
+  const stackNetwork = await ensureStack(ctx, project, log)
   const id = await ctx.docker.runApp({
     name,
     image,
@@ -40,6 +44,7 @@ export async function startAppContainer(
     network,
     mounts,
     gpu: project.gpu,
+    ...(stackNetwork ? { extraNetworks: [stackNetwork] } : {}),
   })
   return { name, id }
 }

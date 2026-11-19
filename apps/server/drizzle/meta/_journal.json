@@ -85,6 +85,13 @@
       "when": 1795051041470,
       "tag": "0011_build_timeout",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795068736482,
+      "tag": "0012_stack_services",
+      "breakpoints": true
     }
   ]
 }
