@@ -15,6 +15,7 @@ export type {
   AddressCheckResult,
   AddressEvent,
   AddressView,
+  CatalogInstall,
   CreatedLink,
   InviteView,
   LibraryView,
