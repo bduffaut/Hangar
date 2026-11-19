@@ -45,6 +45,43 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 - The deployment list shows an image app's pulls as "builds" (Build times chart, branch column
   empty); wording can be tuned when the app page gets its phase 2 tabs.
 
+### To do: estimated time to take off
+
+Some apps take much longer to deploy than others: a large image on a slow Wi-Fi link, a heavy
+build on a small computer, a first build with an empty cache. Each app already has a build time
+limit (Settings, 1 to 120 minutes, default 15). What is missing is telling people, before and
+during a deploy, how long it will likely take and whether it fits the limit.
+
+**On the app's Settings page, beside the build time limit (before anyone presses Deploy):**
+
+- Show **Estimated time to take off**: how long the next deploy should take, end to end (wait in
+  the queue, build or download, start, health check).
+- If the estimate is longer than the limit, show a warning there, with the fix in one click:
+  "This app usually takes about 22 minutes, longer than its 15-minute limit. Raise the limit to 30
+  minutes?" The same warning appears next to **Deploy** / **Update** on the app's page.
+- When there is nothing to go on yet (a new app), say so plainly and use a cautious default.
+
+**On the deployment page, while it runs:**
+
+- A live **estimated time remaining** countdown that updates every second, alongside the elapsed
+  time, per step (queued, building or downloading, starting, checking).
+- It re-estimates as it goes: during a pull, from the bytes downloaded so far and the current
+  speed; during a build, from how far previous builds had got at this point.
+- It warns before the limit is reached ("At this rate the download will need about 4 more minutes
+  than the limit allows"), not only when the build is stopped.
+
+**How to estimate (to design):**
+
+- Builds: from the app's own recent deploys (the median of the last few successful ones, per
+  step), falling back to similar apps on the same computer, then to a default.
+- Image apps: the image's size from its registry manifest (compressed layers, minus layers
+  already on the computer), divided by the computer's recent download speed, which Hangar can
+  measure from its own pulls.
+- First builds and builds after an env var change skip the cache, so they need a separate, longer
+  estimate.
+- Record per-step timings on each deployment (queued, building, deploying, health check) so the
+  estimates have data; today only the start and end of the whole deployment are kept.
+
 ### Phase 2, first steps
 
 1. **Server-side templates.** Installing with a `catalogId` takes the image, ports, and storage
