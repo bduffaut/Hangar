@@ -71,6 +71,9 @@ Testing notes:
 - `pnpm ship` updates the maintainer's server. **Another production site runs in its own
   containers on that same machine and must stay up:** never restart Docker or touch containers
   Hangar did not create, and check that site answers before, during, and after a deploy.
+  `pnpm ship` compresses the image and caps the copy at 6 MB/s (`HANGAR_SHIP_RATE_MB`): an
+  uncapped copy once filled the server's network link long enough for both Cloudflare tunnels to
+  drop for about 15 seconds.
 - Releases: follow "Releasing" in [CONTRIBUTING.md](CONTRIBUTING.md). Tagging `v*` runs the
   Release workflow, which builds the image and attaches `install.sh`; the one-line install uses
   the newest release.

@@ -8,8 +8,14 @@
 //                       server's Tailscale address, D40); then also:
 //   HANGAR_BIND_IP    address Hangar listens on there
 //   HANGAR_LAN_IP     address devices use to reach it (default: same as HANGAR_BIND_IP)
+//   HANGAR_SHIP_RATE_MB  cap on the image copy, in MB/s (default 6; 0 for no cap). The server
+//                        may be running other sites: an uncapped copy can fill its network link
+//                        long enough for their Cloudflare tunnels to drop.
 import { execFileSync, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { Transform } from 'node:stream'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { createGzip } from 'node:zlib'
 
 const host = process.env.HANGAR_SHIP_HOST ?? 'bduffaut@homeserver'
 const tailscale = process.env.HANGAR_TAILSCALE !== '0'
@@ -57,13 +63,33 @@ sh('docker', [
   '.',
 ])
 
-console.log(`Copying ${image} to ${host}…`)
+/** Passes bytes through at no more than `bytesPerSecond`. */
+function throttle(bytesPerSecond) {
+  const started = Date.now()
+  let sent = 0
+  return new Transform({
+    async transform(chunk, _encoding, done) {
+      sent += chunk.length
+      const due = (sent / bytesPerSecond) * 1000 - (Date.now() - started)
+      if (due > 0) await sleep(due)
+      done(null, chunk)
+    },
+  })
+}
+
+const rateMb = Number(process.env.HANGAR_SHIP_RATE_MB ?? 6)
+console.log(
+  `Copying ${image} to ${host}, compressed${rateMb > 0 ? `, at up to ${rateMb} MB/s` : ''}…`,
+)
 await new Promise((resolve, reject) => {
   const save = spawn('docker', ['save', image], { stdio: ['ignore', 'pipe', 'inherit'] })
+  // docker load reads gzip directly.
   const load = spawn('ssh', ['-o', 'BatchMode=yes', host, 'sudo docker load'], {
     stdio: ['pipe', 'inherit', 'inherit'],
   })
-  save.stdout.pipe(load.stdin)
+  let stream = save.stdout.pipe(createGzip({ level: 1 }))
+  if (rateMb > 0) stream = stream.pipe(throttle(rateMb * 1024 * 1024))
+  stream.pipe(load.stdin)
   load.on('exit', (code) =>
     code === 0 ? resolve() : reject(new Error(`docker load exited with ${code}`)),
   )
