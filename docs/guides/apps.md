@@ -1,14 +1,24 @@
 # Install apps like Jellyfin
 
 Besides your own code, Hangar runs ready-made apps: software someone else publishes as a Docker
-image. The first one in the catalog is **Jellyfin**, a media server that streams your movies
-and shows to your phone, TV, and laptop, like your own Netflix. More are on the
-[roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
+image. Open **Apps** in the dashboard to pick one:
+
+| App                | What it does                                          | Who can install it |
+| ------------------ | ----------------------------------------------------- | ------------------ |
+| **Jellyfin**       | Movies and shows on any device, like your own Netflix | Admins             |
+| **Navidrome**      | Your music collection, like your own Spotify          | Admins             |
+| **Audiobookshelf** | Audiobooks and podcasts, with progress kept           | Admins             |
+| **Uptime Kuma**    | Watches your sites and tells you when one is down     | Everyone           |
+| **Mealie**         | Recipes, meal plans, and shopping lists               | Everyone           |
+| **File Browser**   | Upload, download, and share files from a browser      | Everyone           |
+
+More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
 
 Apps are private by default: only your devices with Tailscale can reach them.
 
-> Installing apps needs an admin account. Apps can read folders on the computer and use its
-> hardware, so Hangar keeps that to admins.
+> **Who can install what.** Apps that read a folder on the computer (your movies, music, or
+> books) or use its graphics chip need an admin. The others are open to every account. Hangar
+> installs them exactly as the catalog describes, whatever the form sends.
 
 ## 1. Put your files in a folder
 
@@ -62,9 +72,31 @@ Open the address on any device with Tailscale and follow Jellyfin's own setup:
   with the same name and it picks the data back up. Data left by deleted apps is listed under
   **Settings → Storage**.
 
+## The other apps
+
+Each app's page shows its first steps once it is running. In short:
+
+- **Navidrome** and **Audiobookshelf** work like Jellyfin: add your music or audiobooks folder as
+  a library, install, then create the admin account. Navidrome works with any Subsonic app on
+  your phone; Audiobookshelf has its own app.
+- **Uptime Kuma**: choose SQLite when it asks for a database, create your account, then add a
+  monitor for each site.
+- **Mealie** starts with the account `changeme@example.com` and the password `MyPassword`. Sign in
+  straight away and change both.
+- **File Browser** makes a random password for its `admin` account. Find it in the app's
+  **Logs** in Hangar, sign in, and change it.
+
+> **Set an app up right after installing it.** Most apps make whoever opens them first their
+> admin. That is why Hangar does not offer a public address while installing those apps: finish
+> the setup on your own devices first, then add an address under the app's **Settings**.
+
+Anyone with an account can change the version of an app they installed (under **Settings**, then
+**Update**); only an admin can point an app at a different image.
+
 ## Any other app
 
-**Apps → Any image** runs any published Docker image, such as `ghcr.io/owner/app:1.2`:
+**Apps → Any image** (admins only) runs any published Docker image, such as
+`ghcr.io/owner/app:1.2`:
 
 1. Enter the image, with a version.
 2. Under **Customize**, add a **kept folder** for each folder the image's documentation calls a

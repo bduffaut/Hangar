@@ -41,6 +41,14 @@ export function imageTag(ref: string): string | null {
   return colon === -1 ? null : name.slice(colon + 1)
 }
 
+/** The repository part of a reference, without version or digest: `ghcr.io/owner/app`. */
+export function imageRepository(ref: string): string {
+  const name = ref.split('@')[0]!
+  const lastSlash = name.lastIndexOf('/')
+  const colon = name.indexOf(':', lastSlash + 1)
+  return colon === -1 ? name : name.slice(0, colon)
+}
+
 /** Whether a reference names a fixed version: a digest, or a tag other than latest. */
 export function isPinnedImage(ref: string): boolean {
   if (ref.includes('@sha256:')) return true
@@ -137,12 +145,12 @@ export const libraryPathProblemCopy: Record<LibraryPathProblem, string> = {
     'That folder is too broad to share. Pick the folder that holds the files, like /home/you/Videos.',
 }
 
-// The catalog (phase 1: one template; see docs/ROADMAP.md)
+// The catalog (D42, D43): templates the server installs as written; see docs/ROADMAP.md
 
 export interface CatalogApp {
   id: string
   name: string
-  category: 'media' | 'photos' | 'files' | 'smart-home' | 'monitoring' | 'developer'
+  category: 'media' | 'photos' | 'files' | 'home' | 'smart-home' | 'monitoring' | 'developer'
   summary: string
   /** A paragraph for the install page: what it does and what you need. */
   description: string
@@ -156,9 +164,17 @@ export interface CatalogApp {
   /** Offer the graphics chip when the computer has one. */
   gpu?: { hint: string }
   env: Record<string, string>
+  /**
+   * Whoever opens it first becomes its admin (or it starts with a well-known password). Such an
+   * app gets no public address at install: its owner finishes the setup first, then adds one.
+   */
+  firstVisitorIsAdmin: boolean
   /** What to do once it is live: shown on the app's page until dismissed. */
   firstSteps: string[]
-  /** `elevated`: needs an admin (it reads a library or uses hardware). */
+  /**
+   * `standard`: any account may install it. `elevated`: needs an admin, because it reads a library
+   * or uses hardware. The server enforces this at install and at every deploy.
+   */
   tier: 'standard' | 'elevated'
 }
 
@@ -196,6 +212,7 @@ export const CATALOG: CatalogApp[] = [
     },
     gpu: { hint: 'Converts video with the graphics chip, so it plays smoothly on phones and TVs.' },
     env: {},
+    firstVisitorIsAdmin: true,
     firstSteps: [
       'Open the app and follow its setup: pick a language and create your Jellyfin account.',
       'Add a library: choose "Movies" or "Shows" and the folder /media.',
@@ -203,8 +220,173 @@ export const CATALOG: CatalogApp[] = [
     ],
     tier: 'elevated',
   },
+  {
+    id: 'navidrome',
+    name: 'Navidrome',
+    category: 'media',
+    summary: 'Stream your music collection to your phone, like your own Spotify.',
+    description:
+      'Navidrome reads the music in a folder on this computer and streams it to a web player and to dozens of phone apps (any app that speaks Subsonic). It is light enough for the smallest computer and handles very large collections.',
+    website: 'https://www.navidrome.org',
+    image: 'deluan/navidrome:0.64.2',
+    port: 4533,
+    memoryLimitMb: 512,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/data',
+        purpose: 'Accounts, playlists, and play counts',
+        backup: true,
+      },
+    ],
+    library: {
+      label: 'Music',
+      mountPath: '/music',
+      hint: 'The folder that holds your music. Navidrome only reads it.',
+      writable: false,
+    },
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create the admin account.',
+      'Navidrome finds the music in your library by itself; large collections take a few minutes.',
+      'On your phone, install a Subsonic app (such as Substreamer or play:Sub) and sign in with this address.',
+    ],
+    tier: 'elevated',
+  },
+  {
+    id: 'audiobookshelf',
+    name: 'Audiobookshelf',
+    category: 'media',
+    summary: 'Listen to your audiobooks and podcasts anywhere, and pick up where you left off.',
+    description:
+      'Audiobookshelf organizes the audiobooks in a folder on this computer, remembers where each listener stopped, and has phone apps for listening on the go and offline. It can also follow podcasts and download new episodes.',
+    website: 'https://www.audiobookshelf.org',
+    image: 'ghcr.io/advplyr/audiobookshelf:2.38.0',
+    port: 80,
+    memoryLimitMb: 1024,
+    volumes: [
+      {
+        name: 'config',
+        mountPath: '/config',
+        purpose: 'Accounts, progress, and settings',
+        backup: true,
+      },
+      {
+        name: 'metadata',
+        mountPath: '/metadata',
+        purpose: 'Covers, descriptions, and the app’s own backups',
+        backup: false,
+      },
+    ],
+    library: {
+      label: 'Audiobooks',
+      mountPath: '/audiobooks',
+      hint: 'The folder that holds your audiobooks, one folder per book. Audiobookshelf only reads it.',
+      writable: false,
+    },
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create the root account.',
+      'Add a library and choose the folder /audiobooks.',
+      'Install the Audiobookshelf app on your phone and sign in with this address.',
+    ],
+    tier: 'elevated',
+  },
+  {
+    id: 'uptime-kuma',
+    name: 'Uptime Kuma',
+    category: 'monitoring',
+    summary: 'Watch your websites and apps, and get told when one goes down.',
+    description:
+      'Uptime Kuma checks your sites, apps, and servers every minute and keeps a history of when each was up. It can alert you by email, Discord, Telegram, ntfy, and many others, and can show a public status page.',
+    website: 'https://uptime.kuma.pet',
+    image: 'louislam/uptime-kuma:2.5.12',
+    port: 3001,
+    memoryLimitMb: 512,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/app/data',
+        purpose: 'Monitors, history, and settings',
+        backup: true,
+      },
+    ],
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and choose SQLite as the database: it needs nothing else.',
+      'Create your admin account.',
+      'Add a monitor for each site or app you want to watch, and a notification to hear about it.',
+    ],
+    tier: 'standard',
+  },
+  {
+    id: 'mealie',
+    name: 'Mealie',
+    category: 'home',
+    summary: 'Keep your recipes in one place, plan meals, and build shopping lists.',
+    description:
+      'Mealie saves recipes from any website with one link, scales them, and turns a week of meals into a shopping list. Everyone in the household can have an account.',
+    website: 'https://mealie.io',
+    image: 'ghcr.io/mealie-recipes/mealie:v3.31.0',
+    port: 9000,
+    memoryLimitMb: 1024,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/app/data',
+        purpose: 'Recipes, photos, and accounts',
+        backup: true,
+      },
+    ],
+    env: { ALLOW_SIGNUP: 'false' },
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and sign in with changeme@example.com and the password MyPassword.',
+      'Follow its setup, then change that email and password under your profile right away.',
+      'Add a recipe by pasting a link to any recipe page.',
+    ],
+    tier: 'standard',
+  },
+  {
+    id: 'filebrowser',
+    name: 'File Browser',
+    category: 'files',
+    summary: 'Upload, download, and share files from any browser.',
+    description:
+      'File Browser gives you a simple web page to keep files on this computer: upload from your phone, organize folders, and share a link to a file. Files are kept in storage that survives updates.',
+    website: 'https://filebrowser.org',
+    image: 'filebrowser/filebrowser:v2.63.23',
+    port: 80,
+    memoryLimitMb: 256,
+    volumes: [
+      { name: 'files', mountPath: '/srv', purpose: 'Your files', backup: true },
+      { name: 'database', mountPath: '/database', purpose: 'Accounts and shares', backup: true },
+      { name: 'config', mountPath: '/config', purpose: 'Settings', backup: true },
+    ],
+    env: {},
+    firstVisitorIsAdmin: false,
+    firstSteps: [
+      'Open this app’s Logs in Hangar and find the password on the line that starts "User \'admin\' initialized".',
+      'Sign in as admin with that password, then change it under Settings → Profile.',
+      'Drag files onto the page to upload them.',
+    ],
+    tier: 'standard',
+  },
 ]
 
 export function catalogApp(id: string): CatalogApp | null {
   return CATALOG.find((app) => app.id === id) ?? null
+}
+
+/**
+ * Whether an app may run without an admin (D43): it came from a standard template and still runs
+ * that template's own image, at any version. Anything else from a published image needs an admin.
+ */
+export function isMemberCatalogApp(catalogId: string | null, image: string | null): boolean {
+  const template = catalogId ? catalogApp(catalogId) : null
+  if (!template || template.tier !== 'standard' || !image) return false
+  return isValidImageRef(image) && imageRepository(image) === imageRepository(template.image)
 }

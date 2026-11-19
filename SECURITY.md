@@ -70,6 +70,12 @@ is not a hosting service for strangers.
 - **The install command is trusted.** `curl … | sudo bash` runs the `install.sh` attached to the
   newest GitHub release. Anyone who can publish a release can change it. The install guide shows
   how to read it first, or to install from a release by hand.
+- **Catalog apps run someone else's image.** Each template names a pinned image from its
+  publisher's own repository, and members can only move between versions of that repository.
+  Installing one trusts its publisher as much as running `docker pull` would; Hangar does not scan images.
+  Apps whose first visitor becomes admin are installed private, but on a shared Hangar anyone on
+  your Tailscale network who opens such an app before its owner can claim it, so set apps up as
+  soon as they are installed.
 - **A library is the folder it names, nothing more.** Hangar cannot stop someone with a shell on
   the computer from replacing a library's contents; it does check the folder again before each
   deploy. An app with write access to a library can change or delete those files.

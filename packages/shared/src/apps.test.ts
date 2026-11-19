@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { checkProjectName } from './hostnames.ts'
 import {
   CATALOG,
   checkLibraryPath,
   checkMountPath,
+  imageRepository,
   imageTag,
+  isMemberCatalogApp,
   isPinnedImage,
   isValidImageRef,
   VOLUME_NAME_PATTERN,
@@ -116,6 +119,43 @@ describe('the catalog', () => {
       for (const volume of app.volumes) expect(VOLUME_NAME_PATTERN.test(volume.name)).toBe(true)
       // Anything reading the computer's folders or hardware needs an admin.
       if (app.library || app.gpu) expect(app.tier).toBe('elevated')
+      expect(checkProjectName(app.id)).toBeNull()
+      expect(app.port).toBeGreaterThan(0)
+      expect(app.firstSteps.length).toBeGreaterThan(0)
     }
+  })
+  it('offers members at least one app', () => {
+    expect(CATALOG.some((app) => app.tier === 'standard')).toBe(true)
+  })
+})
+
+describe('image repositories', () => {
+  it.each([
+    ['jellyfin/jellyfin:12.4', 'jellyfin/jellyfin'],
+    ['nginx', 'nginx'],
+    ['localhost:5000/team/app:1.2', 'localhost:5000/team/app'],
+    ['ghcr.io/owner/app@sha256:' + 'a'.repeat(64), 'ghcr.io/owner/app'],
+    ['ghcr.io/owner/app:1.2@sha256:' + 'a'.repeat(64), 'ghcr.io/owner/app'],
+  ])('%s → %s', (ref, repo) => expect(imageRepository(ref)).toBe(repo))
+})
+
+describe('what members may run (D43)', () => {
+  const standard = CATALOG.find((app) => app.tier === 'standard')!
+  const elevated = CATALOG.find((app) => app.tier === 'elevated')!
+  const repo = imageRepository(standard.image)
+  it('allows a standard template at any version of its own image', () => {
+    expect(isMemberCatalogApp(standard.id, standard.image)).toBe(true)
+    expect(isMemberCatalogApp(standard.id, `${repo}:9.9.9`)).toBe(true)
+    expect(isMemberCatalogApp(standard.id, `${repo}@sha256:${'b'.repeat(64)}`)).toBe(true)
+  })
+  it('refuses other images, elevated templates, and unknown ids', () => {
+    expect(isMemberCatalogApp(standard.id, 'evil/image:1.0')).toBe(false)
+    expect(isMemberCatalogApp(standard.id, `${repo}-fork:1.0`)).toBe(false)
+    expect(isMemberCatalogApp(standard.id, `ghcr.io/${repo}:1.0`)).toBe(false)
+    expect(isMemberCatalogApp(standard.id, `${repo}:1.0 `)).toBe(false)
+    expect(isMemberCatalogApp(elevated.id, elevated.image)).toBe(false)
+    expect(isMemberCatalogApp('nope', standard.image)).toBe(false)
+    expect(isMemberCatalogApp(null, standard.image)).toBe(false)
+    expect(isMemberCatalogApp(standard.id, null)).toBe(false)
   })
 })

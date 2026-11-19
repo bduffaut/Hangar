@@ -7,7 +7,7 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import pg from 'pg'
-import { contract, streams } from '@hangar/shared'
+import { catalogApp, contract, streams } from '@hangar/shared'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../src/app.ts'
 import { loadConfig } from '../../src/config.ts'
@@ -17,10 +17,12 @@ import { createLogger } from '../../src/logger.ts'
 import { refreshAddresses } from '../../src/modules/addresses/service.ts'
 import { issueSetupCode } from '../../src/modules/auth/service.ts'
 import { insertQueuedDeployment } from '../../src/modules/deployments/repo.ts'
+import { getProject } from '../../src/modules/projects/repo.ts'
 import { getSettings, setSettings } from '../../src/modules/settings/repo.ts'
 import { getGithubToken, TUNNEL_TOKEN_AAD } from '../../src/modules/settings/secrets.ts'
 import { GithubError } from '../../src/platform/github.ts'
 import { seedSettings } from '../../src/modules/settings/service.ts'
+import { needsAdmin } from '../../src/modules/storage/service.ts'
 import { redeemLink } from '../../src/modules/users/service.ts'
 import { DEV_DATABASE_URL, devCoreEnv, REPO_ROOT } from './harness.ts'
 
@@ -1151,6 +1153,65 @@ describe('accounts', () => {
       })
       expect(app.status).toBe(403)
       expect((await asMember('GET', '/api/storage')).status).toBe(403)
+    })
+
+    it('installs catalog templates from the server copy, standard ones for members (D43)', async () => {
+      const install = (id: string, body: object) =>
+        asMember('POST', `/api/catalog/${id}/install`, { deploy: false, ...body })
+      const kumaTemplate = catalogApp('uptime-kuma')!
+      // Whatever else the request says, the template decides what runs.
+      const kuma = await install('uptime-kuma', {
+        name: 'my-kuma',
+        image: 'nginx:1.29',
+        port: 80,
+        volumes: [{ name: 'root', mountPath: '/etc' }],
+        env: { EVIL: '1' },
+      })
+      expect(kuma.status).toBe(200)
+      expect(kuma.json()).toMatchObject({
+        kind: 'image',
+        image: kumaTemplate.image,
+        catalogId: 'uptime-kuma',
+        port: 3001,
+        volumes: [{ name: 'data', mountPath: '/app/data' }],
+        strategy: 'recreate',
+        hostnames: [],
+      })
+      const id = kuma.json().id as string
+      expect(await needsAdmin(ctx, (await getProject(ctx.db, id))!)).toBe(false)
+
+      // A member may change its version, but not what it runs.
+      const patch = (image: string) => asMember('PATCH', `/api/projects/${id}`, { image })
+      expect((await patch('louislam/uptime-kuma:2.5.11')).status).toBe(200)
+      expect((await patch('nginx:1.29')).status).toBe(403)
+      expect((await patch('louislam/uptime-kuma-fork:2')).status).toBe(403)
+
+      // Elevated templates, unknown ones, and public addresses before setup are refused.
+      expect((await install('jellyfin', { name: 'my-jellyfin' })).status).toBe(403)
+      expect((await install('nope', { name: 'nope' })).status).toBe(404)
+      expect((await install('Jelly_fin', { name: 'x' })).status).toBe(400)
+      const early = await install('mealie', {
+        name: 'my-mealie',
+        hostnames: ['my-mealie.example.com'],
+      })
+      expect(early.status).toBe(400)
+      expect(early.json().error.message).toContain('Finish setting up Mealie')
+
+      // Any other image (set straight in the database here) needs an admin again at deploy time.
+      await ctx.db.execute(`update projects set image = 'nginx:1.29' where id = '${id}'`)
+      expect(await needsAdmin(ctx, (await getProject(ctx.db, id))!)).toBe(true)
+      expect((await asMember('DELETE', `/api/projects/${id}?data=delete`)).status).toBe(200)
+
+      // Admins install elevated templates the same way.
+      const jellyfin = await admin('POST', '/api/catalog/jellyfin/install', {
+        name: 'cat-jellyfin',
+        deploy: false,
+      })
+      expect(jellyfin.status).toBe(200)
+      expect(jellyfin.json().image).toBe(catalogApp('jellyfin')!.image)
+      expect(
+        (await admin('DELETE', `/api/projects/${jellyfin.json().id}?data=delete`)).status,
+      ).toBe(200)
     })
 
     it.skipIf(desktop)('checks a library folder on paper and on the computer', async () => {

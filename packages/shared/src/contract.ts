@@ -302,6 +302,15 @@ export const contract = {
     body: s.imageAppInput,
     response: s.projectView,
   }),
+  /** A catalog template, installed as the server's copy says. Standard templates: anyone. */
+  installCatalogApp: endpoint({
+    method: 'POST',
+    path: '/api/catalog/:id/install',
+    access: 'session',
+    params: s.catalogParams,
+    body: s.catalogInstallInput,
+    response: s.projectView,
+  }),
 
   // Libraries: folders on the computer that apps may use. Admins only.
   listLibraries: endpoint({

@@ -1,7 +1,9 @@
 # Share Hangar with family or a team
 
 One Hangar can be shared. Each person has their own account and sees only their own apps, logs,
-and settings; admins manage accounts but cannot see other people's apps either.
+and settings; admins manage accounts but cannot see other people's apps either. Everyone can
+deploy their own code and install the apps that need nothing from the computer, like Uptime Kuma
+or Mealie; apps that read its folders, like Jellyfin, are an admin's to install.
 
 ## 1. Give them access to the computer
 

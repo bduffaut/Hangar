@@ -3,17 +3,22 @@ import { CATALOG } from '@hangar/shared'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { useProjectsStore } from '../stores/projects.ts'
+import { useSessionStore } from '../stores/session.ts'
 import { BaseIcon } from '../ui/index.ts'
 
 // Ready-made apps to install in one click, and any published image for those who know one (D42).
 useDocumentTitle('Apps')
 const projects = useProjectsStore()
+const session = useSessionStore()
+// Apps that read a library or use hardware are an admin's to install (the server enforces it).
+const locked = (tier: string) => tier !== 'standard' && !session.isAdmin
 void projects.ensureLoaded().catch(() => {})
 const installed = (id: string) => projects.projects.filter((p) => p.catalogId === id)
 const CATEGORY = {
   media: 'Media',
   photos: 'Photos',
   files: 'Files',
+  home: 'Around the house',
   'smart-home': 'Smart home',
   monitoring: 'Monitoring',
   developer: 'Developer tools',
@@ -26,11 +31,13 @@ const CATEGORY = {
     subtitle="Ready-made software for this computer. Each one is private to your devices unless you choose to publish it."
   />
   <div class="hg-apps">
-    <RouterLink
+    <component
+      :is="locked(app.tier) ? 'div' : 'RouterLink'"
       v-for="app in CATALOG"
       :key="app.id"
-      :to="{ name: 'app-install', params: { id: app.id } }"
+      :to="locked(app.tier) ? undefined : { name: 'app-install', params: { id: app.id } }"
       class="hg-app-card hg-notched"
+      :class="{ 'is-locked': locked(app.tier) }"
     >
       <span class="hg-app-category">{{ CATEGORY[app.category] }}</span>
       <h2>{{ app.name }}</h2>
@@ -43,9 +50,13 @@ const CATEGORY = {
             .join(', ')
         }}
       </span>
+      <span v-else-if="locked(app.tier)" class="hg-app-locked">
+        Reads a folder on this computer: ask an admin to install it.
+      </span>
       <span v-else class="hg-app-go">Install</span>
-    </RouterLink>
+    </component>
     <RouterLink
+      v-if="session.isAdmin"
       :to="{ name: 'app-install', params: { id: 'image' } }"
       class="hg-app-card is-custom"
     >
@@ -58,7 +69,7 @@ const CATEGORY = {
     </RouterLink>
   </div>
   <p class="hg-muted hg-apps-more">
-    More apps are coming: photo backup, passwords, smart home, and game servers. See the
+    More apps are coming: photo backup, documents, passwords, smart home, and game servers. See the
     <a
       href="https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md"
       target="_blank"
@@ -86,7 +97,7 @@ const CATEGORY = {
   color: var(--hg-ink);
   text-decoration: none;
 }
-.hg-app-card:hover {
+.hg-app-card:not(.is-locked):hover {
   border-color: var(--hg-accent);
 }
 .hg-app-card:focus-visible {
@@ -116,6 +127,12 @@ const CATEGORY = {
   font-size: var(--hg-size-sm);
   font-weight: var(--hg-weight-bold);
   color: var(--hg-accent);
+}
+.hg-app-locked {
+  margin-top: auto;
+  padding-top: var(--hg-space-3);
+  font-size: var(--hg-size-sm);
+  color: var(--hg-ink-muted);
 }
 .hg-app-installed {
   display: inline-flex;

@@ -3,12 +3,12 @@
 Each phase ends with something you can use on your own server, and each one becomes Decisions
 rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 
-## Where things stand (updated 2026-11-18)
+## Where things stand (updated 2026-11-19)
 
 | Phase                               | State                                                                                                                        |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release. |
-| 2. The app catalog                  | Next. Not started.                                                                                                           |
+| 2. The app catalog                  | **In progress.** Step 1 (server-side templates, D43) done, plus five single-container templates. Stacks next.                |
 | 3. Smart home, games, private HTTPS | Planned.                                                                                                                     |
 | 4. For students and projects        | Planned.                                                                                                                     |
 | 5. See everything                   | Planned.                                                                                                                     |
@@ -38,8 +38,6 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
   version once to see the recreate path.
 - **Cut a release** (`v0.4.0`) once that works: move the changelog's Unreleased notes, bump the
   versions (see CONTRIBUTING.md), tag.
-- Members cannot install catalog apps yet (all image apps are admin-only). Phase 2's server-side
-  template enforcement is what lets standard-tier templates open up to members.
 - Not built yet, planned for later phases: backups of kept folders (section 6), update checks
   for images (section 7), alerts (section 8), private registries, a per-app Network tab.
 - The deployment list shows an image app's pulls as "builds" (Build times chart, branch column
@@ -117,18 +115,34 @@ keep running; a warning before starting says what may slow down.
 
 Where it lives (a dashboard page, `hangar-admin stress`, or both) is to be decided.
 
-### Phase 2, first steps
+### Phase 2 so far (D43)
 
-1. **Server-side templates.** Installing with a `catalogId` takes the image, ports, and storage
-   from the template on the server (not from the request), so a member can install
-   `tier: standard` apps safely. Keep `POST /api/apps` admin-only for arbitrary images.
-2. **Stacks.** A `services` table (one row per container of an app); the pipeline starts them in
+- **Server-side templates: done.** `POST /api/catalog/:id/install` (any account) builds the app
+  from `CATALOG`; `POST /api/apps` stays admin-only for arbitrary images. `isMemberCatalogApp` in
+  `packages/shared/src/apps.ts` is the rule `needsAdmin` applies at every deploy: a standard
+  template still on its own image repository. Members can change such an app's version.
+- **Templates: six now.** Jellyfin, Navidrome, Audiobookshelf (elevated: they read a library),
+  Uptime Kuma, Mealie, File Browser (standard). Images pinned; ports, volumes, users, and first
+  steps checked by running each under Hangar's container options. `firstVisitorIsAdmin` keeps
+  apps that the first visitor claims (all but File Browser) off the internet at install.
+- Members see **Apps** in the nav; elevated templates show "ask an admin"; **Any image** is
+  hidden from them. The install page uses the catalog endpoint unless an admin changed the image,
+  port, or kept folders under Customize (then `POST /api/apps`).
+- Not yet run on the real server: none of the new templates has been installed there.
+- Ideas noticed on the way: honour an image's own `HEALTHCHECK` (Kuma, Mealie, File Browser and
+  Jellyfin all have one) instead of "any HTTP answer"; show the newest version of a template's
+  image so updating is one click; a "set up now" reminder on apps whose first visitor is admin
+  until their first steps are dismissed.
+
+### Phase 2, next steps
+
+1. **Stacks.** A `services` table (one row per container of an app); the pipeline starts them in
    `dependsOn` order on an internal network per stack; only the primary service is routed.
    Generated secrets per install, stored encrypted like env vars.
-3. **Templates:** Immich (the stack proof), Vaultwarden (needs phase 3's private HTTPS; can wait),
-   Uptime Kuma, Navidrome, Audiobookshelf, Paperless-ngx, Mealie, File Browser.
-4. **The app launcher** widget on the home screen.
-5. Tour data, catalog screenshots, and a guide per category.
+2. **Templates that need stacks:** Immich (the stack proof), Paperless-ngx. Vaultwarden needs
+   phase 3's private HTTPS and can wait.
+3. **The app launcher** widget on the home screen.
+4. Tour data for the new templates, catalog screenshots, and a guide per category.
 
 ## The goal
 

@@ -1,6 +1,7 @@
 import {
   checkLibraryPath,
   checkMountPath,
+  isMemberCatalogApp,
   libraryPathProblemCopy,
   type LibraryView,
   MAX_LIBRARIES,
@@ -199,9 +200,13 @@ export async function cleanStorage(
   return { volumes, libraries, gpu: input.gpu }
 }
 
-/** Whether an app uses anything only an admin can grant (checked again at every deploy). */
+/**
+ * Whether an app uses anything only an admin can grant (checked again at every deploy): the
+ * graphics chip, a library, or a published image other than a standard catalog template's (D43).
+ */
 export async function needsAdmin(ctx: Ctx, project: Project): Promise<boolean> {
-  if (project.kind === 'image' || project.gpu) return true
+  if (project.gpu) return true
+  if (project.kind === 'image' && !isMemberCatalogApp(project.catalogId, project.image)) return true
   return (await listAppLibraries(ctx.db, [project.id])).length > 0
 }
 

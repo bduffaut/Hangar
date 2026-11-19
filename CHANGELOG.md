@@ -22,6 +22,14 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - A guide: [Install apps like Jellyfin](docs/guides/apps.md).
 - **A build time limit per app**, in its Settings: 15 minutes by default, from 1 to 120. For an
   app from an image it limits the download.
+- **Five more apps in the catalog (D43):** Navidrome (music), Audiobookshelf (audiobooks and
+  podcasts), Uptime Kuma (monitoring), Mealie (recipes), and File Browser (files).
+- **Members can install apps.** Apps that need nothing from the computer (Uptime Kuma, Mealie,
+  File Browser) are open to every account; the server installs them exactly as the catalog
+  describes, and members can change their version. Apps that read a library or use the graphics
+  chip stay with admins.
+- Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
+  can claim them before their owner finishes setup.
 
 ## [0.3.1] - 2026-11-18
 

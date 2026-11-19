@@ -12,6 +12,7 @@ import {
   githubRepoSlug,
   hooksHostname,
   isValidBranchName,
+  isMemberCatalogApp,
   isValidImageRef,
   isPublicRepoHost,
   isValidRepoUrl,
@@ -21,6 +22,7 @@ import {
   type ProjectView,
   type DeployStrategy,
   type TriggerMode,
+  type CatalogInstall,
   type UserRole,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
@@ -267,25 +269,86 @@ export async function createProject(
  * software at all. It is private (on the Tailscale network) unless given public addresses, and
  * deploys by hand: "Update" pulls the image again.
  */
+type ImageAppInput = ProjectSettings &
+  StorageInput & {
+    name: string
+    image: string
+    env?: Record<string, string>
+    catalogId?: string
+  }
+
+/** Any published image, with the settings given (D42). Admins only. */
 export async function createImageApp(
   ctx: Ctx,
   owner: ProjectOwner,
-  input: ProjectSettings &
-    StorageInput & {
-      name: string
-      image: string
-      env?: Record<string, string>
-      catalogId?: string
-    },
+  input: ImageAppInput,
 ): Promise<Project> {
   if (owner.role !== 'admin') {
     throw new UserError(403, 'admin_only', 'Only an admin can install apps from an image.')
   }
+  if (input.catalogId && !catalogApp(input.catalogId)) {
+    throw new ProjectError('That app is not in the catalog.')
+  }
+  return insertImageApp(ctx, owner, input)
+}
+
+/**
+ * A catalog template, installed as written (D43): the image, port, storage, and env vars come from
+ * the template on the server, never from the request. Standard templates are open to every
+ * account; elevated ones (a library, the graphics chip) need an admin.
+ */
+export async function installCatalogApp(
+  ctx: Ctx,
+  owner: ProjectOwner,
+  catalogId: string,
+  input: CatalogInstall,
+): Promise<Project> {
+  const template = catalogApp(catalogId)
+  if (!template) throw new UserError(404, 'not_found', 'That app is not in the catalog.')
+  if (template.tier !== 'standard' && owner.role !== 'admin') {
+    throw new UserError(
+      403,
+      'admin_only',
+      `${template.name} reads a folder on this computer or uses its hardware, so only an admin can install it.`,
+      'Ask an admin to install it for you.',
+    )
+  }
+  if (template.firstVisitorIsAdmin && input.hostnames?.length) {
+    throw new ProjectError(
+      `Finish setting up ${template.name} before putting it on the internet: whoever opens it first becomes its admin.`,
+      'Install it privately, complete its setup, then add a public address under its Settings.',
+    )
+  }
+  return insertImageApp(ctx, owner, {
+    name: input.name,
+    image: template.image,
+    port: template.port,
+    memoryLimitMb: input.memoryLimitMb ?? template.memoryLimitMb,
+    hostnames: input.hostnames,
+    env: template.env,
+    catalogId: template.id,
+    volumes: template.volumes.map((v) => ({ name: v.name, mountPath: v.mountPath })),
+    libraries:
+      template.library && input.libraryId
+        ? [{ libraryId: input.libraryId, mountPath: template.library.mountPath, writable: false }]
+        : [],
+    gpu: Boolean(template.gpu && input.gpu),
+  })
+}
+
+async function insertImageApp(
+  ctx: Ctx,
+  owner: ProjectOwner,
+  input: ImageAppInput,
+): Promise<Project> {
   const problem = checkProjectName(input.name)
   if (problem) throw new ProjectError(NAME_PROBLEMS[problem])
   if (!isValidImageRef(input.image)) throw new ProjectError(IMAGE_PROBLEM)
-  if (input.catalogId && !catalogApp(input.catalogId)) {
-    throw new ProjectError('That app is not in the catalog.')
+  if (
+    owner.role !== 'admin' &&
+    (await listProjectsOf(ctx.db, owner.id)).length >= MAX_PROJECTS_PER_MEMBER
+  ) {
+    throw new ProjectError(`An account can have at most ${MAX_PROJECTS_PER_MEMBER} projects.`)
   }
   const settings = cleanSettings({
     port: input.port,
@@ -346,10 +409,17 @@ export async function updateProjectSettings(
     throw new ProjectError('This project is built from its repository, not an image.')
   }
   if (image !== undefined) {
-    if (role !== 'admin') {
-      throw new UserError(403, 'admin_only', 'Only an admin can change the image an app runs.')
-    }
     if (!isValidImageRef(image)) throw new ProjectError(IMAGE_PROBLEM)
+    // A member may change the version of a standard catalog app, never what it runs (D43).
+    if (role !== 'admin' && !isMemberCatalogApp(project.catalogId, image)) {
+      throw new UserError(
+        403,
+        'admin_only',
+        project.catalogId
+          ? 'You can change the version, but only an admin can switch this app to another image.'
+          : 'Only an admin can change the image an app runs.',
+      )
+    }
   }
   const current = {
     libraryIds: (await listAppLibraries(ctx.db, [project.id])).map((l) => l.libraryId),

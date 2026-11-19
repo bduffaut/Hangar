@@ -9,6 +9,7 @@ import {
   createProject,
   deleteProject,
   followRuntimeLogs,
+  installCatalogApp,
   ownedProject,
   projectView,
   projectViewsOf,
@@ -35,6 +36,13 @@ export function projectRoutes(http: Http) {
   route(http, contract.createImageApp, async ({ auth, body }) => {
     const { deploy, ...input } = body
     const project = await createImageApp(ctx, auth.user, input)
+    if (deploy !== false) await queueBranchHead(ctx, project, 'manual')
+    return projectView(ctx, await ownedProject(ctx, auth.user.id, project.id))
+  })
+
+  route(http, contract.installCatalogApp, async ({ auth, params, body }) => {
+    const { deploy, ...input } = body
+    const project = await installCatalogApp(ctx, auth.user, params.id, input)
     if (deploy !== false) await queueBranchHead(ctx, project, 'manual')
     return projectView(ctx, await ownedProject(ctx, auth.user.id, project.id))
   })

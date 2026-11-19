@@ -21,6 +21,7 @@ import HgPanel from '../components/HgPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { useProjectsStore } from '../stores/projects.ts'
+import { useSessionStore } from '../stores/session.ts'
 import {
   BaseButton,
   BaseField,
@@ -31,15 +32,26 @@ import {
   BaseSwitch,
 } from '../ui/index.ts'
 
-// Installing an app (D42): a catalog template with everything chosen, or any image by name. The
-// recommended settings are filled in; "Customize" shows the rest.
+// Installing an app (D42, D43): a catalog template with everything chosen, or any image by name.
+// The recommended settings are filled in; "Customize" shows the rest. Members install standard
+// templates as written; admins may also change a template's image, port, and storage.
 const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
+const session = useSessionStore()
 
 const id = computed(() => String(route.params.id))
 const template = computed(() => catalogApp(id.value))
 const custom = computed(() => id.value === 'image')
+/** Why this account cannot install it, if it cannot (the server checks the same). */
+const lockedReason = computed(() => {
+  if (session.isAdmin) return null
+  if (custom.value) return 'Only an admin can run any image. Pick an app from the list instead.'
+  if (template.value && template.value.tier !== 'standard') {
+    return `${template.value.name} reads a folder on this computer, so an admin installs it. Ask an admin to install it for you.`
+  }
+  return null
+})
 useDocumentTitle(
   computed(() => (template.value ? `Install ${template.value.name}` : 'Run an image')),
 )
@@ -73,7 +85,7 @@ const settings = ref<SettingsView | null>(null)
 const gpuAvailable = ref(false)
 onMounted(async () => {
   const [libs, info, s] = await Promise.all([
-    api('listLibraries').catch(() => [] as LibraryView[]),
+    session.isAdmin ? api('listLibraries').catch(() => [] as LibraryView[]) : [],
     api('systemInfo').catch(() => null),
     api('getSettings').catch(() => null),
     projects.ensureLoaded().catch(() => {}),
@@ -153,6 +165,22 @@ const blocked = computed(
     memoryValue.value === null,
 )
 
+/** Whether this is the template as written: then the server installs it from its own copy. */
+const asWritten = computed(() => {
+  const t = template.value
+  if (!t) return false
+  return (
+    image.value.trim() === t.image &&
+    portValue.value === t.port &&
+    JSON.stringify(volumes.value.map((v) => [v.name.trim(), v.mountPath.trim()])) ===
+      JSON.stringify(t.volumes.map((v) => [v.name, v.mountPath]))
+  )
+})
+/** Apps whose first visitor becomes admin stay private until their owner has set them up. */
+const offerPublic = computed(() =>
+  Boolean(publicAddress.value && !template.value?.firstVisitorIsAdmin),
+)
+
 const busy = ref(false)
 const error = ref<string | null>(null)
 async function install() {
@@ -160,25 +188,45 @@ async function install() {
   busy.value = true
   error.value = null
   const t = template.value
+  const hostnames =
+    offerPublic.value && publish.value && publicAddress.value ? [publicAddress.value] : []
+  const libraryChoice = t?.library && libraryId.value ? libraryId.value : undefined
+  const useGpu = Boolean(t?.gpu && gpuAvailable.value && gpu.value)
   try {
-    const project = await api('createImageApp', {
-      body: {
-        name: name.value.trim(),
-        image: image.value.trim(),
-        port: portValue.value,
-        memoryLimitMb: memoryValue.value!,
-        hostnames: publish.value && publicAddress.value ? [publicAddress.value] : [],
-        volumes: volumes.value.map((v) => ({ name: v.name.trim(), mountPath: v.mountPath.trim() })),
-        libraries:
-          t?.library && libraryId.value
-            ? [{ libraryId: libraryId.value, mountPath: t.library.mountPath }]
-            : [],
-        gpu: Boolean(t?.gpu && gpuAvailable.value && gpu.value),
-        env: t?.env,
-        catalogId: t?.id,
-        deploy: true,
-      },
-    })
+    const project =
+      t && asWritten.value
+        ? await api('installCatalogApp', {
+            params: { id: t.id },
+            body: {
+              name: name.value.trim(),
+              memoryLimitMb: memoryValue.value!,
+              hostnames,
+              ...(libraryChoice ? { libraryId: libraryChoice } : {}),
+              gpu: useGpu,
+              deploy: true,
+            },
+          })
+        : await api('createImageApp', {
+            body: {
+              name: name.value.trim(),
+              image: image.value.trim(),
+              port: portValue.value,
+              memoryLimitMb: memoryValue.value!,
+              hostnames,
+              volumes: volumes.value.map((v) => ({
+                name: v.name.trim(),
+                mountPath: v.mountPath.trim(),
+              })),
+              libraries:
+                t?.library && libraryChoice
+                  ? [{ libraryId: libraryChoice, mountPath: t.library.mountPath }]
+                  : [],
+              gpu: useGpu,
+              env: t?.env,
+              catalogId: t?.id,
+              deploy: true,
+            },
+          })
     projects.upsert(project)
     await router.push(
       project.latest
@@ -199,6 +247,12 @@ async function install() {
     title="That app is not in the catalog."
     body="It may have been renamed. Pick one from the list."
   >
+    <RouterLink v-slot="{ navigate }" :to="{ name: 'apps' }" custom>
+      <BaseButton variant="primary" label="Back to apps" @click="navigate" />
+    </RouterLink>
+  </EmptyState>
+
+  <EmptyState v-else-if="lockedReason" title="Ask an admin" :body="lockedReason">
     <RouterLink v-slot="{ navigate }" :to="{ name: 'apps' }" custom>
       <BaseButton variant="primary" label="Back to apps" @click="navigate" />
     </RouterLink>
@@ -299,7 +353,11 @@ async function install() {
             >http://{{ name.trim() }}.{{ settings.lanDomain }}</code
           ><span v-else>its own address</span>. Nobody else can reach it.
         </p>
-        <div v-if="publicAddress" class="hg-install-switch">
+        <p v-if="publicAddress && !offerPublic" class="hg-muted">
+          Whoever opens {{ template?.name }} first becomes its admin, so finish its setup before
+          putting it on the internet. Then add a public address under its Settings.
+        </p>
+        <div v-if="offerPublic" class="hg-install-switch">
           <BaseSwitch id="ai-public" v-model="publish" />
           <label for="ai-public"
             >Also put it on the internet at <code>{{ publicAddress }}</code></label
@@ -318,16 +376,34 @@ async function install() {
         <BaseField label="App name" for="ai-name" :error="nameProblem" help="Used in its address.">
           <BaseInput id="ai-name" v-model="name" mono @update:model-value="nameTouched = true" />
         </BaseField>
-        <BaseField v-if="template" label="Image" for="ai-image-t" :error="imageProblem">
+        <BaseField
+          v-if="template && session.isAdmin"
+          label="Image"
+          for="ai-image-t"
+          :error="imageProblem"
+        >
           <BaseInput id="ai-image-t" v-model="image" mono />
         </BaseField>
-        <BaseField label="Web port" for="ai-port" help="Leave empty to read it from the image.">
+        <BaseField
+          v-if="session.isAdmin"
+          label="Web port"
+          for="ai-port"
+          help="Leave empty to read it from the image."
+        >
           <BaseInput id="ai-port" v-model="port" mono inputmode="numeric" placeholder="auto" />
         </BaseField>
         <BaseField label="Memory limit (MB)" for="ai-memory">
           <BaseInput id="ai-memory" v-model="memory" mono inputmode="numeric" />
         </BaseField>
-        <div class="hg-install-wide">
+        <div v-if="!session.isAdmin && template" class="hg-install-wide">
+          <span class="hg-install-label">Kept folders</span>
+          <ul class="hg-install-kept">
+            <li v-for="v in template.volumes" :key="v.name">
+              <code>{{ v.mountPath }}</code> {{ v.purpose }}
+            </li>
+          </ul>
+        </div>
+        <div v-else class="hg-install-wide">
           <span class="hg-install-label">Kept folders</span>
           <p class="hg-muted hg-install-small">
             Folders inside the app that survive updates. Add the ones the image's documentation
@@ -449,6 +525,12 @@ async function install() {
 .hg-install-small {
   margin: 0;
   font-size: var(--hg-size-sm);
+}
+.hg-install-kept {
+  margin: 0;
+  padding-left: var(--hg-space-5);
+  font-size: var(--hg-size-sm);
+  line-height: 1.7;
 }
 .hg-install-row {
   display: grid;

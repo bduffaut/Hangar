@@ -4,6 +4,8 @@ import {
   BUILD_TIMEOUT_MAX_MINUTES,
   BUILD_TIMEOUT_MIN_MINUTES,
   errorCopy,
+  imageRepository,
+  isMemberCatalogApp,
   isPinnedImage,
   isValidImageRef,
   MEMORY_LIMIT_MAX_MB,
@@ -41,11 +43,19 @@ const props = defineProps<{ project: ProjectView }>()
 const session = useSessionStore()
 const isImage = computed(() => props.project.kind === 'image')
 const image = ref(props.project.image ?? '')
-const imageError = computed(() =>
-  isImage.value && !isValidImageRef(image.value.trim())
-    ? 'Enter an image like jellyfin/jellyfin:12.4, lowercase.'
-    : null,
+// Admins may change the image; a member may change the version of a standard catalog app (D43).
+const canEditImage = computed(
+  () => session.isAdmin || isMemberCatalogApp(props.project.catalogId, props.project.image),
 )
+const imageError = computed(() => {
+  const value = image.value.trim()
+  if (!isImage.value) return null
+  if (!isValidImageRef(value)) return 'Enter an image like jellyfin/jellyfin:12.4, lowercase.'
+  if (!session.isAdmin && !isMemberCatalogApp(props.project.catalogId, value)) {
+    return `Only the version can change: keep ${imageRepository(props.project.image ?? '')}.`
+  }
+  return null
+})
 const imageHint = computed(() =>
   isValidImageRef(image.value.trim()) && !isPinnedImage(image.value.trim())
     ? 'No version given, so each update takes whatever is newest. Pin one, like :12.4, to choose when to upgrade.'
@@ -102,7 +112,7 @@ async function save() {
             port: portValue.value,
             memoryLimitMb: memoryValue.value!,
             buildTimeoutMinutes: buildTimeoutValue.value!,
-            ...(session.isAdmin ? { image: image.value.trim() } : {}),
+            ...(canEditImage.value ? { image: image.value.trim() } : {}),
           }
         : {
             branch: branch.value.trim(),
@@ -197,7 +207,7 @@ async function remove() {
               v-model="image"
               mono
               :invalid="!!imageError"
-              :disabled="!session.isAdmin"
+              :disabled="!canEditImage"
             />
           </BaseField>
         </div>

@@ -402,6 +402,24 @@ export const imageAppInput = z.object({
   ...appStorage,
 })
 
+/**
+ * Installing a catalog template (D43). Only what is the installer's to choose: the template sets
+ * the image, port, storage, and env vars on the server.
+ */
+export const catalogInstallInput = z.object({
+  name: projectInput.shape.name,
+  memoryLimitMb: projectInput.shape.memoryLimitMb,
+  hostnames: projectInput.shape.hostnames,
+  /** The library for a template that asks for one. Admins only. */
+  libraryId: id.optional(),
+  /** Use the graphics chip, for a template that offers it. Admins only. */
+  gpu: z.boolean().optional(),
+  deploy: z.boolean().optional(),
+})
+export type CatalogInstall = z.infer<typeof catalogInstallInput>
+
+export const catalogParams = z.object({ id: z.string().regex(/^[a-z0-9-]{1,64}$/) })
+
 export const projectDeleteQuery = z.object({
   /** `delete` also removes the app's storage; by default it is kept for a reinstall. */
   data: z.enum(['keep', 'delete']).default('keep'),
