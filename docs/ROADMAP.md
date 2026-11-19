@@ -1,8 +1,62 @@
 # Roadmap: from deploy tool to home server dashboard
 
-Status: 2026-11-18. **Phase 1 is built** (D42): apps from images, storage, libraries, the graphics chip, and the first catalog app (Jellyfin). The rest is planned. Each phase ends with something you can use
-on your own server, and each one becomes Decisions rows in [ARCHITECTURE.md](ARCHITECTURE.md)
-when it lands.
+Each phase ends with something you can use on your own server, and each one becomes Decisions
+rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
+
+## Where things stand (updated 2026-11-18)
+
+| Phase                               | State                                                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release. |
+| 2. The app catalog                  | Next. Not started.                                                                                                           |
+| 3. Smart home, games, private HTTPS | Planned.                                                                                                                     |
+| 4. For students and projects        | Planned.                                                                                                                     |
+| 5. See everything                   | Planned.                                                                                                                     |
+| 6. Bring your own setup             | Planned.                                                                                                                     |
+
+### What phase 1 delivered (D42)
+
+- `projects.kind` is `source` or `image`. Image apps are pulled, tagged
+  `hangar/<app>:<n>-<digest>`, deployed by **Update** only, private by default.
+- Kept folders (`app_volumes`, Docker volumes `hangar-data-<app>-<name>`) for any app or project,
+  kept on delete unless asked, reused only by the same account.
+- The `recreate` strategy (`projects.strategy`), set automatically when storage is added.
+- Libraries (`libraries`, `app_libraries`): Settings → Storage, path rules in
+  `packages/shared/src/apps.ts`, the probe in `apps/server/src/platform/host.ts`.
+- The graphics chip (`projects.gpu`, `/dev/dri`), detected by the same probe.
+- Admin-only: libraries, the chip, image apps (`POST /api/apps` is `admin`), re-checked in the
+  pipeline and the reconciler.
+- The catalog is `CATALOG` in `packages/shared/src/apps.ts`: one app, Jellyfin (`12.4`).
+- Dashboard: **Apps** (`AppsView`), the install page (`AppInstallView`), each app's Storage panel
+  (`StorageEditor`), Settings → Storage (`LibrariesPanel`), first steps on a catalog app's page.
+- Guide: `docs/guides/apps.md`. Tour data includes a sample Jellyfin.
+
+### Open items from phase 1
+
+- **Jellyfin has not been installed for real yet.** First real run: make `/srv/media/movies` on
+  the server, install from **Apps**, confirm playback and the graphics chip, then update its
+  version once to see the recreate path.
+- **Cut a release** (`v0.4.0`) once that works: move the changelog's Unreleased notes, bump the
+  versions (see CONTRIBUTING.md), tag.
+- Members cannot install catalog apps yet (all image apps are admin-only). Phase 2's server-side
+  template enforcement is what lets standard-tier templates open up to members.
+- Not built yet, planned for later phases: backups of kept folders (section 6), update checks
+  for images (section 7), alerts (section 8), private registries, a per-app Network tab.
+- The deployment list shows an image app's pulls as "builds" (Build times chart, branch column
+  empty); wording can be tuned when the app page gets its phase 2 tabs.
+
+### Phase 2, first steps
+
+1. **Server-side templates.** Installing with a `catalogId` takes the image, ports, and storage
+   from the template on the server (not from the request), so a member can install
+   `tier: standard` apps safely. Keep `POST /api/apps` admin-only for arbitrary images.
+2. **Stacks.** A `services` table (one row per container of an app); the pipeline starts them in
+   `dependsOn` order on an internal network per stack; only the primary service is routed.
+   Generated secrets per install, stored encrypted like env vars.
+3. **Templates:** Immich (the stack proof), Vaultwarden (needs phase 3's private HTTPS; can wait),
+   Uptime Kuma, Navidrome, Audiobookshelf, Paperless-ngx, Mealie, File Browser.
+4. **The app launcher** widget on the home screen.
+5. Tour data, catalog screenshots, and a guide per category.
 
 ## The goal
 
@@ -160,14 +214,14 @@ Each alert type can be turned off or on per channel.
 Each phase lists what you can do at the end, what gets built, and how it is checked. Sizes are
 rough: S is a few days, M is one to two weeks, L is more.
 
-### Phase 1: Apps with storage (M)
+### Phase 1: Apps with storage (M) — built
 
 **At the end:** you can install **Jellyfin**, point it at your movies, watch on your phone over
 Tailscale, update it, and lose nothing.
 
 - `kind: image` apps: **Run an image** with an image name, port, env vars, and memory.
 - Managed volumes and the recreate strategy, with data kept across deploys and Hangar updates.
-- Libraries: Settings → Libraries, admin-only, path checks, read-only by default.
+- Libraries: Settings → Storage, admin-only, path checks, read-only by default.
 - GPU passthrough (`/dev/dri`) as an elevated option, auto-detected and offered when present.
 - **Delete app** asks separately about its data.
 - Catalog v0: one template (Jellyfin), to prove the format before the catalog grows.
@@ -326,18 +380,9 @@ library), with everything else under **Customize** and filled in with the templa
 - Piracy-oriented download stacks in the catalog (they can still be run as images).
 - A hosted Hangar (D40 stays: every Hangar is its owner's own).
 
-## Order and first steps
+## Order
 
-Phase 1 comes first because everything else stands on storage and the app model. Phases 2 and 3
-can swap places. Phase 4 can start in parallel once phase 1's model has landed, since add-ons
-are apps with storage.
-
-Phase 1, in order:
-
-1. The model: `kind`, `services`, `volumes`, `libraries`, the migration (existing projects
-   become `kind: source` apps with one service), and the tier checks.
-2. The pipeline: pulling images, the recreate strategy, volumes kept on replace.
-3. Settings → Libraries, and the GPU option.
-4. **Run an image** and the app page's Storage tab.
-5. The Jellyfin template and the minimal catalog page.
-6. Tour data and a guide: "Watch your movies anywhere".
+Phase 1 came first because everything else stands on storage and the app model (done). Phases 2
+and 3 can swap places. Phase 4 can start in parallel, since add-ons are apps with storage. Phase
+1 deliberately left out a `services` table: one container per app until stacks need more (phase
+2).

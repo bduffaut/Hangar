@@ -11,6 +11,10 @@
 - **Separation between accounts:** each person's apps and builds run on their own Docker network,
   and nobody sees another account's apps, admins included.
 - **Apps cannot reach** Hangar's database or the proxy's settings.
+- **Folders and hardware need an admin.** Only an admin can share a folder of the computer with an
+  app (read-only unless you allow writing), give it the graphics chip, or run a published image.
+  System folders, hidden folders, and folders reached through a link are refused, and every
+  deploy checks again.
 
 ## What it does not protect against
 
@@ -20,6 +24,8 @@
   If you can, put the Hangar computer on its own network (a guest network or VLAN).
 - **Anyone on your Tailscale network can reach the sign-in page.** Use strong passwords, and share
   the computer only with people you would give an account.
+- **Published images are what their makers ship.** Install apps from projects you trust, pinned
+  to a version.
 
 The full model and its known limits are in
 [SECURITY.md](https://github.com/bduffaut/Hangar/blob/main/SECURITY.md). Found a problem? Report it

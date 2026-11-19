@@ -151,6 +151,20 @@ If anything fails, the new container is removed, the deployment is marked `faile
 
 A **rollback** skips steps 2 to 4 and starts an older deployment's saved image.
 
+**Apps from a published image** (Jellyfin, or any image an admin names; D42) replace steps 2 to 4
+with a **pull**: Docker downloads the image, Hangar records its digest where a commit would go,
+and names it `hangar/<app>:<number>-<digest>`, so rollbacks and cleanup work the same (two image
+versions are kept instead of five, as they are large). They deploy only when you press
+**Update**.
+
+**Storage.** An app's **kept folders** are Docker volumes named `hangar-data-<app>-<name>`,
+mounted at the same place in every new container, so what the app writes there survives.
+**Libraries** are folders on the computer an admin registers in Settings → Storage; Hangar
+checks them before every start and mounts them read-only unless the library allows writing. An
+app with storage deploys with the **recreate** strategy: step 5 first stops the running version
+(two copies must never write to the same files), and if the new one fails, the old one is started
+again.
+
 If Hangar itself is restarted in the middle of a deploy, it marks that deploy as interrupted when it comes back, removes anything half-started, and makes Docker and Traefik match the database again.
 
 ---
@@ -188,21 +202,21 @@ hangar/
 
 ### `apps/server` (the backend)
 
-| Folder or file      | Role                                                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/main.ts`       | Starts everything: loads settings, upgrades the database, starts the worker and the web server.                                                    |
-| `src/config.ts`     | Reads and checks the environment variables Hangar is started with.                                                                                 |
-| `src/context.ts`    | Builds the `ctx` object handed to all code: database, Docker, git, builder, proxy, queue, events, encryption, GitHub. Tests can swap pieces of it. |
-| `src/http/`         | The web layer (see section 7).                                                                                                                     |
-| `src/modules/`      | The features, one folder each: `auth`, `projects`, `deployments`, `env-vars`, `settings`, `github`, `webhooks`, `metrics`, `system`.               |
-| `src/platform/`     | Adapters to the outside world: Docker, git, the builder, Traefik, the GitHub API, encryption, the queue, events, host metrics.                     |
-| `src/worker/`       | Background work: the deploy pipeline, the reconciler, cleanup, the poller, crash recovery.                                                         |
-| `src/db/`           | The database structure (`schema.ts`), connection, migrations, and locks.                                                                           |
-| `drizzle/`          | The migrations, generated from `schema.ts` by **Drizzle** (the database library).                                                                  |
-| `src/cli.ts`        | `hangar-admin`: issue a new setup code, or reset a password.                                                                                       |
-| `scripts/hangar.ts` | A development command-line tool (`pnpm hangar …`) to drive deploys without the dashboard.                                                          |
-| `scripts/build.mjs` | Bundles the server into one file for the production image.                                                                                         |
-| `test/integration/` | Tests that run against the real development setup.                                                                                                 |
+| Folder or file      | Role                                                                                                                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.ts`       | Starts everything: loads settings, upgrades the database, starts the worker and the web server.                                                                                                                                         |
+| `src/config.ts`     | Reads and checks the environment variables Hangar is started with.                                                                                                                                                                      |
+| `src/context.ts`    | Builds the `ctx` object handed to all code: database, Docker, git, builder, proxy, queue, events, encryption, GitHub. Tests can swap pieces of it.                                                                                      |
+| `src/http/`         | The web layer (see section 7).                                                                                                                                                                                                          |
+| `src/modules/`      | The features, one folder each: `auth`, `projects`, `deployments`, `env-vars`, `storage` (kept folders, libraries), `settings`, `github`, `webhooks`, `metrics`, `system`.                                                               |
+| `src/platform/`     | Adapters to the outside world: Docker, git, the builder, Traefik, the GitHub API, encryption, the queue, events, host metrics, and `host.ts` (looks at the computer's folders and graphics chip through a locked-down probe container). |
+| `src/worker/`       | Background work: the deploy pipeline, the reconciler, cleanup, the poller, crash recovery.                                                                                                                                              |
+| `src/db/`           | The database structure (`schema.ts`), connection, migrations, and locks.                                                                                                                                                                |
+| `drizzle/`          | The migrations, generated from `schema.ts` by **Drizzle** (the database library).                                                                                                                                                       |
+| `src/cli.ts`        | `hangar-admin`: issue a new setup code, or reset a password.                                                                                                                                                                            |
+| `scripts/hangar.ts` | A development command-line tool (`pnpm hangar …`) to drive deploys without the dashboard.                                                                                                                                               |
+| `scripts/build.mjs` | Bundles the server into one file for the production image.                                                                                                                                                                              |
+| `test/integration/` | Tests that run against the real development setup.                                                                                                                                                                                      |
 
 ### `frontend` (the dashboard)
 
@@ -275,15 +289,18 @@ Each feature in `src/modules/` is split the same way:
 
 ### The database tables
 
-| Table             | Holds                                                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `users`           | Your account (the password is stored only as an **argon2** hash) and your home screen layout.                              |
-| `sessions`        | Signed-in browsers (only a hash of each session token).                                                                    |
-| `settings`        | Server address, public domain, encrypted GitHub and tunnel tokens, the setup code's hash.                                  |
-| `projects`        | One row per app: repository, branch, folder, port, memory limit, how it deploys, custom domains, which deployment is live. |
-| `deployments`     | One row per attempt: number, commit, status, failure reason, image, timings.                                               |
-| `deployment_logs` | Every build log line, numbered, so a live viewer can resume where it left off.                                             |
-| `env_vars`        | Each project's variables, encrypted.                                                                                       |
+| Table             | Holds                                                                                                                                                                                                                |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users`           | Your account (the password is stored only as an **argon2** hash) and your home screen layout.                                                                                                                        |
+| `sessions`        | Signed-in browsers (only a hash of each session token).                                                                                                                                                              |
+| `settings`        | Server address, public domain, encrypted GitHub and tunnel tokens, the setup code's hash.                                                                                                                            |
+| `projects`        | One row per app: `kind` (built from a repository, or a published `image`), repository, branch, folder, port, memory limit, how it deploys (`strategy`), the graphics chip, custom domains, which deployment is live. |
+| `app_volumes`     | Each app's kept folders: a name and where it is mounted.                                                                                                                                                             |
+| `libraries`       | Folders on the computer an admin shared with apps, and whether apps may write to them.                                                                                                                               |
+| `app_libraries`   | Which app uses which library, mounted where, and whether it may write.                                                                                                                                               |
+| `deployments`     | One row per attempt: number, commit, status, failure reason, image, timings.                                                                                                                                         |
+| `deployment_logs` | Every build log line, numbered, so a live viewer can resume where it left off.                                                                                                                                       |
+| `env_vars`        | Each project's variables, encrypted.                                                                                                                                                                                 |
 
 ---
 
@@ -378,12 +395,13 @@ This builds Hangar's image on this PC, copies it to the laptop over your SSH con
 
 ## 11. Tests
 
-| Command                       | What it checks                                                                                                                                                                                                                                       | Needs                                                                                                       |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `pnpm test`                   | **Unit tests** (143): small pieces in isolation, such as encryption, validation, the routing file, wording completeness, log parsing, formatting.                                                                                                    | Nothing.                                                                                                    |
-| `pnpm test:integration`       | **Integration tests** (50): real deploys of every sample app, failed deploys keeping the old version, rollback, cancel, killing Hangar mid-build, the safety checks, the API's sign-in and validation, and the whole flow over HTTP through Traefik. | `pnpm dev` running.                                                                                         |
-| `pnpm test:e2e`               | **Browser tests**: a real browser completes the Preflight Checklist with a test flight, then creates, deploys, configures, rolls back, and deletes a project, on a desktop and a phone screen.                                                       | `pnpm dev` running, and the browser container (see `e2e/`). This resets the development instance's account. |
-| `pnpm lint`, `pnpm typecheck` | Code style and type mistakes.                                                                                                                                                                                                                        | Nothing.                                                                                                    |
+| Command                       | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Needs                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pnpm test`                   | **Unit tests** (208): small pieces in isolation, such as encryption, validation, image names and library folder rules, the catalog, the routing file, wording completeness, log parsing, formatting.                                                                                                                                                                                                                                                                                                    | Nothing.                                                                                                    |
+| `pnpm test:integration`       | **Integration tests**: real deploys of every sample app, an app pulled from an image, storage surviving a redeploy, failed deploys keeping the old version, rollback, cancel, killing Hangar mid-build, the safety checks, the API (sign-in, validation, who may grant libraries and hardware), and the whole flow over HTTP through Traefik. The two tests that check real library folders run only where Docker is native (Linux); Docker Desktop does not let containers see the computer's folders. | `pnpm dev` running.                                                                                         |
+| `pnpm test:site`              | **The public site**: the front page, the guides, and the tour, built and served, on a desktop and a phone screen.                                                                                                                                                                                                                                                                                                                                                                                       | Nothing.                                                                                                    |
+| `pnpm test:e2e`               | **Browser tests**: a real browser completes the Preflight Checklist with a test flight, then creates, deploys, configures, rolls back, and deletes a project, on a desktop and a phone screen.                                                                                                                                                                                                                                                                                                          | `pnpm dev` running, and the browser container (see `e2e/`). This resets the development instance's account. |
+| `pnpm lint`, `pnpm typecheck` | Code style and type mistakes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Nothing.                                                                                                    |
 
 GitHub runs the lint, type, unit, and integration checks on every push.
 

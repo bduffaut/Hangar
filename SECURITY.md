@@ -22,9 +22,21 @@ public issue.
   the Cloudflare Tunnel, and core refuses any dashboard request that arrives on the public
   entrypoint, whatever its hostname. Public traffic reaches only published apps, webhooks, and
   address checks, with no open ports.
-- **The public site** (hangar.benduffaut.com) is static: guides, the tour, and the install script.
-  It has no accounts and never connects to anyone's Hangar. The install script downloads the
-  release from GitHub and checks its checksum before running it.
+- **Folders and hardware are an admin's to grant (D42).** Libraries (folders on the computer), the
+  graphics chip, and apps from a published image are admin-only, enforced on the server and
+  checked again at every deploy and every restart against the owner's current role. A library
+  path is refused if it is, contains, or sits inside a system folder, a hidden folder, or a home
+  folder itself; then a short-lived probe container (no network, only the read-search
+  capability, a read-only root, the computer's `/` mounted read-only, the path passed as an
+  argument) refuses it if it is missing or any part of it is a link. Apps get libraries
+  read-only unless the library allows writing, and never by a path a user typed. There is no
+  option to run an app privileged or give it the Docker socket.
+- **Kept data stays with its account.** A data volume is labelled with the account that made it;
+  an app of the same name in another account is refused it rather than inheriting it.
+- **The public site** (hangar.benduffaut.com) is static: guides and the tour, served by nginx with
+  a strict content security policy. It has no accounts, serves no scripts, and never connects to
+  anyone's Hangar. The install command downloads `install.sh` from the GitHub release, which
+  downloads the release itself and checks its checksum before running it.
 
 ## Known limits
 
@@ -55,7 +67,11 @@ is not a hosting service for strangers.
   without Tailscale at all, it is plain HTTP on the local network.
 - **No two-factor sign-in yet.** Tailscale's own sign-in, with its two-factor options, is the
   first door.
-- **The install command is trusted.** `curl … | sudo bash` runs what hangar.benduffaut.com
-  serves. It only fetches a GitHub release and checks its checksum, but a compromised site could
-  serve a different script to new installs. The install guide shows how to read it first, or to
-  install from a release by hand.
+- **The install command is trusted.** `curl … | sudo bash` runs the `install.sh` attached to the
+  newest GitHub release. Anyone who can publish a release can change it. The install guide shows
+  how to read it first, or to install from a release by hand.
+- **A library is the folder it names, nothing more.** Hangar cannot stop someone with a shell on
+  the computer from replacing a library's contents; it does check the folder again before each
+  deploy. An app with write access to a library can change or delete those files.
+- **Published images are what their publishers ship.** Hangar pins what you choose but does not
+  review images. Install images from projects you trust, with a version tag.

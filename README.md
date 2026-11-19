@@ -36,6 +36,10 @@ else's cloud.
   HTTPS. Your home IP stays private.
 - **Live everything.** Build logs as they happen, your app's own output, CPU and memory per app,
   and whether each address really answers from the internet.
+- **Ready-made apps.** Install apps like **Jellyfin** (your own Netflix) from the **Apps**
+  catalog in one click, or run any published Docker image. Kept folders survive updates, and
+  **libraries** share folders on the computer (your movies, your photos) read-only by default.
+  More apps are on the [roadmap](docs/ROADMAP.md).
 - **Share it.** Invite family or a team; each person sees only their own apps.
 
 ![A project: its live version, build times, and resource use](docs/images/project.png)
@@ -84,12 +88,13 @@ sudo HANGAR_VERSION=0.3.1 bash installer/install.sh
 ```
 
 Everything runs on your computer. [hangar.benduffaut.com](https://hangar.benduffaut.com) is only
-the guide, the tour, and the install script: it has no accounts and never talks to your Hangar.
+the guides and the tour: it has no accounts, serves no scripts, and never talks to your Hangar.
+The install command downloads from the GitHub release.
 
 Hangar is a TypeScript monorepo: a Fastify API and worker, a Vue 3 dashboard, Postgres (data,
 job queue, and live events), Traefik for routing, and BuildKit for builds, all in Docker.
 
-- [Guides: install, Tailscale, going public, GitHub, sharing, troubleshooting](docs/guides)
+- [Guides: install, Tailscale, going public, apps like Jellyfin, GitHub, sharing, troubleshooting](docs/guides)
 - [How the code works, in plain language](docs/GUIDE.md)
 - [Architecture and decisions](docs/ARCHITECTURE.md)
 - [Roadmap: the home server dashboard](docs/ROADMAP.md)
