@@ -195,7 +195,7 @@ export async function runDeployment(
 
         const timeout =
           project.kind === 'image' ? IMAGE_HEALTH_CHECK_TIMEOUT_MS : HEALTH_CHECK_TIMEOUT_MS
-        await waitUntilHealthy(ctx, log, container.name, port, timeout)
+        await waitUntilHealthy(ctx, log, container.name, image, port, timeout)
         live = await switchTraffic(ctx, project, deployment, container, port, log)
       } finally {
         if (!live && paused.length) {
@@ -332,11 +332,21 @@ async function build(
   log.system(`Built ${tag}`)
 }
 
-/** Any HTTP response counts as healthy. A container that exits or restarts fails at once. */
+/** How long one run of an image's own health check may take. */
+const OWN_CHECK_TIMEOUT_MS = 10_000
+/** Pause between runs of an image's own health check while it still fails. */
+const OWN_CHECK_INTERVAL_MS = 2_000
+
+/**
+ * Any HTTP response counts as answering. An image with its own `HEALTHCHECK` must then also pass
+ * it (D46): Hangar runs that command itself, at once and every 2 s, instead of waiting on Docker's
+ * interval (often 30 s). A container that exits or restarts fails at once.
+ */
 async function waitUntilHealthy(
   ctx: Ctx,
   log: DeploymentLog,
   containerName: string,
+  image: string,
   port: number,
   timeoutMs: number,
 ): Promise<void> {
@@ -365,7 +375,7 @@ async function waitUntilHealthy(
     if (response) {
       const seconds = Math.round((Date.now() - started) / 100) / 10
       log.system(`The app answered with HTTP ${response.status} after ${seconds} s`)
-      return
+      return waitForOwnCheck(ctx, log, containerName, image, started + timeoutMs)
     }
     await sleep(HEALTH_CHECK_INTERVAL_MS)
   }
@@ -373,6 +383,49 @@ async function waitUntilHealthy(
     'health_check_failed',
     `The app did not answer on port ${port} within ${timeoutMs / 1000} seconds. ` +
       `Make sure it listens on 0.0.0.0 and on the port in the PORT variable.`,
+  )
+}
+
+/** Runs the image's own health check until it passes, if it has one (D46). */
+async function waitForOwnCheck(
+  ctx: Ctx,
+  log: DeploymentLog,
+  containerName: string,
+  image: string,
+  deadline: number,
+): Promise<void> {
+  const cmd = await ctx.docker.imageHealthCheck(image).catch(() => null)
+  if (!cmd) return
+  log.system(`Running the image's own health check: ${cmd.join(' ')}`)
+  const started = Date.now()
+  let last = ''
+  while (Date.now() < deadline) {
+    const state = await ctx.docker.containerState(containerName)
+    if (!state?.running || state.restarting || state.restartCount > 0) {
+      throw new PipelineError('health_check_failed', 'The app stopped during its own health check')
+    }
+    const result = await ctx.docker
+      .execOnce(containerName, cmd, OWN_CHECK_TIMEOUT_MS)
+      .catch((error: unknown) => ({ exitCode: -1, output: String(error) }))
+    if (result.exitCode === 0) {
+      const seconds = Math.round((Date.now() - started) / 100) / 10
+      log.system(`The image's own health check passed after ${seconds} s`)
+      return
+    }
+    // 126 and 127: the command cannot run in this container (a tool the image does not have).
+    // Docker would mark it unhealthy forever; it says nothing about the app, so Hangar moves on.
+    if (result.exitCode === 126 || result.exitCode === 127) {
+      log.system(`The image's own health check cannot run here (${result.output}); skipping it`)
+      return
+    }
+    last = result.output
+    await sleep(OWN_CHECK_INTERVAL_MS)
+  }
+  if (last) log.write('stdout', last)
+  throw new PipelineError(
+    'health_check_failed',
+    "The app answers, but its image's own health check did not pass in time" +
+      (last ? `. Its last output: ${last.split('\n').at(-1)}` : ''),
   )
 }
 

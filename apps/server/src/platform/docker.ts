@@ -177,6 +177,53 @@ export function createDocker(docker = new Dockerode()) {
         .filter((port) => Number.isInteger(port))
     },
 
+    /**
+     * The image's own health check command (its `HEALTHCHECK`), as the argv to run inside the
+     * container: `CMD-SHELL` becomes `/bin/sh -c`. Null for none or `HEALTHCHECK NONE`.
+     */
+    async imageHealthCheck(ref: string): Promise<string[] | null> {
+      const image = await docker.getImage(ref).inspect()
+      const test = (image.Config as { Healthcheck?: { Test?: string[] } }).Healthcheck?.Test
+      if (!test?.length) return null
+      if (test[0] === 'CMD-SHELL' && test[1]) return ['/bin/sh', '-c', test[1]]
+      if (test[0] === 'CMD' && test.length > 1) return test.slice(1)
+      return null
+    },
+
+    /**
+     * Runs a command once inside a running container, as its own user, and returns its exit code
+     * and the end of its output. A command still running after `timeoutMs` counts as failed.
+     */
+    async execOnce(
+      idOrName: string,
+      cmd: string[],
+      timeoutMs: number,
+    ): Promise<{ exitCode: number; output: string }> {
+      const exec = await docker.getContainer(idOrName).exec({
+        Cmd: cmd,
+        AttachStdout: true,
+        AttachStderr: true,
+      })
+      const stream = await exec.start({ hijack: true, stdin: false })
+      const chunks: Buffer[] = []
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+      const finished = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), timeoutMs)
+        stream.on('end', () => {
+          clearTimeout(timer)
+          resolve(true)
+        })
+        stream.on('error', () => {
+          clearTimeout(timer)
+          resolve(false)
+        })
+      })
+      if (!finished) stream.destroy()
+      const info = await exec.inspect()
+      const output = demuxLogs(Buffer.concat(chunks)).trim().slice(-500)
+      return { exitCode: finished ? (info.ExitCode ?? 1) : 124, output }
+    },
+
     /** Every tag of Hangar's app images (`hangar/*:*`). */
     async listAppImageTags(): Promise<string[]> {
       const images = await docker.listImages({ filters: { reference: ['hangar/*'] } })

@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getDeploymentByNumber } from '../../src/modules/deployments/repo.ts'
+import { getDeploymentByNumber, listLogs } from '../../src/modules/deployments/repo.ts'
 import {
   queueDeployment,
   queueRollback,
@@ -86,6 +86,50 @@ describe('a project through its lifecycle', () => {
       .toEqual([before.currentDeploymentId])
     expect((await h.fetchApp(name())).body).toContain('fixture: dockerfile-app greeting=hello')
   })
+
+  // D46: an image's own HEALTHCHECK must pass too; Hangar runs it itself, without waiting on Docker.
+  it.each([
+    [
+      'passes',
+      'HEALTHCHECK CMD test -f /tmp/ready',
+      'ready',
+      "The image's own health check passed",
+    ],
+    ['fails', 'HEALTHCHECK CMD false', 'failed', null],
+    ['cannot-run', 'HEALTHCHECK CMD ["no-such-tool", "--check"]', 'ready', 'cannot run here'],
+  ])(
+    'deploys an image whose own health check %s',
+    { timeout: 180_000 },
+    async (label, healthcheck, status, logged) => {
+      const dir = `own-check-${label}`
+      // Answers at once, but is ready by its own check only after 3 seconds.
+      repo.write(
+        `${dir}/server.js`,
+        "setTimeout(() => require('fs').writeFileSync('/tmp/ready', ''), 3000)\n" +
+          "require('http').createServer((q, r) => r.end('ok')).listen(8080)\n",
+      )
+      repo.write(
+        `${dir}/Dockerfile`,
+        `FROM node:24-alpine\nCOPY server.js /\nEXPOSE 8080\n${healthcheck}\nCMD ["node", "/server.js"]\n`,
+      )
+      const sha = repo.commit(`Own health check: ${label}`)
+      const project = await h.createProject(dir, { repoUrl: repo.url, rootDir: dir })
+      const done = await h.waitForEnd(
+        await queueDeployment(h.ctx, project, { commitSha: sha, trigger: 'manual' }),
+        170_000,
+      )
+      if (status === 'ready') {
+        expect([done.status, done.failureReason]).toEqual(['ready', null])
+      } else {
+        expect(done.status).toBe('failed')
+        expect(done.failureReason).toContain('own health check')
+      }
+      if (logged) {
+        const lines = (await listLogs(h.ctx.db, done.id)).map((l) => l.line).join('\n')
+        expect(lines).toContain(logged)
+      }
+    },
+  )
 
   it('deploys a new commit, then rolls back to the first image without rebuilding', async () => {
     await updateProject(h.ctx.db, projectId, { rootDir: 'dockerfile-app', port: null })

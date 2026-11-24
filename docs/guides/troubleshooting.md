@@ -35,6 +35,9 @@ went wrong and how to fix it. Common causes:
 - **Build failed:** the same command fails on your own computer too. Run the build there first.
 - **Health check failed:** the app started but did not answer. Make sure it listens on
   `0.0.0.0` (not `localhost`) and on the port shown in the app's Settings, or set the port there.
+  If the log says the image's own health check did not pass, the app answers but reports itself
+  not ready: the `HEALTHCHECK` in its Dockerfile (or the image's) keeps failing. Its last output is
+  in the log.
 
 The version that was running keeps running.
 

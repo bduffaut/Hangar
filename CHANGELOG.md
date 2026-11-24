@@ -40,6 +40,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   by a search later. Open to every account.
 - **Each part of an app, on Radio.** For apps made of several parts, the app's **Radio** tab lists
   them (its database, cache, and so on) with how each is doing, and shows any one's live output.
+- **Deploys respect an image's own health check (D46).** If an image (or your Dockerfile) declares a
+  `HEALTHCHECK`, a deploy goes live only once it passes, not at the app's first answer. Hangar runs
+  it straight away rather than waiting on Docker's schedule, so deploys stay quick.
 - Apps can have a longer download time limit set by their template (Immich: 45 minutes).
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.

@@ -129,7 +129,7 @@ Where it lives (a dashboard page, `hangar-admin stress`, or both) is to be decid
   hidden from them. The install page uses the catalog endpoint unless an admin changed the image,
   port, or kept folders under Customize (then `POST /api/apps`).
 - Not yet run on the real server: none of the new templates has been installed there.
-- Ideas noticed on the way: honour an image's own `HEALTHCHECK` (Kuma, Mealie, File Browser and
+- Ideas noticed on the way: honour an image's own `HEALTHCHECK` (done, D46) (Kuma, Mealie, File Browser and
   Jellyfin all have one) instead of "any HTTP answer"; show the newest version of a template's
   image so updating is one click; a "set up now" reminder on apps whose first visitor is admin
   until their first steps are dismissed.
@@ -158,6 +158,8 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   `worker/stack.ts`) and `?part=<service>` on the Radio stream, limited to the template's own
   parts; Radio lists the parts with a status dot and tunes into any of them. The tour has a
   sample Immich (`frontend/src/demo/data.ts`) so the public site shows a stack's parts.
+- **An image's own `HEALTHCHECK` counts (D46)**, run by Hangar with `docker exec` at once and every
+  2 s (`waitForOwnCheck` in `worker/pipeline.ts`).
 - Known limits of stacks: metrics show the app's own container only; a rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
   totals.
@@ -165,8 +167,8 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 ### Phase 2, next steps
 
 1. Catalog screenshots and a guide per category.
-2. Ideas from the work so far: honour an image's own `HEALTHCHECK`; show the newest version of a
-   template's image; let templates fill env from the app's public addresses (Paperless).
+2. Ideas from the work so far: show the newest version of a template's image; let templates fill
+   env from the app's public addresses (Paperless).
 
 ## The goal
 
