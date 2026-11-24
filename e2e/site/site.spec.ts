@@ -34,6 +34,10 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
   await expect(page.getByRole('dialog', { name: 'The flight deck' })).toBeVisible()
   await page.getByRole('button', { name: 'Skip tour' }).click()
   await expect(page.getByText('recipes-api').first()).toBeVisible()
+  // The launcher: a tile per app, catalog apps first under their own name.
+  const tiles = page.locator('.hg-launcher-tile')
+  await expect(tiles.first()).toContainText('Jellyfin')
+  await page.screenshot({ path: 'test-results/tour-home.png', fullPage: true })
 
   await page.goto('/tour/projects/blog')
   await page.getByRole('button', { name: 'Deploy', exact: true }).click()

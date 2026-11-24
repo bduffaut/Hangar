@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline'
 import { contract, schemas, streams } from '@hangar/shared'
-import { eventStream, type Http, OK, route } from '../../http/server.ts'
+import { authenticate, eventStream, type Http, OK, parseInput, route } from '../../http/server.ts'
 import { queueBranchHead, queueDeployment } from '../deployments/service.ts'
 import { deploymentView } from '../deployments/views.ts'
 import { refreshAddresses } from '../addresses/service.ts'
@@ -18,6 +18,7 @@ import {
   updateProjectSettings,
   webhookInfo,
 } from './service.ts'
+import { projectIcon } from './icon.ts'
 
 export function projectRoutes(http: Http) {
   const { ctx } = http
@@ -98,6 +99,26 @@ export function projectRoutes(http: Http) {
   route(http, contract.projectWebhook, async ({ auth, params }) =>
     webhookInfo(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
+
+  // The app's own icon, for the launcher (D45). Not in the contract: it answers with an image. An
+  // SVG could carry script, so the response may run nothing, even when opened directly.
+  http.app.get('/api/projects/:id/icon', async (request, reply) => {
+    const session = await authenticate(ctx, request, reply)
+    const { id } = parseInput(schemas.idParams, request.params)
+    const project = await ownedProject(ctx, session.user.id, id)
+    const icon = await projectIcon(ctx, project.id)
+    if (!icon) {
+      return reply
+        .code(404)
+        .send({ error: { code: 'not_found', message: 'This app has no icon.' } })
+    }
+    return reply
+      .header('content-type', icon.type)
+      .header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+      .header('x-content-type-options', 'nosniff')
+      .header('cache-control', 'private, max-age=3600')
+      .send(icon.body)
+  })
 
   // Radio: the live output of the project's running container.
   eventStream(

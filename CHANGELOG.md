@@ -32,6 +32,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   its database, a cache, and machine learning for faces and search. Hangar starts, updates, and
   stops them together, makes the database password for each install, and keeps the parts on a
   private network only the app can reach.
+- **The launcher.** A new home screen widget with a tile per app, each with the app's own icon and
+  a status dot: one click opens it, like a folder of bookmarks. On existing dashboards, add it
+  under **Customize**.
 - **Paperless-ngx: your paper documents, searchable.** The second app made of several parts (the
   app, Postgres, and a Valkey queue). Upload or scan a document and it is read, filed, and found
   by a search later. Open to every account.

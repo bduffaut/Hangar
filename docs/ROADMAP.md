@@ -5,14 +5,14 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 
 ## Where things stand (updated 2026-11-23)
 
-| Phase                               | State                                                                                                                               |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.        |
-| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; eight templates including Immich, Paperless-ngx. Launcher next. |
-| 3. Smart home, games, private HTTPS | Planned.                                                                                                                            |
-| 4. For students and projects        | Planned.                                                                                                                            |
-| 5. See everything                   | Planned.                                                                                                                            |
-| 6. Bring your own setup             | Planned.                                                                                                                            |
+| Phase                               | State                                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.             |
+| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; eight templates including Immich, Paperless-ngx; the launcher (D45). |
+| 3. Smart home, games, private HTTPS | Planned.                                                                                                                                 |
+| 4. For students and projects        | Planned.                                                                                                                                 |
+| 5. See everything                   | Planned.                                                                                                                                 |
+| 6. Bring your own setup             | Planned.                                                                                                                                 |
 
 ### What phase 1 delivered (D42)
 
@@ -149,6 +149,11 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   `PAPERLESS_URL` would narrow its allowed hosts and lock out the private address. An idea from
   it: let templates fill env from the app's own public addresses, so this is automatic.
   Vaultwarden still waits for phase 3's private HTTPS.
+- **The launcher: done (D45).** `LauncherWidget` on the home screen, icons from
+  `GET /api/projects/:id/icon` (`modules/projects/icon.ts`), checked against real File Browser,
+  Jellyfin, and Paperless containers. Saved layouts do not get it by themselves (add it under
+  Customize). The icon route has no integration test: the test process cannot reach app
+  containers by name on Docker Desktop.
 - Known limits of stacks: the runtime logs and metrics show the app's own container only; a
   rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
@@ -156,9 +161,8 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 
 ### Phase 2, next steps
 
-1. **The app launcher** widget on the home screen.
-2. Each part's status and logs on a stack app's page.
-3. Tour data for the new templates, catalog screenshots, and a guide per category.
+1. Each part's status and logs on a stack app's page.
+2. Tour data for the new templates, catalog screenshots, and a guide per category.
 
 ## The goal
 
@@ -450,7 +454,7 @@ services:
     devices:
       - { kind: gpu, optional: true, why: Faster playback on phones and TVs }
     env:
-      JELLYFIN_PublishedServerUrl: "{{ app.url }}"
+      JELLYFIN_PublishedServerUrl: '{{ app.url }}'
     memory: 2048
     health: { http: /health }
 strategy: recreate

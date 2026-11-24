@@ -167,6 +167,17 @@ export const dashboardCopy = {
     action: 'Reset layout',
   },
   categories: { traffic: 'Traffic', instruments: 'Instruments', machine: 'Machine' },
+  launcher: {
+    empty: 'Apps you install show up here, one tile each.',
+    browse: 'Browse apps',
+    lights: {
+      live: 'Live: opens in a new tab',
+      busy: 'Deploying now',
+      failed: 'The last deploy failed: opens its page',
+      stopped: 'Stopped: opens its page',
+      none: 'Not live yet: opens its page',
+    },
+  },
   widgets: {
     departures: {
       title: 'Departures',
@@ -175,6 +186,10 @@ export const dashboardCopy = {
     projects: {
       title: 'Projects',
       description: 'Every app with its address, last commit, and status.',
+    },
+    launcher: {
+      title: 'Launcher',
+      description: 'Open any of your apps in one click, like a folder of bookmarks.',
     },
     activity: { title: 'Latest activity', description: 'The newest deployment of each project.' },
     outcomes: {

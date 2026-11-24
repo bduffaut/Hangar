@@ -4,6 +4,7 @@ import { defineDashboardPlugin } from '../../dashboard/types.ts'
 import ActivityWidget from './ActivityWidget.vue'
 import DeparturesWidget from './DeparturesWidget.vue'
 import GaugeWidget, { type Reading } from './GaugeWidget.vue'
+import LauncherWidget from './LauncherWidget.vue'
 import MachineWidget from './MachineWidget.vue'
 import OutcomesWidget from './OutcomesWidget.vue'
 import ProjectsWidget from './ProjectsWidget.vue'
@@ -23,6 +24,14 @@ export const builtInWidgets = defineDashboardPlugin({
       category: categories.traffic,
       component: DeparturesWidget,
       size: { w: 12, h: rowsFor(80), minW: 4 },
+      sizeToContent: true,
+    })
+    registerWidget({
+      id: 'hangar.launcher',
+      ...copy.launcher,
+      category: categories.traffic,
+      component: LauncherWidget,
+      size: { w: 12, h: rowsFor(120), minW: 3 },
       sizeToContent: true,
     })
     registerWidget({

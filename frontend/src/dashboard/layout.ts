@@ -33,7 +33,8 @@ export const rowsFor = (px: number) => Math.ceil((px + GRID.space) / GRID.rowHei
 // gauges like temperature and battery can be added while customizing.
 const DEFAULT_PLACEMENT: { id: string; x: number; y: number; w?: number }[] = [
   { id: 'hangar.departures', x: 0, y: 0 },
-  { id: 'hangar.projects', x: 0, y: 20 },
+  { id: 'hangar.launcher', x: 0, y: 12 },
+  { id: 'hangar.projects', x: 0, y: 30 },
   { id: 'hangar.activity', x: 0, y: 60, w: 7 },
   { id: 'hangar.outcomes', x: 7, y: 60, w: 5 },
 ]
