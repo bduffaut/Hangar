@@ -11,6 +11,7 @@ image. Open **Apps** in the dashboard to pick one:
 | **Audiobookshelf** | Audiobooks and podcasts, with progress kept               | Admins             |
 | **Uptime Kuma**    | Watches your sites and tells you when one is down         | Everyone           |
 | **Mealie**         | Recipes, meal plans, and shopping lists                   | Everyone           |
+| **Paperless-ngx**  | Your paper documents, scanned, read, and searchable       | Everyone           |
 | **File Browser**   | Upload, download, and share files from a browser          | Everyone           |
 
 More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
@@ -84,6 +85,13 @@ Each app's page shows its first steps once it is running. In short:
   phone app, sign in with the app's address, and turn on backup. Photos are kept in the app's
   storage (`library`), and the database in the storage of its `database` part; both survive
   updates. Together the parts may use up to about 6 GB of memory.
+- **Paperless-ngx** runs as three parts: the app, its database, and a queue for reading documents.
+  Open it and create your account (the first one has full access), then drag documents onto the
+  page or scan them with a Paperless phone app. Documents are kept in the app's storage (`media`).
+  Before you give it a public address, add the env var `PAPERLESS_CSRF_TRUSTED_ORIGINS` with that
+  address (for example `https://docs.example.com`) under its **Settings**, then press **Update**:
+  Paperless refuses sign-ins from an HTTPS address it was not told about. (Its own `PAPERLESS_URL`
+  setting would also lock out the private address, so use this one.)
 
 - **Navidrome** and **Audiobookshelf** work like Jellyfin: add your music or audiobooks folder as
   a library, install, then create the admin account. Navidrome works with any Subsonic app on

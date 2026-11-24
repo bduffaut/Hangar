@@ -3,16 +3,16 @@
 Each phase ends with something you can use on your own server, and each one becomes Decisions
 rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 
-## Where things stand (updated 2026-11-19)
+## Where things stand (updated 2026-11-23)
 
-| Phase                               | State                                                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release. |
-| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; seven templates including Immich. Launcher next.         |
-| 3. Smart home, games, private HTTPS | Planned.                                                                                                                     |
-| 4. For students and projects        | Planned.                                                                                                                     |
-| 5. See everything                   | Planned.                                                                                                                     |
-| 6. Bring your own setup             | Planned.                                                                                                                     |
+| Phase                               | State                                                                                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.        |
+| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; eight templates including Immich, Paperless-ngx. Launcher next. |
+| 3. Smart home, games, private HTTPS | Planned.                                                                                                                            |
+| 4. For students and projects        | Planned.                                                                                                                            |
+| 5. See everything                   | Planned.                                                                                                                            |
+| 6. Bring your own setup             | Planned.                                                                                                                            |
 
 ### What phase 1 delivered (D42)
 
@@ -144,6 +144,11 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 --project integration catalog`.
 - **Immich** is the first stack (server, Postgres with vector search, Valkey, machine learning;
   v3.4.2). Templates can set a longer download limit (`buildTimeoutMinutes`, Immich 45).
+- **Paperless-ngx** is the second stack (app, Postgres 18, Valkey; 3.5.1), open to members. A
+  public address needs `PAPERLESS_CSRF_TRUSTED_ORIGINS` set by hand (its first steps say so);
+  `PAPERLESS_URL` would narrow its allowed hosts and lock out the private address. An idea from
+  it: let templates fill env from the app's own public addresses, so this is automatic.
+  Vaultwarden still waits for phase 3's private HTTPS.
 - Known limits of stacks: the runtime logs and metrics show the app's own container only; a
   rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
@@ -151,11 +156,9 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 
 ### Phase 2, next steps
 
-1. **Templates that need stacks:** Paperless-ngx (Redis + its own Postgres). Vaultwarden needs
-   phase 3's private HTTPS and can wait.
-2. **The app launcher** widget on the home screen.
-3. Each part's status and logs on a stack app's page.
-4. Tour data for the new templates, catalog screenshots, and a guide per category.
+1. **The app launcher** widget on the home screen.
+2. Each part's status and logs on a stack app's page.
+3. Tour data for the new templates, catalog screenshots, and a guide per category.
 
 ## The goal
 
@@ -447,7 +450,7 @@ services:
     devices:
       - { kind: gpu, optional: true, why: Faster playback on phones and TVs }
     env:
-      JELLYFIN_PublishedServerUrl: '{{ app.url }}'
+      JELLYFIN_PublishedServerUrl: "{{ app.url }}"
     memory: 2048
     health: { http: /health }
 strategy: recreate

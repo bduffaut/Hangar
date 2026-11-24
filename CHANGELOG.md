@@ -32,6 +32,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   its database, a cache, and machine learning for faces and search. Hangar starts, updates, and
   stops them together, makes the database password for each install, and keeps the parts on a
   private network only the app can reach.
+- **Paperless-ngx: your paper documents, searchable.** The second app made of several parts (the
+  app, Postgres, and a Valkey queue). Upload or scan a document and it is read, filed, and found
+  by a search later. Open to every account.
 - Apps can have a longer download time limit set by their template (Immich: 45 minutes).
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.

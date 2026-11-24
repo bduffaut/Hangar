@@ -326,6 +326,86 @@ export const CATALOG: CatalogApp[] = [
     tier: 'standard',
   },
   {
+    id: 'paperless-ngx',
+    name: 'Paperless-ngx',
+    category: 'files',
+    summary: 'Scan your paper documents once, then find any of them in seconds.',
+    description:
+      'Paperless-ngx reads every document you upload or scan (letters, bills, receipts, contracts), recognizes its text, and files it by date, sender, and type, so a search finds it later. It runs as three parts on this computer (the app, its database, and a queue for the reading work), and Hangar keeps them together.',
+    website: 'https://docs.paperless-ngx.com',
+    image: 'ghcr.io/paperless-ngx/paperless-ngx:3.5.1',
+    port: 8000,
+    memoryLimitMb: 2048,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/usr/src/paperless/data',
+        purpose: 'Search index, settings, and accounts',
+        backup: true,
+      },
+      {
+        name: 'media',
+        mountPath: '/usr/src/paperless/media',
+        purpose: 'Your documents, original and searchable copies',
+        backup: true,
+      },
+    ],
+    env: {
+      PAPERLESS_DBENGINE: 'postgresql',
+      PAPERLESS_DBHOST: 'database',
+      PAPERLESS_DBUSER: 'paperless',
+      PAPERLESS_DBNAME: 'paperless',
+      PAPERLESS_REDIS: 'redis://redis:6379',
+    },
+    secrets: ['PAPERLESS_DBPASS', 'PAPERLESS_SECRET_KEY'],
+    services: [
+      {
+        name: 'database',
+        image:
+          'postgres:18@sha256:f5cbc081c25690710f3fc6f4c61a7565382bae01ca0d0f2028a53d7926b85a20',
+        memoryLimitMb: 512,
+        env: {
+          POSTGRES_PASSWORD: '${PAPERLESS_DBPASS}',
+          POSTGRES_USER: 'paperless',
+          POSTGRES_DB: 'paperless',
+        },
+        volumes: [
+          {
+            // Postgres 18 keeps its files in a folder per major version under this one.
+            name: 'database',
+            mountPath: '/var/lib/postgresql',
+            purpose: 'Tags, correspondents, and where each document is',
+            backup: true,
+          },
+        ],
+        healthCommand: 'pg_isready -U paperless -d paperless',
+      },
+      {
+        name: 'redis',
+        image:
+          'valkey/valkey:9@sha256:418652cfb58ef879d4978c33553735d7147016032d5aefaa14c828e611eb9dfd',
+        memoryLimitMb: 256,
+        env: {},
+        volumes: [
+          {
+            name: 'queue',
+            mountPath: '/data',
+            purpose: 'Documents waiting to be read',
+            backup: false,
+          },
+        ],
+        healthCommand: 'valkey-cli ping | grep -q PONG',
+      },
+    ],
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create your account: the first one has full access.',
+      'Upload a document by dragging it onto the page, or install a Paperless phone app to scan with your camera.',
+      'Before giving it a public address, add the env var PAPERLESS_CSRF_TRUSTED_ORIGINS with that address (like https://docs.example.com) under Settings, then Update, or sign-ins from it are refused.',
+    ],
+    tier: 'standard',
+  },
+  {
     id: 'navidrome',
     name: 'Navidrome',
     category: 'media',
