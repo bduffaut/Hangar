@@ -265,6 +265,16 @@ export const loadingLines = [
   'Reading the flight plan…',
 ] as const
 
+/** Update checks for image apps (D47). */
+export const updateCopy = {
+  available: (newest: string, current: string) =>
+    `Version ${newest} is out. This app runs ${current}.`,
+  action: (newest: string) => `Update to ${newest}`,
+  askAdmin: 'Ask an admin to update it.',
+  note: 'Hangar keeps the app’s storage. If the new version does not start, the current one keeps running.',
+  dismiss: 'Not now',
+} as const
+
 export const toastCopy = {
   deployQueued: 'Deployment queued',
   firstLive: 'Wheels up! Your app is airborne.',

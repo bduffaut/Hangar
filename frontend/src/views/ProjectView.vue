@@ -16,6 +16,7 @@ import EnvEditor from '../components/project/EnvEditor.vue'
 import ProjectDeployments from '../components/project/ProjectDeployments.vue'
 import ProjectRadio from '../components/project/ProjectRadio.vue'
 import ProjectSettingsForm from '../components/project/ProjectSettingsForm.vue'
+import UpdateNotice from '../components/project/UpdateNotice.vue'
 import RunwayLights from '../components/RunwayLights.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
@@ -256,6 +257,12 @@ const running = computed(
         <RunwayLights :recent="project.recent" />
       </div>
     </section>
+
+    <UpdateNotice
+      v-if="project.kind === 'image'"
+      :key="`update-${project.id}`"
+      :project="project"
+    />
 
     <section
       v-if="template && project.current && !firstStepsDone"

@@ -160,6 +160,10 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   sample Immich (`frontend/src/demo/data.ts`) so the public site shows a stack's parts.
 - **An image's own `HEALTHCHECK` counts (D46)**, run by Hangar with `docker exec` at once and every
   2 s (`waitForOwnCheck` in `worker/pipeline.ts`).
+- **Newer versions of image apps (D47)**, the first part of section 7: the app's page offers the
+  newest tag in the same style, read from the registry when the page opens (`versions.ts`,
+  `platform/registry.ts`). Still to do from section 7: a daily background check, release notes,
+  and backing up storage before an update.
 - Known limits of stacks: metrics show the app's own container only; a rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
   totals.
@@ -167,8 +171,7 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 ### Phase 2, next steps
 
 1. Catalog screenshots and a guide per category.
-2. Ideas from the work so far: show the newest version of a template's image; let templates fill
-   env from the app's public addresses (Paperless).
+2. Ideas from the work so far: let templates fill env from the app's public addresses (Paperless).
 
 ## The goal
 

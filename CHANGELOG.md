@@ -43,6 +43,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - **Deploys respect an image's own health check (D46).** If an image (or your Dockerfile) declares a
   `HEALTHCHECK`, a deploy goes live only once it passes, not at the app's first answer. Hangar runs
   it straight away rather than waiting on Docker's schedule, so deploys stay quick.
+- **New versions of apps (D47).** An app's page says when its image has a newer version (for
+  example Immich v3.5.0 while it runs v3.4.2) and updates to it in one click. Hangar asks the
+  image's registry at most twice a day.
 - Apps can have a longer download time limit set by their template (Immich: 45 minutes).
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.

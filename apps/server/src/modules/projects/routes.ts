@@ -21,6 +21,7 @@ import {
 } from './service.ts'
 import { stackStatus } from '../../worker/stack.ts'
 import { projectIcon } from './icon.ts'
+import { appVersion } from './versions.ts'
 
 export function projectRoutes(http: Http) {
   const { ctx } = http
@@ -100,6 +101,11 @@ export function projectRoutes(http: Http) {
 
   route(http, contract.projectServices, async ({ auth, params }) =>
     stackStatus(ctx, await ownedProject(ctx, auth.user.id, params.id)),
+  )
+
+  // Reads the image's registry when nothing recent is cached, so it can take a few seconds.
+  route(http, contract.projectVersion, async ({ auth, params }) =>
+    appVersion(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
 
   route(http, contract.projectWebhook, async ({ auth, params }) =>

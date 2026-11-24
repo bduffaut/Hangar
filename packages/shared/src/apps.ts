@@ -56,6 +56,34 @@ export function isPinnedImage(ref: string): boolean {
   return tag !== null && tag !== 'latest'
 }
 
+/**
+ * The newest release among `tags` in the same style as `current` (D47): the same `v` prefix and
+ * the same number of parts, so `v3.4.2` only moves to tags like `v3.5.0` and `12.4` to `12.5`.
+ * Anything else (`latest`, `nightly`, `3.5.0-rc1`, dates) is never offered. Null when `current`
+ * is not a plain version or nothing newer exists.
+ */
+export function newerVersion(current: string, tags: string[]): string | null {
+  const shape = /^(v?)(\d+(?:\.\d+){0,2})$/
+  const parse = (tag: string) => {
+    const match = shape.exec(tag)
+    return match ? { prefix: match[1]!, parts: match[2]!.split('.').map(Number) } : null
+  }
+  const now = parse(current)
+  if (!now) return null
+  const compare = (a: number[], b: number[]) => {
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! - b[i]!
+    return 0
+  }
+  let best: { tag: string; parts: number[] } | null = null
+  for (const tag of tags) {
+    const v = parse(tag)
+    if (!v || v.prefix !== now.prefix || v.parts.length !== now.parts.length) continue
+    if (compare(v.parts, now.parts) <= 0) continue
+    if (!best || compare(v.parts, best.parts) > 0) best = { tag, parts: v.parts }
+  }
+  return best?.tag ?? null
+}
+
 // Storage
 
 /** A volume's short name, unique within its app: `config`, `data`. */

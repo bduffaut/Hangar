@@ -563,6 +563,15 @@ export const serviceView = z.object({
 })
 export type ServiceView = z.infer<typeof serviceView>
 
+/** An image app's version, and a newer one in the same tag style if its registry lists one (D47). */
+export const appVersionView = z.object({
+  current: z.string().nullable(),
+  newest: z.string().nullable(),
+  /** When the registry was last read; null when it could not be. */
+  checkedAt: timestamp.nullable(),
+})
+export type AppVersionView = z.infer<typeof appVersionView>
+
 /** Which part's output Radio follows: the app itself unless a service is named. */
 export const runtimeLogsQuery = z.object({ part: z.string().max(64).optional() })
 

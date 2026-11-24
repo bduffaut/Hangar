@@ -74,6 +74,15 @@ Open the address on any device with Tailscale and follow Jellyfin's own setup:
   with the same name and it picks the data back up. Data left by deleted apps is listed under
   **Settings → Storage**.
 
+## New versions
+
+When a newer version of an app's image is out, its page says so, for example "Version v3.5.0 is
+out. This app runs v3.4.2." Press **Update to v3.5.0** to switch: Hangar downloads it, keeps the
+app's storage, and keeps the current version running if the new one does not start. Hangar checks
+at most twice a day, and only offers versions in the same style as the one you run (so never
+`latest` or a test release). Some apps change their data when they update and cannot go back to
+an older version afterwards; read the app's release notes before a big jump.
+
 ## The other apps
 
 Each app's page shows its first steps once it is running. In short:

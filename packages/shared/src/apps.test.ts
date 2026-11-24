@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkProjectName } from './hostnames.ts'
 import {
+  newerVersion,
   CATALOG,
   checkLibraryPath,
   checkMountPath,
@@ -179,6 +180,29 @@ describe('stack services', () => {
       PLAIN: 'v',
       BOTH: 'a-1-',
     })
+  })
+})
+
+describe('newer versions (D47)', () => {
+  const tags = [
+    'latest',
+    'v3.4.1',
+    'v3.4.2',
+    'v3.5.0',
+    'v3.10.0',
+    '3.11.0',
+    'v4.0.0-rc1',
+    'nightly',
+  ]
+  it('picks the newest tag in the same style, comparing numbers', () => {
+    expect(newerVersion('v3.4.2', tags)).toBe('v3.10.0')
+    expect(newerVersion('12.4', ['12.3', '12.4', '12.5', '12.5.1', '13'])).toBe('12.5')
+    expect(newerVersion('3.5.1', ['3.5.1', '3.5.2', 'v3.6.0'])).toBe('3.5.2')
+  })
+  it('offers nothing when already newest, or for tags that are not plain versions', () => {
+    expect(newerVersion('v3.10.0', tags)).toBeNull()
+    expect(newerVersion('latest', tags)).toBeNull()
+    expect(newerVersion('9-alpine', ['10-alpine'])).toBeNull()
   })
 })
 

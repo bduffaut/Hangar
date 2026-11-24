@@ -42,6 +42,10 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
 
   // An app made of several parts: Radio lists them and plays any one's output.
   await page.goto('/tour/projects/immich')
+  await expect(page.getByText('Version v3.5.0 is out. This app runs v3.4.2.')).toBeVisible()
+  await page.getByRole('region', { name: 'Update available' }).screenshot({
+    path: 'test-results/tour-update.png',
+  })
   await page.getByRole('tab', { name: /Radio/ }).click()
   const parts = page.getByRole('group', { name: 'Parts of this app' })
   await parts.getByRole('button', { name: /^database/ }).click()

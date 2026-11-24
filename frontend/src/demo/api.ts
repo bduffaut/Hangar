@@ -69,6 +69,16 @@ export async function demoCall(
     case 'getProject':
     case 'checkProjectAddresses':
       return demoProject(id) ?? Promise.reject(notFound())
+    case 'projectVersion': {
+      // The sample Immich has a newer release waiting, so the tour shows the update notice.
+      const project = demoProject(id)
+      const current = project?.image?.split(':').at(-1) ?? null
+      return {
+        current,
+        newest: project?.name === 'immich' ? 'v3.5.0' : null,
+        checkedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      }
+    }
     case 'projectServices':
       return demoServices(id)
     case 'projectWebhook':
