@@ -37,7 +37,8 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   under **Customize**.
 - **Paperless-ngx: your paper documents, searchable.** The second app made of several parts (the
   app, Postgres, and a Valkey queue). Upload or scan a document and it is read, filed, and found
-  by a search later. Open to every account.
+  by a search later. Open to every account. When it gets a public address, Hangar tells it and
+  restarts it, so sign-ins work there too (D48).
 - **Each part of an app, on Radio.** For apps made of several parts, the app's **Radio** tab lists
   them (its database, cache, and so on) with how each is doing, and shows any one's live output.
 - **Deploys respect an image's own health check (D46).** If an image (or your Dockerfile) declares a

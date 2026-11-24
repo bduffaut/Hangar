@@ -478,6 +478,19 @@ export async function updateProjectSettings(
 }
 
 /**
+ * Whether a settings change altered the public addresses of a running app whose template passes
+ * them in an env var (D48), so a new container must start with the new value.
+ */
+export function needsRestartForAddresses(ctx: Ctx, before: Project, after: Project): boolean {
+  const template = after.catalogId ? findTemplate(ctx, after.catalogId) : null
+  if (!template?.addressEnv || !after.currentDeploymentId || after.desiredState !== 'running') {
+    return false
+  }
+  const key = (p: Project) => [...p.hostnames].sort().join(',')
+  return key(before) !== key(after)
+}
+
+/**
  * Removes the project's containers, images, and records, cancelling any build in progress. Its
  * storage is kept unless `data` is `delete`: reinstalling an app of the same name picks it up.
  */

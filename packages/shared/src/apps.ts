@@ -221,6 +221,12 @@ export interface CatalogApp {
   /** Supporting containers, started in this order before the app (D44). */
   services?: CatalogService[]
   /**
+   * An env var Hangar fills with the app's public addresses (`https://name, ...`) when it starts,
+   * for apps that refuse requests from addresses they were not told about (D48). A value the owner
+   * set is kept and the addresses are added to it.
+   */
+  addressEnv?: string
+  /**
    * Whoever opens it first becomes its admin (or it starts with a well-known password). Such an
    * app gets no public address at install: its owner finishes the setup first, then adds one.
    */
@@ -386,6 +392,9 @@ export const CATALOG: CatalogApp[] = [
       PAPERLESS_REDIS: 'redis://redis:6379',
     },
     secrets: ['PAPERLESS_DBPASS', 'PAPERLESS_SECRET_KEY'],
+    // Its sign-in form checks where requests come from; PAPERLESS_URL would also lock out the
+    // private address, so only the trusted origins are set.
+    addressEnv: 'PAPERLESS_CSRF_TRUSTED_ORIGINS',
     services: [
       {
         name: 'database',
@@ -429,7 +438,6 @@ export const CATALOG: CatalogApp[] = [
     firstSteps: [
       'Open the app and create your account: the first one has full access.',
       'Upload a document by dragging it onto the page, or install a Paperless phone app to scan with your camera.',
-      'Before giving it a public address, add the env var PAPERLESS_CSRF_TRUSTED_ORIGINS with that address (like https://docs.example.com) under Settings, then Update, or sign-ins from it are refused.',
     ],
     tier: 'standard',
   },
@@ -593,6 +601,15 @@ export const CATALOG: CatalogApp[] = [
 /** The image a service runs for an app at `appImage`: `{version}` becomes the app's tag. */
 export function serviceImage(service: CatalogService, appImage: string): string {
   return service.image.replaceAll('{version}', imageTag(appImage) ?? 'latest')
+}
+
+/** The env var value for a template's `addressEnv` (D48): the owner's own origins, then each address. */
+export function addressEnvValue(own: string | undefined, hostnames: string[]): string {
+  const origins = [
+    ...(own ?? '').split(',').map((o) => o.trim()),
+    ...hostnames.map((h) => `https://${h}`),
+  ].filter(Boolean)
+  return [...new Set(origins)].join(',')
 }
 
 /** Fills `${NAME}` in a service's env from the app's env vars; unknown names become empty. */

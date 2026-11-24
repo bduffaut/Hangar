@@ -20,6 +20,7 @@ const TEST_TEMPLATES: CatalogApp[] = [
     volumes: [],
     env: { CACHE_HOST: 'redis' },
     secrets: ['TEST_SECRET'],
+    addressEnv: 'PUBLIC_ORIGINS',
     services: [
       {
         name: 'redis',

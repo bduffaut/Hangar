@@ -5,6 +5,8 @@ import type { Project } from '../modules/projects/repo.ts'
 import { resolveMounts } from '../modules/storage/service.ts'
 import { appContainerName, ownerNetworkName } from '../platform/names.ts'
 import { ensureStack } from './stack.ts'
+import { addressEnvValue } from '@hangar/shared'
+import { findTemplate } from '../modules/catalog/templates.ts'
 
 /** Makes sure an account's network exists, with Traefik and core attached to reach its apps. */
 export async function ensureOwnerNetwork(ctx: Ctx, ownerId: string): Promise<string> {
@@ -31,6 +33,13 @@ export async function startAppContainer(
 ): Promise<{ name: string; id: string }> {
   const name = appContainerName(project.name, deployment.number)
   env ??= await getEnv(ctx, project.id)
+  // An app that must be told its own public addresses (D48).
+  const addressEnv = project.catalogId
+    ? findTemplate(ctx, project.catalogId)?.addressEnv
+    : undefined
+  if (addressEnv && project.hostnames.length) {
+    env = { ...env, [addressEnv]: addressEnvValue(env[addressEnv], project.hostnames) }
+  }
   const network = await ensureOwnerNetwork(ctx, project.ownerId)
   const mounts = await resolveMounts(ctx, project)
   const stackNetwork = await ensureStack(ctx, project, log)

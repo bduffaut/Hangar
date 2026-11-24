@@ -99,10 +99,8 @@ Each app's page shows its first steps once it is running. In short:
 - **Paperless-ngx** runs as three parts: the app, its database, and a queue for reading documents.
   Open it and create your account (the first one has full access), then drag documents onto the
   page or scan them with a Paperless phone app. Documents are kept in the app's storage (`media`).
-  Before you give it a public address, add the env var `PAPERLESS_CSRF_TRUSTED_ORIGINS` with that
-  address (for example `https://docs.example.com`) under its **Settings**, then press **Update**:
-  Paperless refuses sign-ins from an HTTPS address it was not told about. (Its own `PAPERLESS_URL`
-  setting would also lock out the private address, so use this one.)
+  When you give it a public address, Hangar tells Paperless about it and restarts it, so you can
+  sign in from there too.
 
 - **Navidrome** and **Audiobookshelf** work like Jellyfin: add your music or audiobooks folder as
   a library, install, then create the admin account. Navidrome works with any Subsonic app on

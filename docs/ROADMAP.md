@@ -145,9 +145,7 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 - **Immich** is the first stack (server, Postgres with vector search, Valkey, machine learning;
   v3.4.2). Templates can set a longer download limit (`buildTimeoutMinutes`, Immich 45).
 - **Paperless-ngx** is the second stack (app, Postgres 18, Valkey; 3.5.1), open to members. A
-  public address needs `PAPERLESS_CSRF_TRUSTED_ORIGINS` set by hand (its first steps say so);
-  `PAPERLESS_URL` would narrow its allowed hosts and lock out the private address. An idea from
-  it: let templates fill env from the app's own public addresses, so this is automatic.
+  public address reaches `PAPERLESS_CSRF_TRUSTED_ORIGINS` by itself (`addressEnv`, D48).
   Vaultwarden still waits for phase 3's private HTTPS.
 - **The launcher: done (D45).** `LauncherWidget` on the home screen, icons from
   `GET /api/projects/:id/icon` (`modules/projects/icon.ts`), checked against real File Browser,
@@ -171,7 +169,6 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
 ### Phase 2, next steps
 
 1. Catalog screenshots and a guide per category.
-2. Ideas from the work so far: let templates fill env from the app's public addresses (Paperless).
 
 ## The goal
 

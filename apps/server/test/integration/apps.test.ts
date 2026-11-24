@@ -3,12 +3,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { queueBranchHead, queueDeployment } from '../../src/modules/deployments/service.ts'
 import { getEnv, setEnv } from '../../src/modules/env-vars/service.ts'
-import { getProject } from '../../src/modules/projects/repo.ts'
+import { getProject, updateProject } from '../../src/modules/projects/repo.ts'
 import {
   checkPart,
   deleteProject,
   followRuntimeLogs,
   installCatalogApp,
+  needsRestartForAddresses,
   setDesiredState,
 } from '../../src/modules/projects/service.ts'
 import { replaceAppStorage } from '../../src/modules/storage/repo.ts'
@@ -127,11 +128,12 @@ describe('a stack (D44)', () => {
 
     // Each part's state, and its output on Radio; only the template's own parts can be asked for.
     expect(await stackStatus(h.ctx, project)).toMatchObject([{ name: 'redis', state: 'running' }])
-    const output = await followRuntimeLogs(h.ctx, project, AbortSignal.timeout(5_000), 'redis')
+    const reading = new AbortController()
+    const output = await followRuntimeLogs(h.ctx, project, reading.signal, 'redis')
     const firstChunk = await new Promise<string>((resolve) =>
       output!.once('data', (chunk: Buffer) => resolve(chunk.toString())),
     )
-    output!.destroy()
+    reading.abort()
     expect(firstChunk.length).toBeGreaterThan(0)
     expect(() => checkPart(h.ctx, project, 'hangar-core')).toThrow(/no part named/)
 
@@ -163,6 +165,24 @@ describe('a stack (D44)', () => {
     expect(third.status).toBe('ready')
     expect(docker('inspect', service, '--format', '{{.Id}}').trim()).not.toBe(serviceId)
     expect(docker('exec', service, 'valkey-cli', 'get', 'kept')).toContain('yes')
+
+    // An app told its addresses (D48): a new address reaches its env through a fresh container.
+    const before = (await getProject(h.ctx.db, project.id))!
+    await updateProject(h.ctx.db, project.id, { hostnames: ['stack.example.com'] })
+    const withAddress = (await getProject(h.ctx.db, project.id))!
+    expect(needsRestartForAddresses(h.ctx, before, withAddress)).toBe(true)
+    expect(needsRestartForAddresses(h.ctx, withAddress, withAddress)).toBe(false)
+    const fourth = await h.waitForEnd(await queueBranchHead(h.ctx, withAddress, 'manual'))
+    expect(fourth.status).toBe('ready')
+    expect(
+      docker(
+        'inspect',
+        `hangar-app-${project.name}-${fourth.number}`,
+        '--format',
+        '{{json .Config.Env}}',
+      ),
+    ).toContain('PUBLIC_ORIGINS=https://stack.example.com')
+    await updateProject(h.ctx.db, project.id, { hostnames: [] })
 
     // Stopping the app stops its services; starting it brings them back first.
     const current = (await getProject(h.ctx.db, project.id))!

@@ -11,6 +11,7 @@ import {
   checkPart,
   followRuntimeLogs,
   installCatalogApp,
+  needsRestartForAddresses,
   ownedProject,
   projectView,
   projectViewsOf,
@@ -57,7 +58,11 @@ export function projectRoutes(http: Http) {
 
   route(http, contract.updateProject, async ({ auth, params, body }) => {
     const project = await ownedProject(ctx, auth.user.id, params.id)
-    return projectView(ctx, await updateProjectSettings(ctx, auth.user.role, project, body))
+    const updated = await updateProjectSettings(ctx, auth.user.role, project, body)
+    // An app told its addresses at start (D48) needs a fresh container to hear about new ones.
+    if (needsRestartForAddresses(ctx, project, updated))
+      await queueBranchHead(ctx, updated, 'manual')
+    return projectView(ctx, updated)
   })
 
   route(http, contract.deleteProject, async ({ auth, params, query }) => {

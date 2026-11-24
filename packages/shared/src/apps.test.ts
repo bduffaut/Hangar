@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkProjectName } from './hostnames.ts'
 import {
+  addressEnvValue,
   newerVersion,
   CATALOG,
   checkLibraryPath,
@@ -180,6 +181,16 @@ describe('stack services', () => {
       PLAIN: 'v',
       BOTH: 'a-1-',
     })
+  })
+})
+
+describe('addresses an app is told about (D48)', () => {
+  it('adds each public address to what the owner set, once', () => {
+    expect(addressEnvValue(undefined, ['docs.example.com'])).toBe('https://docs.example.com')
+    expect(
+      addressEnvValue('https://a.example.com, https://docs.example.com', ['docs.example.com']),
+    ).toBe('https://a.example.com,https://docs.example.com')
+    expect(addressEnvValue('', [])).toBe('')
   })
 })
 
