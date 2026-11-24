@@ -154,15 +154,19 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   Jellyfin, and Paperless containers. Saved layouts do not get it by themselves (add it under
   Customize). The icon route has no integration test: the test process cannot reach app
   containers by name on Docker Desktop.
-- Known limits of stacks: the runtime logs and metrics show the app's own container only; a
-  rollback keeps services at the current version (Immich's machine learning follows the app's
+- **Each part's status and logs: done.** `GET /api/projects/:id/services` (`stackStatus` in
+  `worker/stack.ts`) and `?part=<service>` on the Radio stream, limited to the template's own
+  parts; Radio lists the parts with a status dot and tunes into any of them. The tour has a
+  sample Immich (`frontend/src/demo/data.ts`) so the public site shows a stack's parts.
+- Known limits of stacks: metrics show the app's own container only; a rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
   totals.
 
 ### Phase 2, next steps
 
-1. Each part's status and logs on a stack app's page.
-2. Tour data for the new templates, catalog screenshots, and a guide per category.
+1. Catalog screenshots and a guide per category.
+2. Ideas from the work so far: honour an image's own `HEALTHCHECK`; show the newest version of a
+   template's image; let templates fill env from the app's public addresses (Paperless).
 
 ## The goal
 

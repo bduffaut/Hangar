@@ -5,12 +5,15 @@ import { queueBranchHead, queueDeployment } from '../../src/modules/deployments/
 import { getEnv, setEnv } from '../../src/modules/env-vars/service.ts'
 import { getProject } from '../../src/modules/projects/repo.ts'
 import {
+  checkPart,
   deleteProject,
+  followRuntimeLogs,
   installCatalogApp,
   setDesiredState,
 } from '../../src/modules/projects/service.ts'
 import { replaceAppStorage } from '../../src/modules/storage/repo.ts'
 import { storageView } from '../../src/modules/storage/service.ts'
+import { stackStatus } from '../../src/worker/stack.ts'
 import { createFixtureRepo, createHarness, docker, eventually } from './harness.ts'
 
 const h = createHarness()
@@ -122,6 +125,16 @@ describe('a stack (D44)', () => {
     )
     expect(Object.keys(JSON.parse(serviceNetworks))).toEqual([network])
 
+    // Each part's state, and its output on Radio; only the template's own parts can be asked for.
+    expect(await stackStatus(h.ctx, project)).toMatchObject([{ name: 'redis', state: 'running' }])
+    const output = await followRuntimeLogs(h.ctx, project, AbortSignal.timeout(5_000), 'redis')
+    const firstChunk = await new Promise<string>((resolve) =>
+      output!.once('data', (chunk: Buffer) => resolve(chunk.toString())),
+    )
+    output!.destroy()
+    expect(firstChunk.length).toBeGreaterThan(0)
+    expect(() => checkPart(h.ctx, project, 'hangar-core')).toThrow(/no part named/)
+
     // Its secret was made for this install and reaches the service through ${TEST_SECRET}.
     const env = await getEnv(h.ctx, project.id)
     expect(env.TEST_SECRET).toMatch(/^[a-f0-9]{48}$/)
@@ -157,6 +170,7 @@ describe('a stack (D44)', () => {
     await eventually(async () => {
       expect(docker('inspect', service, '--format', '{{.State.Running}}').trim()).toBe('false')
     })
+    expect(await stackStatus(h.ctx, project)).toMatchObject([{ name: 'redis', state: 'stopped' }])
     await setDesiredState(h.ctx, (await getProject(h.ctx.db, project.id))!, 'running')
     await eventually(async () => {
       expect(docker('inspect', service, '--format', '{{.State.Running}}').trim()).toBe('true')

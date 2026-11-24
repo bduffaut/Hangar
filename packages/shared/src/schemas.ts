@@ -552,6 +552,20 @@ export const projectView = z.object({
 })
 export type ProjectView = z.infer<typeof projectView>
 
+/** A supporting part of a stack app (D44), as Docker sees it right now. */
+export const SERVICE_STATES = ['running', 'starting', 'unhealthy', 'stopped', 'missing'] as const
+export const serviceView = z.object({
+  /** Its name in the template, also its address inside the stack: `database`, `redis`. */
+  name: z.string(),
+  image: z.string(),
+  state: z.enum(SERVICE_STATES),
+  memoryLimitMb: z.number().int(),
+})
+export type ServiceView = z.infer<typeof serviceView>
+
+/** Which part's output Radio follows: the app itself unless a service is named. */
+export const runtimeLogsQuery = z.object({ part: z.string().max(64).optional() })
+
 export const webhookView = z.object({
   url: z.string().nullable(),
   secret: z.string(),

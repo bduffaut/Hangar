@@ -391,6 +391,13 @@ export const contract = {
     params: s.idParams,
     response: s.projectView,
   }),
+  projectServices: endpoint({
+    method: 'GET',
+    path: '/api/projects/:id/services',
+    access: 'session',
+    params: s.idParams,
+    response: z.array(s.serviceView),
+  }),
   projectWebhook: endpoint({
     method: 'GET',
     path: '/api/projects/:id/webhook',

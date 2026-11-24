@@ -2,19 +2,22 @@
 // deployments, and one deploy that keeps happening while you watch. Everything lives in this
 // module; nothing is sent anywhere. Shapes follow the API contract exactly, so the real dashboard
 // renders it unchanged.
-import type {
-  AccountView,
-  AddressView,
-  DeploymentView,
-  FlightStats,
-  LibraryView,
-  LogLineView,
-  MetricsSample,
-  ProjectView,
-  Session,
-  SettingsView,
-  StorageView,
-  SystemInfo,
+import {
+  catalogApp,
+  serviceImage,
+  type AccountView,
+  type AddressView,
+  type DeploymentView,
+  type FlightStats,
+  type LibraryView,
+  type LogLineView,
+  type MetricsSample,
+  type ProjectView,
+  type Session,
+  type SettingsView,
+  type ServiceView,
+  type StorageView,
+  type SystemInfo,
 } from '@hangar/shared'
 
 const HOUR = 3_600_000
@@ -53,8 +56,9 @@ interface Seed {
   stopped?: boolean
   framework: string
   commits: string[]
-  /** An app from the catalog: runs this image, with storage and a library. */
+  /** An app from the catalog: runs this image, with the template's storage and parts. */
   image?: string
+  catalogId?: string
 }
 
 const LIBRARY_ID = uuid(9, 1)
@@ -116,6 +120,7 @@ const SEEDS: Seed[] = [
     framework: 'Image',
     commits: ['jellyfin/jellyfin:12.4'],
     image: 'jellyfin/jellyfin:12.4',
+    catalogId: 'jellyfin',
   },
   {
     name: 'discord-bot',
@@ -124,6 +129,16 @@ const SEEDS: Seed[] = [
     stopped: true,
     framework: 'Python',
     commits: ['Add the /weather command', 'Reconnect after network drops', 'Pin dependencies'],
+  },
+  // Last, so the other samples keep their ids. An app made of several parts (D44).
+  {
+    name: 'immich',
+    repo: '',
+    hostnames: [],
+    framework: 'Image',
+    commits: ['ghcr.io/immich-app/immich-server:v3.4.2'],
+    image: 'ghcr.io/immich-app/immich-server:v3.4.2',
+    catalogId: 'immich',
   },
 ]
 
@@ -141,6 +156,7 @@ function buildProjects(): ProjectRecord[] {
   let deploymentSeq = 0
   return SEEDS.map((seed, index) => {
     const id = uuid(3, index + 1)
+    const template = seed.catalogId ? catalogApp(seed.catalogId) : null
     const createdAt = now() - (20 + index * 3) * DAY
     const deployments: DeploymentView[] = []
     const count = seed.stopped ? 5 : seed.image ? 3 : 9 + index * 2
@@ -164,7 +180,7 @@ function buildProjects(): ProjectRecord[] {
         failureReason: failed ? 'The build command exited with code 1.' : null,
         trigger: n === 1 ? 'manual' : random() < 0.8 ? 'push' : 'manual',
         sourceDeploymentId: null,
-        port: seed.image ? 8096 : seed.framework === 'Node.js' ? 8080 : 3000,
+        port: template?.port ?? (seed.framework === 'Node.js' ? 8080 : 3000),
         isCurrent: false,
         createdAt: iso(at),
         startedAt: iso(at + 2000),
@@ -189,23 +205,18 @@ function buildProjects(): ProjectRecord[] {
         name: seed.name,
         kind: seed.image ? 'image' : 'source',
         image: seed.image ?? null,
-        catalogId: seed.image ? 'jellyfin' : null,
+        catalogId: seed.catalogId ?? null,
         strategy: seed.image ? 'recreate' : 'rolling',
-        gpu: Boolean(seed.image),
-        volumes: seed.image
-          ? [
-              { name: 'config', mountPath: '/config' },
-              { name: 'cache', mountPath: '/cache' },
-            ]
-          : [],
-        libraries: seed.image
+        gpu: Boolean(template?.gpu),
+        volumes: (template?.volumes ?? []).map(({ name, mountPath }) => ({ name, mountPath })),
+        libraries: template?.library
           ? [{ libraryId: LIBRARY_ID, name: 'Movies', mountPath: '/media', readOnly: true }]
           : [],
         repoUrl: seed.repo ? `https://github.com/${seed.repo}` : '',
         branch: seed.image ? '' : 'main',
         rootDir: '',
-        port: seed.image ? 8096 : null,
-        memoryLimitMb: seed.image ? 2048 : 512,
+        port: template?.port ?? null,
+        memoryLimitMb: template?.memoryLimitMb ?? 512,
         buildTimeoutMinutes: 15,
         triggerMode: seed.image ? 'manual' : index === 1 ? 'webhook' : 'poll',
         desiredState: seed.stopped ? 'stopped' : 'running',
@@ -220,6 +231,21 @@ function buildProjects(): ProjectRecord[] {
 }
 
 const projects = buildProjects()
+
+const demoTemplate = (record: ProjectRecord) =>
+  record.seed.catalogId ? catalogApp(record.seed.catalogId) : null
+
+/** The parts of a sample app made of several (D44), all running. */
+export function demoServices(projectId: string): ServiceView[] {
+  const record = projects.find((p) => p.view.id === projectId)
+  if (!record?.seed.image) return []
+  return (demoTemplate(record)?.services ?? []).map((service) => ({
+    name: service.name,
+    image: serviceImage(service, record.seed.image!),
+    state: 'running',
+    memoryLimitMb: service.memoryLimitMb,
+  }))
+}
 
 function toView(record: ProjectRecord): ProjectView {
   const list = record.deployments
@@ -285,18 +311,32 @@ export const demoSystemInfo: SystemInfo = {
   gpu: true,
 }
 
-/** Storage of the sample Jellyfin: its settings, and a cache of converted video. */
+const VOLUME_SIZES: Record<string, number> = {
+  config: 184 * 1024 ** 2,
+  cache: 2.3 * 1024 ** 3,
+  library: 38.4 * 1024 ** 3,
+  database: 1.1 * 1024 ** 3,
+  'model-cache': 820 * 1024 ** 2,
+}
+
+/** Storage of a sample app: its own kept folders, then its parts' (D44). */
 export function demoStorage(projectId: string): StorageView {
-  const project = projects.find((p) => p.view.id === projectId)?.view
-  if (!project) return { volumes: [], libraries: [] }
-  const sizes: Record<string, number> = { config: 184 * 1024 ** 2, cache: 2.3 * 1024 ** 3 }
+  const record = projects.find((p) => p.view.id === projectId)
+  if (!record) return { volumes: [], libraries: [] }
+  const project = record.view
+  const services = demoTemplate(record)?.services ?? []
+  const volume = (v: { name: string; mountPath: string }, service: string | null) => ({
+    name: v.name,
+    mountPath: v.mountPath,
+    service,
+    dockerName: `hangar-data-${project.name}-${v.name}`,
+    sizeBytes: VOLUME_SIZES[v.name] ?? 12 * 1024 ** 2,
+  })
   return {
-    volumes: project.volumes.map((v) => ({
-      ...v,
-      service: null,
-      dockerName: `hangar-data-${project.name}-${v.name}`,
-      sizeBytes: sizes[v.name] ?? 12 * 1024 ** 2,
-    })),
+    volumes: [
+      ...project.volumes.map((v) => volume(v, null)),
+      ...services.flatMap((s) => s.volumes.map((v) => volume(v, s.name))),
+    ],
     libraries: project.libraries.map((l) => ({
       libraryId: l.libraryId,
       name: l.name,
@@ -533,8 +573,29 @@ export function demoSample(at = now()): MetricsSample {
   }
 }
 
-/** Requests an app answers, for its Radio (runtime log). */
-export function demoRuntimeLine(projectId: string, random = Math.random): string {
+/** What each part of the sample Immich prints, for its Radio. */
+const PART_LINES: Record<string, string[]> = {
+  database: [
+    'LOG:  checkpoint starting: time',
+    'LOG:  checkpoint complete: wrote 42 buffers (0.3%)',
+    'LOG:  automatic vacuum of table "immich.public.asset"',
+  ],
+  redis: [
+    '1:M * 100 changes in 300 seconds. Saving...',
+    '1:M * Background saving started',
+    '1:M * Background saving terminated with success',
+  ],
+  'immich-machine-learning': [
+    'INFO  Loading visual model ViT-B-32__openai to memory',
+    'INFO  POST /predict 200 (faces)',
+    'INFO  POST /predict 200 (search)',
+  ],
+}
+
+/** Requests an app answers, for its Radio (runtime log), or a line from one of its parts. */
+export function demoRuntimeLine(projectId: string, random = Math.random, part?: string): string {
+  const pick = (lines: string[]) => lines[Math.floor(random() * lines.length)]!
+  if (part && PART_LINES[part]) return `${new Date().toISOString()} ${pick(PART_LINES[part])}`
   const name = projects.find((p) => p.view.id === projectId)?.view.name ?? 'app'
   const paths =
     name === 'recipes-api'

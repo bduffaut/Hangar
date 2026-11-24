@@ -4,6 +4,7 @@ import {
   CONTAINER_STOP_GRACE_SECONDS,
   serviceEnv,
   serviceImage,
+  type ServiceView,
 } from '@hangar/shared'
 import type { Ctx } from '../context.ts'
 import { findTemplate } from '../modules/catalog/templates.ts'
@@ -139,6 +140,29 @@ async function waitUntilReady(ctx: Ctx, name: string, service: string): Promise<
     await new Promise((resolve) => setTimeout(resolve, POLL_MS))
   }
   throw new StackError(`${service} did not become ready within 3 minutes`)
+}
+
+/** Each of an app's services as Docker sees it now, in start order (D44). */
+export async function stackStatus(ctx: Ctx, project: Project): Promise<ServiceView[]> {
+  return Promise.all(
+    stackServices(ctx, project).map(async (service) => {
+      const state = await ctx.docker.serviceState(serviceContainerName(project.name, service.name))
+      return {
+        name: service.name,
+        image: serviceImage(service, project.image!),
+        memoryLimitMb: service.memoryLimitMb,
+        state: !state
+          ? ('missing' as const)
+          : !state.running
+            ? ('stopped' as const)
+            : state.health === 'unhealthy'
+              ? ('unhealthy' as const)
+              : state.health === 'starting'
+                ? ('starting' as const)
+                : ('running' as const),
+      }
+    }),
+  )
 }
 
 /** Stops an app's services, for a stopped app. Their containers and data stay. */

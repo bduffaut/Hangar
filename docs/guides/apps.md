@@ -85,6 +85,8 @@ Each app's page shows its first steps once it is running. In short:
   phone app, sign in with the app's address, and turn on backup. Photos are kept in the app's
   storage (`library`), and the database in the storage of its `database` part; both survive
   updates. Together the parts may use up to about 6 GB of memory.
+  For any app made of several parts, the app's **Radio** tab lists them with how each is doing;
+  pick one to see its live output, for example when the database will not start.
 - **Paperless-ngx** runs as three parts: the app, its database, and a queue for reading documents.
   Open it and create your account (the first one has full access), then drag documents onto the
   page or scan them with a Paperless phone app. Documents are kept in the app's storage (`media`).

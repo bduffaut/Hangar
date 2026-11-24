@@ -8,6 +8,7 @@ import {
   createImageApp,
   createProject,
   deleteProject,
+  checkPart,
   followRuntimeLogs,
   installCatalogApp,
   ownedProject,
@@ -18,6 +19,7 @@ import {
   updateProjectSettings,
   webhookInfo,
 } from './service.ts'
+import { stackStatus } from '../../worker/stack.ts'
 import { projectIcon } from './icon.ts'
 
 export function projectRoutes(http: Http) {
@@ -96,6 +98,10 @@ export function projectRoutes(http: Http) {
     return deploymentView(deployment, project.currentDeploymentId)
   })
 
+  route(http, contract.projectServices, async ({ auth, params }) =>
+    stackStatus(ctx, await ownedProject(ctx, auth.user.id, params.id)),
+  )
+
   route(http, contract.projectWebhook, async ({ auth, params }) =>
     webhookInfo(ctx, await ownedProject(ctx, auth.user.id, params.id)),
   )
@@ -120,14 +126,18 @@ export function projectRoutes(http: Http) {
       .send(icon.body)
   })
 
-  // Radio: the live output of the project's running container.
+  // Radio: the live output of the project's running container, or of one part of a stack (D44).
   eventStream(
     http,
     streams.runtimeLogs,
     schemas.idParams,
-    (params, request) => ownedProject(ctx, request.auth!.user.id, params.id),
-    async (stream, project) => {
-      const output = await followRuntimeLogs(ctx, project, stream.signal)
+    async (params, request) => {
+      const project = await ownedProject(ctx, request.auth!.user.id, params.id)
+      const { part } = parseInput(schemas.runtimeLogsQuery, request.query)
+      return { project, part: part ? checkPart(ctx, project, part) : undefined }
+    },
+    async (stream, { project, part }) => {
+      const output = await followRuntimeLogs(ctx, project, stream.signal, part)
       if (!output) {
         stream.send('end', { reason: 'not_running' })
         return stream.close()

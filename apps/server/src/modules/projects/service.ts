@@ -27,10 +27,10 @@ import {
 import type { Ctx } from '../../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
-import { appImageRepository } from '../../platform/names.ts'
+import { appImageRepository, serviceContainerName } from '../../platform/names.ts'
 import { addressViews, listAddressChecks, pruneAddressChecks } from '../addresses/service.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
-import { removeStack } from '../../worker/stack.ts'
+import { removeStack, stackServices } from '../../worker/stack.ts'
 import { findTemplate } from '../catalog/templates.ts'
 import {
   listDeploymentsById,
@@ -644,7 +644,26 @@ export async function projectViewsOf(ctx: Ctx, ownerId: string): Promise<Project
 const RUNTIME_LOG_TAIL = 500
 
 /** The live output of the project's current container (its last lines first), or null if none runs. */
-export async function followRuntimeLogs(ctx: Ctx, project: Project, signal: AbortSignal) {
+/** A part of a stack app by its template name; only those, so never any other container. */
+export function checkPart(ctx: Ctx, project: Project, part: string): string {
+  if (!stackServices(ctx, project).some((s) => s.name === part)) {
+    throw new UserError(404, 'not_found', `This app has no part named ${part}.`)
+  }
+  return part
+}
+
+export async function followRuntimeLogs(
+  ctx: Ctx,
+  project: Project,
+  signal: AbortSignal,
+  part?: string,
+) {
+  // A stack's supporting part (D44).
+  if (part) {
+    const name = serviceContainerName(project.name, checkPart(ctx, project, part))
+    const state = await ctx.docker.serviceState(name)
+    return state?.running ? ctx.docker.followLogs(name, RUNTIME_LOG_TAIL, signal) : null
+  }
   const [container] = (await ctx.docker.listManagedApps(project.id)).filter(
     (c) => c.deploymentId === project.currentDeploymentId,
   )

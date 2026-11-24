@@ -9,6 +9,7 @@ import {
   demoProjects,
   demoRepos,
   demoSession,
+  demoServices,
   demoSettings,
   demoStats,
   demoStorage,
@@ -68,6 +69,8 @@ export async function demoCall(
     case 'getProject':
     case 'checkProjectAddresses':
       return demoProject(id) ?? Promise.reject(notFound())
+    case 'projectServices':
+      return demoServices(id)
     case 'projectWebhook':
       return {
         url: 'https://hooks.example.com/api/webhooks/github',

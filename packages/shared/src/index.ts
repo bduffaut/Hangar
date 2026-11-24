@@ -8,7 +8,7 @@ export * from './statuses.ts'
 export * from './contract.ts'
 export * as schemas from './schemas.ts'
 export * from './validation.ts'
-export { GITHUB_PURPOSES } from './schemas.ts'
+export { GITHUB_PURPOSES, SERVICE_STATES } from './schemas.ts'
 export type {
   AccessView,
   AccountView,
@@ -27,6 +27,7 @@ export type {
   LogLineView,
   MetricsSample,
   ProjectView,
+  ServiceView,
   Session,
   SettingsView,
   StorageView,

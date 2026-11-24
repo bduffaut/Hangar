@@ -243,6 +243,18 @@ export const emptyCopy = {
     connecting: 'Tuning in…',
     reconnecting: 'Connection lost. Reconnecting…',
     ended: 'The app stopped. Reconnect after it starts again.',
+    partNotRunning:
+      'This part is not running, so there is no live output. Deploying the app starts it again.',
+    /** Apps made of several parts (D44): whose output to show, and how each part is doing. */
+    parts: 'Parts of this app',
+    app: 'The app',
+    partStates: {
+      running: 'Running',
+      starting: 'Starting',
+      unhealthy: 'Running, but its health check fails',
+      stopped: 'Stopped',
+      missing: 'Not created yet: deploy the app',
+    },
   },
 } as const
 

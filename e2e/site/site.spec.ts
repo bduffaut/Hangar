@@ -36,8 +36,17 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
   await expect(page.getByText('recipes-api').first()).toBeVisible()
   // The launcher: a tile per app, catalog apps first under their own name.
   const tiles = page.locator('.hg-launcher-tile')
-  await expect(tiles.first()).toContainText('Jellyfin')
+  await expect(tiles.nth(0)).toContainText('Immich')
+  await expect(tiles.nth(1)).toContainText('Jellyfin')
   await page.screenshot({ path: 'test-results/tour-home.png', fullPage: true })
+
+  // An app made of several parts: Radio lists them and plays any one's output.
+  await page.goto('/tour/projects/immich')
+  await page.getByRole('tab', { name: /Radio/ }).click()
+  const parts = page.getByRole('group', { name: 'Parts of this app' })
+  await parts.getByRole('button', { name: /^database/ }).click()
+  await expect(page.getByText(/checkpoint/).first()).toBeVisible()
+  await page.screenshot({ path: 'test-results/tour-radio-parts.png' })
 
   await page.goto('/tour/projects/blog')
   await page.getByRole('button', { name: 'Deploy', exact: true }).click()

@@ -47,8 +47,10 @@ export function demoStream(url: string, handlers: Handlers, options: StreamOptio
         send('end', { reason: 'not_running' })
         return
       }
-      for (let i = 0; i < 8; i++) send('log', { line: demoRuntimeLine(projectId) })
-      every(1800, () => send('log', { line: demoRuntimeLine(projectId) }))
+      const part = new URL(url, window.location.origin).searchParams.get('part') ?? undefined
+      const line = () => demoRuntimeLine(projectId, Math.random, part)
+      for (let i = 0; i < 8; i++) send('log', { line: line() })
+      every(1800, () => send('log', { line: line() }))
     } else if (path.endsWith('/logs/stream')) {
       const id = path.split('/')[3] ?? ''
       const deployment = demoDeployment(id)
