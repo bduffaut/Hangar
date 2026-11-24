@@ -1,6 +1,11 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { getDeploymentByNumber, listLogs } from '../../src/modules/deployments/repo.ts'
+import {
+  type Deployment,
+  getDeploymentByNumber,
+  listDeployments,
+  listLogs,
+} from '../../src/modules/deployments/repo.ts'
 import {
   queueDeployment,
   queueRollback,
@@ -201,9 +206,19 @@ describe('interrupting builds', () => {
 
     expect(done.status).toBe('failed')
     expect(done.failureCode).toBe('interrupted')
+    expect((await h.fetchApp(live.name)).body).toContain('fixture: static-site')
+
+    // The cut-short deploy is tried once more, for the same commit (D49).
+    let retry: Deployment | undefined
+    await eventually(async () => {
+      ;[retry] = await listDeployments(h.ctx.db, project.id, 1)
+      expect(retry!.number).toBe(deployment.number + 1)
+    })
+    expect([retry!.commitSha, retry!.trigger]).toEqual([sha, 'manual'])
+    await requestCancel(h.ctx, retry!.id)
+    expect((await h.waitForEnd(retry!, 120_000)).status).toBe('cancelled')
     expect(await h.ctx.docker.listManagedApps(project.id)).toEqual([])
     expect(docker('exec', 'hangar-core', 'ls', '-A', h.ctx.config.buildDir)).toBe('')
-    expect((await h.fetchApp(live.name)).body).toContain('fixture: static-site')
   })
 
   it('fails a build whose deployment is overtaken by a rollback, leaving the rollback live', async () => {

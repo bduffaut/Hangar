@@ -51,6 +51,12 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.
 
+### Fixed
+
+- A deploy that Hangar's own restart cut short (an update, a reboot) is tried again when it starts,
+  instead of waiting for the next commit (D49).
+- Closing an app's live output could, rarely, stop Hangar when Docker dropped the connection.
+
 ## [0.3.1] - 2026-11-18
 
 ### Changed

@@ -162,6 +162,8 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   newest tag in the same style, read from the registry when the page opens (`versions.ts`,
   `platform/registry.ts`). Still to do from section 7: a daily background check, release notes,
   and backing up storage before an update.
+- **Deploys cut short by a restart are tried again (D49)**, found when shipping restarted core
+  just after the poller queued the public site.
 - Known limits of stacks: metrics show the app's own container only; a rollback keeps services at the current version (Immich's machine learning follows the app's
   configured version, not the rolled-back one); services' memory is not in the home screen's
   totals.
