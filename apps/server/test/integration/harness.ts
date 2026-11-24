@@ -1,6 +1,7 @@
 // Integration tests drive the real dev stack (`pnpm dev`) from the host: they queue deployments in
 // the dev database, the worker inside hangar-core runs them, and the tests check the results
 // through Traefik on port 80, exactly as a browser would.
+import { ownerNetworkName } from '../../src/platform/names.ts'
 import { execFileSync } from 'node:child_process'
 import {
   cpSync,
@@ -164,6 +165,9 @@ export function createHarness() {
       if (ownerId) {
         await ctx.db.delete(users).where(eq(users.id, ownerId))
         removeOwnerBuilder(ownerId)
+        // As deleting an account does: each run's network would otherwise use up Docker's address
+        // pools after a few dozen runs ("all predefined address pools have been fully subnetted").
+        await ctx.docker.removeAppNetwork(ownerNetworkName(ownerId)).catch(() => {})
       }
       await ctx.queue.send('reconcile', {})
       await close()

@@ -489,7 +489,12 @@ export function createDocker(docker = new Dockerode()) {
       const out = new PassThrough()
       docker.modem.demuxStream(raw, out, out)
       raw.on('end', () => out.end())
-      raw.on('error', (error) => out.destroy(error))
+      // A broken connection (ECONNRESET when Docker or the reader goes away) ends the output; it
+      // must never surface as an unhandled stream error, which would stop the whole process.
+      raw.on('error', () => {
+        if (!out.destroyed) out.end()
+      })
+      out.on('close', () => raw.destroy())
       signal.addEventListener('abort', () => raw.destroy(), { once: true })
       return out
     },
