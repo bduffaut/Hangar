@@ -174,8 +174,8 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   (`HANGAR_DOCS_SHOTS=1 pnpm test:site screenshots --project=desktop`); retake them after a
   visible change to the Apps page, an install page, or an app's page. The site gives headings
   GitHub's anchors, so `apps.md#new-versions` works in both places.
-- **Left for later from phase 2:** templates for Kavita, Syncthing, ntfy, Actual, Forgejo, and
-  code-server (none needs anything new); the Storage, Network, and Updates tabs on an app's page;
+- **Left for later from phase 2:** templates for Syncthing and code-server (ntfy, Actual,
+  Forgejo, and Kavita are in, 2026-11-25); the Storage, Network, and Updates tabs on an app's page;
   a "set up now" reminder on apps whose first visitor becomes admin; the rest of section 7 (a
   daily background check, release notes, a backup before each update, which waits for section 6).
 - **Still to run on the real server** (the maintainer's to do): install Jellyfin, Immich, and

@@ -5,7 +5,7 @@ import type { Project } from '../modules/projects/repo.ts'
 import { dataVolumeName, resolveMounts } from '../modules/storage/service.ts'
 import { appAlias, appContainerName, ownerNetworkName } from '../platform/names.ts'
 import { ensureStack } from './stack.ts'
-import { addressEnvValue, isTemplateFilePath } from '@hangar/shared'
+import { addressEnvValue, imageRepository, isTemplateFilePath } from '@hangar/shared'
 import { writeFileIfMissing } from '../platform/host.ts'
 import { findTemplate } from '../modules/catalog/templates.ts'
 import { listAppDevices } from '../modules/devices/repo.ts'
@@ -99,6 +99,12 @@ export async function startAppContainer(
     ...(alias ? { aliases: [alias] } : {}),
     ...(ports.length ? { ports: ports.map((p) => ({ ...p, hostIp: ip! })) } : {}),
     ...(project.hostNetwork ? { hostNetwork: true } : {}),
+    // A template's own command, while the app runs any version of the template's image.
+    ...(template?.command &&
+    project.image &&
+    imageRepository(project.image) === imageRepository(template.image)
+      ? { cmd: template.command }
+      : {}),
     ...(devices.length
       ? { devices: devices.map(({ path, mountPath }) => ({ path, mountPath })) }
       : {}),

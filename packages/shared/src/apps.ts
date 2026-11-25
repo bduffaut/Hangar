@@ -284,6 +284,8 @@ export interface CatalogApp {
   image: string
   /** The app's web port; for an app without a web page (`web: false`), the port its check opens. */
   port: number
+  /** The command to run instead of the image's own, for images that need one (`ntfy serve`). */
+  command?: string[]
   /** False for apps that are not web pages (a game server): no address in the browser (D51). */
   web?: false
   /** Ports published on the computer's Tailscale address, at the same number (D51). */
@@ -938,6 +940,131 @@ export const CATALOG: CatalogApp[] = [
       'Open the app and follow its setup. Under Admin Web Interface, set the port to 3000 (not 80), so this address keeps working. Keep DNS on port 53.',
       'In the Tailscale admin console, open DNS, add a nameserver with this computer’s Tailscale address, and turn on Override DNS servers.',
       'Browse on any device with Tailscale on: the app’s Query Log shows each lookup, and blocked ones in red.',
+    ],
+    tier: 'elevated',
+  },
+  {
+    // Phase 2's leftovers: none needs more than storage and a port.
+    id: 'ntfy',
+    name: 'ntfy',
+    category: 'monitoring',
+    summary: 'Send notifications to your phone from scripts, apps, and other servers.',
+    description:
+      'ntfy delivers push notifications to your phone and computer: anything that can send a web request (a script, a backup job, Uptime Kuma, Home Assistant) can notify you, by posting a message to a topic you subscribe to in the ntfy app.',
+    website: 'https://ntfy.sh',
+    image:
+      'binwiederhier/ntfy:v2.38.2@sha256:ca35419d29a834824db2440fa9320897fbe40b026c5fc2360c76ed3501b5e716',
+    command: ['serve'],
+    port: 80,
+    memoryLimitMb: 256,
+    volumes: [
+      {
+        name: 'cache',
+        mountPath: '/var/cache/ntfy',
+        purpose: 'Messages not yet delivered',
+        backup: false,
+      },
+    ],
+    env: {
+      NTFY_CACHE_FILE: '/var/cache/ntfy/cache.db',
+      NTFY_BEHIND_PROXY: 'true',
+    },
+    firstVisitorIsAdmin: false,
+    firstSteps: [
+      'Install the ntfy app on your phone, add this address as your server (Settings, Default server), and subscribe to a topic with a hard-to-guess name.',
+      'Send a test from any computer with Tailscale: curl -d "Hello" <this address>/<your topic>.',
+      'Anyone who can reach it can use any topic, so keep it private, or set up its access control before giving it a public address.',
+    ],
+    tier: 'standard',
+  },
+  {
+    id: 'actual',
+    name: 'Actual Budget',
+    category: 'home',
+    summary: 'A budget for your household, by envelope, kept on your own computer.',
+    description:
+      'Actual Budget is a fast budgeting app built on envelope budgeting: give every dollar a job, import your bank’s files, and see where the money went. It syncs between your devices through this computer.',
+    website: 'https://actualbudget.org',
+    image:
+      'actualbudget/actual-server:26.11.0@sha256:06cf186569cf58d93e12659ff1a517b65b5b0ebee7050a3991d4bd8a1d398da6',
+    port: 5006,
+    memoryLimitMb: 512,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/data',
+        purpose: 'Budgets and the server password',
+        backup: true,
+      },
+    ],
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and set the server password: anyone who knows it can open your budgets.',
+      'Create a budget, or import one from YNAB or a file from your bank.',
+    ],
+    tier: 'standard',
+  },
+  {
+    id: 'forgejo',
+    name: 'Forgejo',
+    category: 'developer',
+    summary: 'Your own Git server, with issues and pull requests, like a private GitHub.',
+    description:
+      'Forgejo hosts Git repositories with a web page for code, issues, pull requests, and releases. Keep private projects at home, or mirror your GitHub repositories as a backup. Clone over HTTP with its address.',
+    website: 'https://forgejo.org',
+    image:
+      'codeberg.org/forgejo/forgejo:17.0.2@sha256:879f4f10a98e3e167b32cde5f7ae3af0163d50bfacf567559a27a0e95a95670c',
+    port: 3000,
+    memoryLimitMb: 768,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/data',
+        purpose: 'Repositories, accounts, and settings',
+        backup: true,
+      },
+    ],
+    // Clones go over HTTP: its SSH port is not published.
+    env: { FORGEJO__server__DISABLE_SSH: 'true' },
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app: its setup page is filled in. Under Server and third-party service settings, set the Server domain and Base URL to this address, then create the administrator account at the bottom.',
+      'Create a repository, or use New migration to mirror one from GitHub.',
+    ],
+    tier: 'standard',
+  },
+  {
+    id: 'kavita',
+    name: 'Kavita',
+    category: 'media',
+    summary: 'Read your books, comics, and manga from any browser.',
+    description:
+      'Kavita organizes the ebooks, comics, and manga in a folder on this computer and lets you read them in any browser, keeping your place across devices. It also serves OPDS for reading apps.',
+    website: 'https://www.kavitareader.com',
+    image:
+      'jvmilazz0/kavita:0.9.1@sha256:31181a32f0dda73cae68721867028a7253d57881b58bea5754cd9e578e75421a',
+    port: 5000,
+    memoryLimitMb: 768,
+    volumes: [
+      {
+        name: 'config',
+        mountPath: '/kavita/config',
+        purpose: 'Accounts, progress, and covers',
+        backup: true,
+      },
+    ],
+    library: {
+      label: 'Books',
+      mountPath: '/books',
+      hint: 'The folder that holds your books, comics, or manga. Kavita only reads it.',
+      writable: false,
+    },
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create the admin account.',
+      'Add a library and choose the folder /books.',
     ],
     tier: 'elevated',
   },

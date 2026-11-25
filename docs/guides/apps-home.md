@@ -5,8 +5,10 @@ Small apps for the household:
 - **Mealie** saves recipes from any website, plans the week's meals, and makes the shopping list.
 - **Uptime Kuma** checks your sites and apps every minute and tells you when one goes down.
 - **AdGuard Home** blocks ads and trackers on every device in your Tailscale network.
+- **ntfy** sends notifications to your phone from scripts, apps, and other servers.
+- **Actual Budget** keeps a household budget, synced between your devices.
 
-Every account can install Mealie and Uptime Kuma. AdGuard Home answers DNS on a port of the
+Every account can install Mealie, Uptime Kuma, ntfy, and Actual Budget. AdGuard Home answers DNS on a port of the
 computer, so an admin installs it.
 
 ## Mealie
@@ -91,3 +93,30 @@ there, and blocked ones are in red. Add more block lists under **Filters**.
 > **When the Hangar computer is off,** devices using it for DNS cannot look anything up while
 > Tailscale is on. Add a second nameserver (such as `1.1.1.1`) after it in Tailscale's DNS page
 > if you want a fallback, knowing lookups that go there are not filtered.
+
+## ntfy
+
+ntfy pushes notifications to your phone. Anything that can send a web request can use it: a
+backup script, Uptime Kuma, Home Assistant.
+
+1. Open **Apps**, pick **ntfy**, and install it.
+2. Install the ntfy app on your phone. In its settings, set the **default server** to the app's
+   address, then subscribe to a topic with a hard-to-guess name, like `home-7f3k2`.
+3. From any computer with Tailscale, send a test to the address shown on the app's page:
+
+   ```sh
+   curl -d "Backup finished" <ntfy's address>/home-7f3k2
+   ```
+
+Anyone who can reach ntfy can read and post to any topic. Over Tailscale that is only your
+devices; before giving it a public address, set up its
+[access control](https://docs.ntfy.sh/config/#access-control).
+
+## Actual Budget
+
+1. Open **Apps**, pick **Actual Budget**, and install it.
+2. Open it and set the **server password** right away: anyone who knows it can open your budgets.
+3. Create a budget, or import one from YNAB or a file from your bank.
+
+On your phone, open the app's address in the browser and add it to the home screen. Your budgets
+are kept in the app's `data` storage.

@@ -75,6 +75,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - **AdGuard Home: ad blocking for your whole tailnet.** DNS on port 53 of the Tailscale address;
   point the tailnet's DNS at it and every device with Tailscale on is filtered. The guide covers
   the Tailscale side.
+- **Four more apps:** **ntfy** (notifications to your phone), **Actual Budget** (a household
+  budget), **Forgejo** (your own Git server), and **Kavita** (books, comics, and manga). Templates
+  can now set the command an image runs, which ntfy needs.
 - **Every port on the computer, in one list.** Settings → Network shows each port an app holds,
   with its app, owner, and the address to connect to.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at

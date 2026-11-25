@@ -11,12 +11,16 @@ choices already filled in.
 | **Jellyfin**       | Movies and shows on any device, like your own Netflix      | [Movies, music, and books](apps-media.md) | Admins             |
 | **Navidrome**      | Your music collection, like your own Spotify               | [Movies, music, and books](apps-media.md) | Admins             |
 | **Audiobookshelf** | Audiobooks and podcasts, with progress kept                | [Movies, music, and books](apps-media.md) | Admins             |
+| **Kavita**         | Books, comics, and manga in any browser                    | [Movies, music, and books](apps-media.md) | Admins             |
 | **Immich**         | Backs up your phone's photos, like your own Google Photos  | [Photos](apps-photos.md)                  | Everyone           |
 | **Paperless-ngx**  | Your paper documents, scanned, read, and searchable        | [Documents and files](apps-documents.md)  | Everyone           |
 | **File Browser**   | Upload, download, and share files from a browser           | [Documents and files](apps-documents.md)  | Everyone           |
 | **Mealie**         | Recipes, meal plans, and shopping lists                    | [Around the house](apps-home.md)          | Everyone           |
 | **Uptime Kuma**    | Watches your sites and tells you when one is down          | [Around the house](apps-home.md)          | Everyone           |
 | **AdGuard Home**   | Blocks ads and trackers on every device in your tailnet    | [Around the house](apps-home.md)          | Admins             |
+| **ntfy**           | Notifications to your phone from scripts and apps          | [Around the house](apps-home.md)          | Everyone           |
+| **Actual Budget**  | A household budget, kept at home                           | [Around the house](apps-home.md)          | Everyone           |
+| **Forgejo**        | Your own Git server, like a private GitHub                 | [Developer tools](apps-developer.md)      | Everyone           |
 | **Home Assistant** | Your lights, sensors, and thermostat in one app            | [Smart home](apps-smart-home.md)          | Everyone           |
 | **Mosquitto**      | The MQTT broker smart home apps talk through               | [Smart home](apps-smart-home.md)          | Everyone           |
 | **Zigbee2MQTT**    | Zigbee lights and sensors from any brand, with a USB stick | [Smart home](apps-smart-home.md)          | Admins             |

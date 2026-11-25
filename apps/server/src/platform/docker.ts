@@ -62,6 +62,8 @@ export interface AppContainerSpec {
   extraNetworks?: string[]
   /** Other names the app answers to on `network`. */
   aliases?: string[]
+  /** The command to run instead of the image's own. */
+  cmd?: string[]
   /** USB devices (D55): a path on the computer (a link is followed) and where the app sees it. */
   devices?: { path: string; mountPath: string }[]
   /** On the computer's own network (D54): no Docker network, aliases, or published ports. */
@@ -316,6 +318,7 @@ export function createDocker(docker = new Dockerode()) {
         name: spec.name,
         Image: spec.image,
         Env: Object.entries(spec.env).map(([key, value]) => `${key}=${value}`),
+        ...(spec.cmd?.length ? { Cmd: spec.cmd } : {}),
         ...(spec.ports?.length
           ? {
               ExposedPorts: Object.fromEntries(

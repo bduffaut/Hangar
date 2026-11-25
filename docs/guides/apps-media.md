@@ -1,15 +1,16 @@
 # Movies, music, and books
 
-Jellyfin, Navidrome, and Audiobookshelf play files you already have: videos, music, or
-audiobooks in a folder on the Hangar computer. Hangar shares that folder with the app as a
+Jellyfin, Navidrome, Audiobookshelf, and Kavita play files you already have: videos, music,
+audiobooks, or books in a folder on the Hangar computer. Hangar shares that folder with the app as a
 **library**, read-only, so the app can never change or delete your files. Libraries reach outside
 an app's own storage, so installing these apps needs an admin.
 
-| App                | Plays                   | Folder inside the app | Phone apps                               |
-| ------------------ | ----------------------- | --------------------- | ---------------------------------------- |
-| **Jellyfin**       | Movies and shows        | `/media`              | Jellyfin, for phones and TVs             |
-| **Navidrome**      | Music                   | `/music`              | Any Subsonic app (Substreamer, play:Sub) |
-| **Audiobookshelf** | Audiobooks and podcasts | `/audiobooks`         | Audiobookshelf, with offline listening   |
+| App                | Plays                    | Folder inside the app | Phone apps                               |
+| ------------------ | ------------------------ | --------------------- | ---------------------------------------- |
+| **Jellyfin**       | Movies and shows         | `/media`              | Jellyfin, for phones and TVs             |
+| **Navidrome**      | Music                    | `/music`              | Any Subsonic app (Substreamer, play:Sub) |
+| **Audiobookshelf** | Audiobooks and podcasts  | `/audiobooks`         | Audiobookshelf, with offline listening   |
+| **Kavita**         | Books, comics, and manga | `/books`              | Any OPDS reading app, or the browser     |
 
 ## 1. Put your files in a folder
 
@@ -75,6 +76,16 @@ Navidrome is light: it fits in half a gigabyte of memory, even with a very large
 
 Audiobookshelf can also follow podcasts and download new episodes. They go to its own storage,
 since the library is read-only to it.
+
+## Kavita
+
+1. Open **Apps**, pick **Kavita**, and add your books folder under **Books** (EPUB, PDF, comics
+   as CBZ or CBR).
+2. Install it, open it, and create the admin account.
+3. Add a library in Kavita and choose the folder **`/books`**.
+
+Kavita reads in the browser and keeps your place on every device. Reading apps that speak OPDS
+can use it too: the address is in each user's settings in Kavita.
 
 ## Good to know
 
