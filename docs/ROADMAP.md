@@ -3,16 +3,16 @@
 Each phase ends with something you can use on your own server, and each one becomes Decisions
 rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 
-## Where things stand (updated 2026-11-23)
+## Where things stand (updated 2026-11-25)
 
-| Phase                               | State                                                                                                                                    |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.             |
-| 2. The app catalog                  | **In progress.** Server-side templates (D43) and stacks (D44) done; eight templates including Immich, Paperless-ngx; the launcher (D45). |
-| 3. Smart home, games, private HTTPS | Planned.                                                                                                                                 |
-| 4. For students and projects        | Planned.                                                                                                                                 |
-| 5. See everything                   | Planned.                                                                                                                                 |
-| 6. Bring your own setup             | Planned.                                                                                                                                 |
+| Phase                               | State                                                                                                                                  |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.           |
+| 2. The app catalog                  | **Built** (D43–D49): eight templates including the Immich and Paperless-ngx stacks, the launcher, update checks, a guide per category. |
+| 3. Smart home, games, private HTTPS | **Planned in detail**, see [Phase 3 plan](#phase-3-plan) below. Not started.                                                           |
+| 4. For students and projects        | Planned.                                                                                                                               |
+| 5. See everything                   | Planned.                                                                                                                               |
+| 6. Bring your own setup             | Planned.                                                                                                                               |
 
 ### What phase 1 delivered (D42)
 
@@ -168,9 +168,113 @@ stack.ts`. No `services` table: the template is the source of truth (a stored sp
   configured version, not the rolled-back one); services' memory is not in the home screen's
   totals.
 
-### Phase 2, next steps
+- **A guide per category: done.** `docs/guides/apps.md` is the overview; `apps-media.md`,
+  `apps-photos.md`, `apps-documents.md`, and `apps-home.md` walk through each app. Their pictures
+  are taken from the tour by `e2e/site/screenshots.spec.ts` into `docs/images/guides/`
+  (`HANGAR_DOCS_SHOTS=1 pnpm test:site screenshots --project=desktop`); retake them after a
+  visible change to the Apps page, an install page, or an app's page. The site gives headings
+  GitHub's anchors, so `apps.md#new-versions` works in both places.
+- **Left for later from phase 2:** templates for Kavita, Syncthing, ntfy, Actual, Forgejo, and
+  code-server (none needs anything new); the Storage, Network, and Updates tabs on an app's page;
+  a "set up now" reminder on apps whose first visitor becomes admin; the rest of section 7 (a
+  daily background check, release notes, a backup before each update, which waits for section 6).
+- **Still to run on the real server** (the maintainer's to do): install Jellyfin, Immich, and
+  Paperless-ngx there, then tag `v0.4.0`.
 
-1. Catalog screenshots and a guide per category.
+### Phase 3 plan
+
+**At the end:** friends join a **Minecraft** server over Tailscale, **Home Assistant** runs with a
+Zigbee stick, **Vaultwarden** opens on `https://` on your own devices, and **AdGuard Home** blocks
+ads on every device in the tailnet.
+
+Everything phase 3 needs from the computer itself (ports, USB sticks, HTTPS certificates, the
+home network) reaches past an app's container, so all of it is admin-only and re-checked at
+deploy, like libraries (section 4). Core gains no new powers over the computer: what it cannot
+do through Docker, a small host-side helper installed by the installer does from a list core
+writes.
+
+Steps in build order. Each one ships on its own and gets its Decisions row.
+
+1. **Apps reach each other by name (S).** Each app's container gets its name as an alias on its
+   account's network (D32), so Zigbee2MQTT reaches `mqtt://mosquitto:1883` and Uptime Kuma can
+   watch `http://jellyfin:8096`. Accounts stay apart: only apps of the same account share a
+   network. Integration test: two apps of one account talk; one of another account cannot.
+2. **Files a template writes before the first start (S).** A template may list `files`
+   (`{ volume, path, content }`) that Hangar writes into a kept folder before the first start,
+   only when the file does not exist yet, so the owner's own edits are never overwritten. Written
+   by a throwaway container, as the host probe works. Needed by three templates: Mosquitto 2
+   accepts only local connections without a config file; Home Assistant answers 400 behind a
+   proxy until `configuration.yaml` trusts it (`use_x_forwarded_for`, `trusted_proxies`);
+   Zigbee2MQTT needs to be told its broker and its stick.
+3. **Install questions (S).** A template may ask something required before install, filled in
+   nowhere else: Minecraft's EULA ("I accept Minecraft's EULA", sets `EULA=TRUE`), Home
+   Assistant's time zone. Answers go to the app's env. The form shows them first (section
+   "Catalog template format": required questions first).
+4. **Ports that are not web pages (M).** An app's ports become a list:
+   `{ port, protocol: http | tcp | udp }` (table `app_ports`). TCP and UDP ports are published
+   by Docker on `HANGAR_BIND_IP`, the Tailscale address, and never on every interface. Admin
+   only. The form refuses 22, 80, 443, Hangar's own ports, and a port another app already has;
+   Docker's own "address already in use" becomes "Port 25565 is already in use on this computer,
+   by something Hangar did not start". An app without an HTTP port is healthy once its TCP port
+   accepts a connection (UDP only: once it runs, plus its image's own check, D46). The app's page
+   shows `hangar.<tailnet>.ts.net:25565` with a copy button, and its launcher tile copies the
+   address instead of opening it. Settings → Security lists every published port (Security
+   notes). Public TCP stays out: a Cloudflare TCP route needs `cloudflared` on each player's
+   computer, which defeats the point.
+5. **USB devices (M).** An admin picks a device from what the computer has under
+   `/dev/serial/by-id/` (read by the host probe; first check that the probe's read-only view of
+   `/` includes `/dev`, and mount `/dev/serial` into it if not). Hangar stores the by-id path,
+   which stays the same when the stick moves to another socket, and passes the device at start
+   with read and write (Docker resolves the link then). A missing stick fails the deploy in plain
+   words ("The Zigbee stick is not plugged in"), and the app's page says so while it is away.
+   Elevated, re-checked at deploy. Integration test on Linux CI with a stand-in character device.
+6. **Private HTTPS (M).** A Tailscale machine has one `ts.net` name, so each app gets a port on
+   it: `https://hangar.<tailnet>.ts.net:8401`. Three ways were weighed:
+   - **Recommended: a host-side helper.** Core writes the list it wants (app, port) to
+     `/opt/hangar/state/https.json`; a systemd path unit installed by the installer runs
+     `hangar-tailscale sync`, which points `tailscale serve --https=<port>` at a loopback port
+     Docker publishes for the app (`127.0.0.1:<port>`). Tailscale makes and renews the
+     certificates, and core never touches Tailscale. Existing installs get the unit through
+     `hangar-update`.
+   - Traefik's own Tailscale certificate resolver: no host helper, but Traefik would need the
+     `tailscaled` socket and a fixed range of entrypoints declared in advance.
+   - A Tailscale sidecar per app (its own `vault.<tailnet>.ts.net` name): the nicest addresses,
+     but each needs an auth key and tags in the tailnet's policy, which is too much to ask.
+     When the tailnet's HTTPS certificates are off, apps stay on http with a note on how to turn
+     them on (as for the Control Tower, D40). A template can mark HTTPS as required (Vaultwarden)
+     so the install page says so before installing. First, on the real server: check that
+     `tailscale serve` on a port other than 443 works, keeps the `Host` header, and passes
+     WebSockets (Vaultwarden's live sync).
+7. **Home Assistant's home network (S–M).** By default Home Assistant runs like every app (bridge
+   network, private address through Traefik). Zigbee, Z-Wave, MQTT, and most cloud devices work
+   that way. An admin option, **Find devices on my home network**, switches it to host networking
+   for discovery (Chromecast, HomeKit, DLNA), with a plain warning: it then answers on port 8123
+   on every network the computer is on, including the home network. Traefik reaches it through
+   the host gateway, so its private address stays the same. Only templates that declare it can
+   ask for host networking.
+8. **The catalog (M),** in this order, each run for real before it lands:
+   - **Minecraft (Java)** after steps 3–4: the first app without a web page. Bedrock (UDP 19132)
+     right after. Valheim waits until someone asks: several GB of memory and a UDP range.
+   - **Vaultwarden** after step 6: standard tier; an admin token made at install (`secrets`);
+     first steps close sign-ups after the household has its accounts.
+   - **Mosquitto**, **Home Assistant**, **Zigbee2MQTT** (steps 1, 2, 5, 7), then **Node-RED**.
+     **ESPHome** last: flashing a board from the browser needs HTTPS (step 6), and finding boards
+     needs host networking.
+   - **AdGuard Home:** DNS on TCP and UDP 53 on the Tailscale address (systemd-resolved listens
+     on 127.0.0.53 only, so there is no clash), plus its web page.
+9. **Guides (S):** "Smart home with Hangar", "Run a game server", "Ad blocking for all your
+   devices" (pointing the tailnet's DNS at Hangar in Tailscale's admin), and "Passwords with
+   Vaultwarden", with pictures from the tour as in phase 2. The tour gets a sample Minecraft
+   server and Home Assistant.
+
+**Checks before calling it done:** a phone joins Minecraft over Tailscale; Home Assistant sees a
+Zigbee sensor through the stick and survives the stick being moved to another socket;
+Vaultwarden's phone app signs in over `https://`; a device using AdGuard as its DNS server has
+ads blocked; and the other production site on the maintainer's server answers throughout, since
+new published ports and `tailscale serve` changes happen on that machine.
+
+**Needs from the maintainer:** a Zigbee (or Z-Wave) USB stick on the server for step 5, and the
+tailnet's HTTPS certificates turned on for step 6.
 
 ## The goal
 
@@ -372,7 +476,8 @@ image by an admin.
 ### Phase 3: Smart home, games, and private HTTPS (M)
 
 **At the end:** **Home Assistant** finds your devices, a Zigbee dongle works, friends join your
-**Minecraft** server over Tailscale, and Vaultwarden works on `https://`.
+**Minecraft** server over Tailscale, and Vaultwarden works on `https://`. The detailed plan, in
+build order, is [Phase 3 plan](#phase-3-plan) above.
 
 - TCP/UDP ports on the Tailscale address; USB devices (`/dev/ttyUSB*`, `/dev/serial/by-id/*`)
   as elevated options, with a device picker.

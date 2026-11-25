@@ -38,7 +38,7 @@ runs it, and gives it an address.
 **Ready-made apps** like Jellyfin work the same way, except that Hangar downloads the app's
 published image instead of building your code, and only when you press **Update**. An app that
 keeps data stops its old version just before starting the new one, so the two never write to the
-same files, and starts it again if the new one fails. See [Install apps like Jellyfin](apps.md).
+same files, and starts it again if the new one fails. See [Install apps](apps.md).
 
 ## What hangar.benduffaut.com is
 

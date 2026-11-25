@@ -25,6 +25,21 @@ test('the front page leads to the install guide and the tour', async ({ page }) 
   await expect(page).toHaveURL(/\/docs\/tailscale$/)
 })
 
+test('the app guides show their pictures and link to each other', async ({ page }) => {
+  await page.goto('/docs/apps')
+  const catalog = page.getByRole('img', { name: /The Apps page/ })
+  await catalog.scrollIntoViewIfNeeded()
+  await expect
+    .poll(() => catalog.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+    .toBeGreaterThan(0)
+  await page.getByRole('link', { name: 'Photos' }).first().press('Enter')
+  await expect(page).toHaveURL(/\/docs\/apps-photos$/)
+  // A link to a section of another guide lands on that section.
+  await page.getByRole('link', { name: 'New versions' }).press('Enter')
+  await expect(page).toHaveURL(/\/docs\/apps#new-versions$/)
+  await expect(page.getByRole('heading', { name: 'New versions' })).toBeInViewport()
+})
+
 test('the tour shows the dashboard and sends actions to the install guide', async ({ page }) => {
   await page.goto('/tour')
   // Phones show the short version of the banner.

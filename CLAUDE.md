@@ -69,6 +69,9 @@ Testing notes:
   changing its version, run it for real: `HANGAR_TEST_CATALOG=<id> pnpm vitest run --project
 integration catalog`.
 - Pipe test output to a file, not straight into `tail`: a pipe hides the exit code.
+- The guides' pictures (`docs/images/guides/`) come from the tour:
+  `HANGAR_DOCS_SHOTS=1 pnpm test:site screenshots --project=desktop`. Retake them after a visible
+  change to the Apps page, an install page, or an app's page.
 
 ## Shipping
 

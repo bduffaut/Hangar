@@ -19,7 +19,10 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - **Graphics chip.** Apps like Jellyfin can use `/dev/dri` for faster video conversion.
 - Apps with storage stop the old version before starting the new one, and start it again if the
   new one fails.
-- A guide: [Install apps like Jellyfin](docs/guides/apps.md).
+- Guides for the apps: [Install apps](docs/guides/apps.md), then one per kind of app
+  ([movies, music, and books](docs/guides/apps-media.md), [photos](docs/guides/apps-photos.md),
+  [documents and files](docs/guides/apps-documents.md), [recipes and monitoring](docs/guides/apps-home.md)),
+  with pictures of the dashboard.
 - **A build time limit per app**, in its Settings: 15 minutes by default, from 1 to 120. For an
   app from an image it limits the download.
 - **Five more apps in the catalog (D43):** Navidrome (music), Audiobookshelf (audiobooks and

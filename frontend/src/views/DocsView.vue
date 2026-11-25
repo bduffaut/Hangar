@@ -16,6 +16,23 @@ const files = import.meta.glob('../../../docs/guides/*.md', {
   eager: true,
 }) as Record<string, string>
 
+/** Pictures in the guides, written as `../images/guides/x.png` so they show on GitHub too. */
+const images = import.meta.glob('../../../docs/images/guides/*.png', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>
+const imageUrl = (name: string) => images[`../../../docs/images/guides/${name}`]
+
+/** A heading's anchor, as GitHub makes it, so `apps.md#new-versions` works in both places. */
+const anchor = (text: string) =>
+  text
+    .replace(/<[^>]+>/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 -]/g, '')
+    .trim()
+    .replace(/ /g, '-')
+
 /** The order of the guides in the side menu; anything not listed comes after, by name. */
 const ORDER = [
   'install',
@@ -23,6 +40,10 @@ const ORDER = [
   'tailscale',
   'go-public',
   'apps',
+  'apps-media',
+  'apps-photos',
+  'apps-documents',
+  'apps-home',
   'github',
   'sharing',
   'updating',
@@ -45,10 +66,17 @@ const guides: Guide[] = Object.entries(files)
       // Links between guides stay inside the site.
       .replace(/href="(?:\.\/)?([a-z0-9-]+)\.md(#[^"]*)?"/g, 'href="/docs/$1$2"')
       .replace(/href="(https?:\/\/[^"]+)"/g, 'href="$1" rel="noopener" target="_blank"')
+      .replace(/<img src="\.\.\/images\/guides\/([a-z0-9-]+\.png)"/g, (tag, name: string) => {
+        const url = imageUrl(name)
+        return url ? `<img loading="lazy" src="${url}"` : tag
+      })
+      .replace(/<h([23])>([\s\S]*?)<\/h\1>/g, (_, level: string, inner: string) => {
+        return `<h${level} id="${anchor(inner)}">${inner}</h${level}>`
+      })
       // Numbered steps ("## 1. Run the installer") get the waypoint mark the front page uses.
       .replace(
-        /<h2>(\d+)\.\s+([\s\S]*?)<\/h2>/g,
-        '<h2 class="hg-step"><span class="hg-step-mark" aria-hidden="true">$1</span><span><span class="hg-visually-hidden">Step $1: </span>$2</span></h2>',
+        /<h2 (id="[^"]*")>(\d+)\.\s+([\s\S]*?)<\/h2>/g,
+        '<h2 $1 class="hg-step"><span class="hg-step-mark" aria-hidden="true">$2</span><span><span class="hg-visually-hidden">Step $2: </span>$3</span></h2>',
       )
     return { slug, title, html }
   })
@@ -455,6 +483,14 @@ function closeMenu(event: Event) {
 }
 .hg-docs-body :deep(blockquote > :last-child) {
   margin-bottom: 0;
+}
+.hg-docs-body :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: var(--hg-space-5) 0;
+  border: 1px solid var(--hg-line);
+  border-radius: var(--hg-radius-sm);
 }
 .hg-docs-body :deep(table) {
   display: block;
