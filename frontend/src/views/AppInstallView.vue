@@ -5,6 +5,7 @@ import {
   checkProjectName,
   isPinnedImage,
   isValidImageRef,
+  type DeviceView,
   type LibraryView,
   libraryPathProblemCopy,
   checkLibraryPath,
@@ -52,9 +53,11 @@ const lockedReason = computed(() => {
   if (session.isAdmin) return null
   if (custom.value) return 'Only an admin can run any image. Pick an app from the list instead.'
   if (template.value && template.value.tier !== 'standard') {
-    const what = template.value.ports?.length
-      ? 'uses a port on this computer'
-      : 'reads a folder on this computer'
+    const what = template.value.device
+      ? 'uses a USB stick plugged into this computer'
+      : template.value.ports?.length
+        ? 'uses a port on this computer'
+        : 'reads a folder on this computer'
     return `${template.value.name} ${what}, so an admin installs it. Ask an admin to install it for you.`
   }
   return null
@@ -124,7 +127,21 @@ const libraries = ref<LibraryView[]>([])
 const libraryId = ref<string | null>(null)
 const settings = ref<SettingsView | null>(null)
 const gpuAvailable = ref(false)
+/** USB sticks plugged in (D55), for a template that needs one. */
+const devices = ref<DeviceView[] | null>(null)
+const device = ref<string | null>(null)
+const deviceOptions = computed(() =>
+  (devices.value ?? []).map((d) => ({
+    label: d.usedBy.length ? `${d.name} (used by ${d.usedBy.join(', ')})` : d.name,
+    value: d.path,
+  })),
+)
+async function loadDevices() {
+  devices.value = await api('listDevices').catch(() => [])
+  device.value = devices.value.find((d) => !d.usedBy.length)?.path ?? devices.value[0]?.path ?? null
+}
 onMounted(async () => {
+  if (template.value?.device && session.isAdmin) void loadDevices()
   const [libs, info, s] = await Promise.all([
     session.isAdmin ? api('listLibraries').catch(() => [] as LibraryView[]) : [],
     api('systemInfo').catch(() => null),
@@ -202,6 +219,7 @@ const publicAddress = computed(() =>
 const blocked = computed(
   () =>
     Boolean(nameProblem.value || imageProblem.value || unanswered.value || portsProblem.value) ||
+    Boolean(template.value?.device && !device.value) ||
     (port.value.trim() !== '' && portValue.value === null) ||
     memoryValue.value === null,
 )
@@ -255,6 +273,7 @@ async function install() {
               ...(libraryChoice ? { libraryId: libraryChoice } : {}),
               gpu: useGpu,
               ...(t.hostNetwork && hostNetwork.value ? { hostNetwork: true } : {}),
+              ...(t.device && device.value ? { device: device.value } : {}),
               accepted: questions.value.filter((q) => accepted.value[q.env]).map((q) => q.env),
               deploy: true,
             },
@@ -277,6 +296,7 @@ async function install() {
                   : [],
               gpu: useGpu,
               ...(t?.hostNetwork && hostNetwork.value ? { hostNetwork: true } : {}),
+              ...(t?.device && device.value ? { device: device.value } : {}),
               ...(t
                 ? {}
                 : {
@@ -410,6 +430,26 @@ async function install() {
             label="Add another library"
             @click="addingLibrary = true"
           />
+        </div>
+      </div>
+    </HgPanel>
+
+    <HgPanel v-if="template?.device" :title="template.device.label">
+      <div class="hg-install-group">
+        <p class="hg-muted">{{ template.device.hint }}</p>
+        <BaseField
+          v-if="devices?.length"
+          label="Device"
+          for="ai-device"
+          help="Its name stays the same when you plug it into another USB socket."
+        >
+          <BaseSelect id="ai-device" v-model="device" :options="deviceOptions" />
+        </BaseField>
+        <BaseMessage v-else-if="devices" tone="warn">
+          No USB stick is plugged in. Plug it into the computer, then look again.
+        </BaseMessage>
+        <div>
+          <BaseButton size="sm" icon="restart" label="Look again" @click="loadDevices" />
         </div>
       </div>
     </HgPanel>

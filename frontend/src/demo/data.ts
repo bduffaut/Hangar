@@ -220,6 +220,7 @@ function buildProjects(): ProjectRecord[] {
         gpu: Boolean(template?.gpu),
         web: template?.web !== false,
         hostNetwork: false,
+        devices: [],
         ports: (template?.ports ?? []).map((p) => ({
           port: p.port,
           protocol: p.protocol,

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import {
   type PortProtocol,
+  serialDeviceName,
   appHostname,
   BUILD_TIMEOUT_MAX_MINUTES,
   BUILD_TIMEOUT_MIN_MINUTES,
@@ -29,6 +30,8 @@ import type { Ctx } from '../../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository, serviceContainerName } from '../../platform/names.ts'
+import { insertAppDevices, listAppDevices } from '../devices/repo.ts'
+import { checkDevice } from '../devices/service.ts'
 import { insertAppPorts, listAppPorts } from '../ports/repo.ts'
 import { checkPorts, portAddress, portHost } from '../ports/service.ts'
 import { addressViews, listAddressChecks, pruneAddressChecks } from '../addresses/service.ts'
@@ -291,6 +294,8 @@ type ImageAppInput = ProjectSettings &
     ports?: { port: number; protocol: PortProtocol }[]
     /** The computer's own network (D54): only for a template that offers it. */
     hostNetwork?: boolean
+    /** A USB stick for a template that needs one (D55), by its /dev/serial/by-id path. */
+    device?: string
   }
 
 /** Any published image, with the settings given (D42). Admins only. */
@@ -358,6 +363,7 @@ export async function installCatalogApp(
         : [],
     gpu: Boolean(template.gpu && input.gpu),
     hostNetwork: Boolean(template.hostNetwork && input.hostNetwork),
+    ...(template.device && input.device ? { device: input.device } : {}),
   })
 }
 
@@ -407,10 +413,28 @@ async function insertImageApp(
     )
   }
   await checkPorts(ctx, ports)
+  // A template's USB stick (D55): required where the template asks for one, an admin's to give.
+  const devices =
+    template?.device && input.device
+      ? [{ path: input.device, mountPath: template.device.mountPath }]
+      : []
+  if (template?.device && !devices.length) {
+    throw new ProjectError(
+      `${template.name} needs a ${template.device.label.toLowerCase()}. Plug it in and pick it.`,
+    )
+  }
+  if (devices.length && owner.role !== 'admin') {
+    throw new UserError(403, 'admin_only', 'Only an admin can give an app a USB device.')
+  }
+  for (const d of devices) await checkDevice(ctx, d.path)
   // Two containers can never hold the same port on the computer, so a new version waits for the
   // old one to stop.
   const hasStorage = Boolean(
-    storage.volumes?.length || storage.libraries?.length || ports.length || hostNetwork,
+    storage.volumes?.length ||
+    storage.libraries?.length ||
+    ports.length ||
+    hostNetwork ||
+    devices.length,
   )
 
   let project: Project
@@ -439,6 +463,7 @@ async function insertImageApp(
     throw error
   }
   await replaceAppStorage(ctx.db, project.id, storage)
+  await insertAppDevices(ctx.db, project.id, devices)
   await insertAppPorts(ctx.db, project.id, ports).catch(async (error: unknown) => {
     // Taken a moment ago by another install.
     await deleteProjectRow(ctx.db, project.id)
@@ -659,6 +684,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
     listAppLibraries(ctx.db, ids),
   ])
   const ports = await listAppPorts(ctx.db, ids)
+  const devices = await listAppDevices(ctx.db, ids)
   const host = ports.length ? await portHost(ctx) : { ip: null, name: null }
   return projects.map((p) => {
     const latestRow = latest.find((d) => d.projectId === p.id)
@@ -673,6 +699,9 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       gpu: p.gpu,
       web: p.web,
       hostNetwork: p.hostNetwork,
+      devices: devices
+        .filter((d) => d.projectId === p.id)
+        .map((d) => ({ path: d.path, name: serialDeviceName(d.path), mountPath: d.mountPath })),
       ports: ports
         .filter((port) => port.projectId === p.id)
         .map(({ port, protocol, hostPort }) => ({

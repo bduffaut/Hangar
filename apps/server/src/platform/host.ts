@@ -94,3 +94,29 @@ export async function writeFileIfMissing(
   if (exitCode !== 0) throw new Error(`Could not write ${path} into ${volume}: ${output}`)
   return output.includes('written')
 }
+
+/**
+ * The USB serial devices plugged in (D55): each stable name under /dev/serial/by-id with what it
+ * points to now. Only links whose device exists are listed.
+ */
+const LIST_SERIAL = `
+for f in /host/dev/serial/by-id/*; do
+  [ -e "$f" ] || continue
+  t=$(readlink -f "$f")
+  printf '%s\\t%s\\n' "\${f#/host}" "\${t#/host}"
+done
+`
+
+export async function listSerialDevices(ctx: Ctx): Promise<{ path: string; target: string }[]> {
+  const { exitCode, output } = await ctx.docker.runProbe({
+    image: await image(ctx),
+    cmd: ['sh', '-c', LIST_SERIAL],
+    binds: ['/dev:/host/dev:ro'],
+  })
+  if (exitCode !== 0) throw new Error(`Could not list USB devices: ${output}`)
+  return output
+    .split('\n')
+    .map((line) => line.split('\t'))
+    .filter((parts): parts is [string, string] => parts.length === 2 && parts[0]!.length > 0)
+    .map(([path, target]) => ({ path, target }))
+}

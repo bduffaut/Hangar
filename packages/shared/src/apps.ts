@@ -54,6 +54,25 @@ export function isTemplateFilePath(path: string): boolean {
   )
 }
 
+// USB devices (D55): a Zigbee or Z-Wave stick, by its stable name under /dev/serial/by-id, which
+// stays the same when the stick moves to another socket (ttyUSB0 does not).
+
+export const SERIAL_DEVICE_DIR = '/dev/serial/by-id'
+
+export function isSerialDevicePath(path: string): boolean {
+  return /^\/dev\/serial\/by-id\/[A-Za-z0-9._:+-]+$/.test(path) && !path.endsWith('/..')
+}
+
+/** `usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_1234-if00-port0` → `ITead Sonoff Zigbee 3.0 USB Dongle Plus`. */
+export function serialDeviceName(path: string): string {
+  const base = path.split('/').pop() ?? path
+  return base
+    .replace(/^usb-/, '')
+    .replace(/-if\d+(-port\d+)?$/, '')
+    .replace(/_[0-9a-fA-F]{8,}$/, '')
+    .replaceAll('_', ' ')
+}
+
 export const MAX_APP_VOLUMES = 8
 export const MAX_APP_LIBRARIES = 8
 export const MAX_LIBRARIES = 32
@@ -284,6 +303,10 @@ export interface CatalogApp {
   library?: { label: string; mountPath: string; hint: string; writable: boolean }
   /** Offer the graphics chip when the computer has one. */
   gpu?: { hint: string }
+  /**
+   * A USB stick the app needs (D55), picked by an admin at install and passed in at `mountPath`.
+   */
+  device?: { label: string; hint: string; mountPath: string }
   /**
    * Offer the computer's own network (admins), for apps that find devices by listening on the home
    * network (D54). The app then answers on every network the computer is on, at its port.
@@ -815,6 +838,67 @@ export const CATALOG: CatalogApp[] = [
       'Your other apps reach it at mosquitto:1883 (its name, if you changed it). In Home Assistant, add the MQTT integration with that broker and port, and no user name.',
     ],
     tier: 'standard',
+  },
+  {
+    // A Zigbee stick (D55) and Mosquitto by name (D50): Zigbee devices appear in Home Assistant.
+    id: 'zigbee2mqtt',
+    name: 'Zigbee2MQTT',
+    category: 'smart-home',
+    summary: 'Use Zigbee lights, sensors, and switches from any brand, with no hubs.',
+    description:
+      'Zigbee2MQTT talks to Zigbee devices (bulbs, buttons, door and motion sensors from IKEA, Aqara, Philips, and many more) through a USB stick plugged into this computer, and passes them to Home Assistant through Mosquitto. Install Mosquitto first, with the name mosquitto.',
+    website: 'https://www.zigbee2mqtt.io',
+    image:
+      'koenkk/zigbee2mqtt:2.14.3@sha256:fb4a6b0f6868ad1cd6a9996479802b2420e599c3463b62bbff8c8cd9a908f43a',
+    port: 8080,
+    device: {
+      label: 'Zigbee stick',
+      hint: 'The USB stick that talks to your Zigbee devices, like a Sonoff Zigbee 3.0 Dongle or a SkyConnect.',
+      mountPath: '/dev/zigbee',
+    },
+    memoryLimitMb: 512,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/app/data',
+        purpose: 'Settings, paired devices, and the Zigbee network key',
+        backup: true,
+      },
+    ],
+    files: [
+      {
+        volume: 'data',
+        path: 'configuration.yaml',
+        content: [
+          '# Written by Hangar when Zigbee2MQTT was installed. Edit it freely: Hangar never writes',
+          "# it again while it exists. Zigbee2MQTT replaces GENERATE with your network's own keys.",
+          'version: 4',
+          'homeassistant:',
+          '  enabled: true',
+          'mqtt:',
+          '  server: mqtt://mosquitto:1883',
+          'serial:',
+          '  port: /dev/zigbee',
+          'frontend:',
+          '  enabled: true',
+          '  port: 8080',
+          'advanced:',
+          '  network_key: GENERATE',
+          '  pan_id: GENERATE',
+          '  ext_pan_id: GENERATE',
+          '',
+        ].join('\n'),
+      },
+    ],
+    env: {},
+    // Its web page has no sign-in of its own.
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app: it shows the Zigbee network. Press Permit join, then pair each device as its manual says (often by holding its button).',
+      'In Home Assistant, the devices appear by themselves through the MQTT integration.',
+      'If it cannot reach the broker, install Mosquitto with the name mosquitto, or change mqtt.server in configuration.yaml.',
+    ],
+    tier: 'elevated',
   },
 ]
 

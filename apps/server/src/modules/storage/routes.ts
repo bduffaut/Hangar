@@ -1,5 +1,6 @@
 import { contract } from '@hangar/shared'
 import { type Http, OK, route } from '../../http/server.ts'
+import { deviceList } from '../devices/service.ts'
 import { portList } from '../ports/service.ts'
 import { ownedProject } from '../projects/service.ts'
 import {
@@ -21,6 +22,8 @@ export function storageRoutes(http: Http) {
 
   route(http, contract.listLibraries, () => libraryList(ctx))
   route(http, contract.listPorts, () => portList(ctx))
+  // Each listing starts a short-lived container.
+  route(http, contract.listDevices, () => deviceList(ctx), { rateLimit: 30 })
   // Each check starts a short-lived container, so a few a minute is plenty.
   route(http, contract.createLibrary, ({ body }) => createLibrary(ctx, body), { rateLimit: 20 })
   route(http, contract.updateLibrary, ({ params, body }) => updateLibrary(ctx, params.id, body))

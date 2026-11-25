@@ -9,7 +9,7 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.           |
 | 2. The app catalog                  | **Built** (D43–D49): eight templates including the Immich and Paperless-ngx stacks, the launcher, update checks, a guide per category. |
-| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–4 and 7 done (D50–D54); Minecraft, Home Assistant, Mosquitto in the catalog.          |
+| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–5 and 7 done (D50–D55); left: private HTTPS (step 6), AdGuard, Vaultwarden.           |
 | 4. For students and projects        | Planned.                                                                                                                               |
 | 5. See everything                   | Planned.                                                                                                                               |
 | 6. Bring your own setup             | Planned.                                                                                                                               |
@@ -297,6 +297,11 @@ new published ports and `tailscale serve` changes happen on that machine.
   the host network, Home Assistant cannot reach Mosquitto by name (Mosquitto would need a port on
   the computer's loopback, or Home Assistant a way into the account network); a firewall such as
   ufw may block Docker's networks from reaching the computer, which the doctor could check.
+- **Step 5 done (D55):** `device` on a template, table `app_devices`, `modules/devices/`,
+  `listSerialDevices` in `platform/host.ts`. Tested with a stand-in link under
+  `/dev/serial/by-id` (Docker follows it to the device). **Zigbee2MQTT** (2.14.3) is in the
+  catalog but has not run with a real stick: that needs the maintainer's server and a stick. An
+  installed app's stick cannot be changed under its Settings yet.
 - **Minecraft (Java)** is in the catalog and installs for real (`HANGAR_TEST_CATALOG=minecraft`).
   Guide: `docs/guides/apps-games.md`. Not yet run on the real server. Its image tag
   (`2026.11.1-java25`) is not in a numeric style, so the update notice (D47) does not offer newer

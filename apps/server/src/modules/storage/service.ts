@@ -9,6 +9,7 @@ import {
   type UserRole,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
+import { listAppDevices } from '../devices/repo.ts'
 import { listAppPorts } from '../ports/repo.ts'
 import { conflict, notFound, UserError } from '../../errors.ts'
 import type { AppMount } from '../../platform/docker.ts'
@@ -210,6 +211,7 @@ export async function needsAdmin(ctx: Ctx, project: Project): Promise<boolean> {
   if (project.gpu || project.hostNetwork) return true
   if (project.kind === 'image' && !isMemberCatalogApp(project.catalogId, project.image)) return true
   if ((await listAppPorts(ctx.db, [project.id])).length > 0) return true
+  if ((await listAppDevices(ctx.db, [project.id])).length > 0) return true
   return (await listAppLibraries(ctx.db, [project.id])).length > 0
 }
 

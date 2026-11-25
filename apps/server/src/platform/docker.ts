@@ -62,6 +62,8 @@ export interface AppContainerSpec {
   extraNetworks?: string[]
   /** Other names the app answers to on `network`. */
   aliases?: string[]
+  /** USB devices (D55): a path on the computer (a link is followed) and where the app sees it. */
+  devices?: { path: string; mountPath: string }[]
   /** On the computer's own network (D54): no Docker network, aliases, or published ports. */
   hostNetwork?: boolean
   /** Ports published on `hostIp` only (D51), never on every address of the computer. */
@@ -342,9 +344,16 @@ export function createDocker(docker = new Dockerode()) {
               ]
             }),
           ),
-          Devices: spec.gpu
-            ? [{ PathOnHost: '/dev/dri', PathInContainer: '/dev/dri', CgroupPermissions: 'rwm' }]
-            : [],
+          Devices: [
+            ...(spec.gpu
+              ? [{ PathOnHost: '/dev/dri', PathInContainer: '/dev/dri', CgroupPermissions: 'rwm' }]
+              : []),
+            ...(spec.devices ?? []).map((d) => ({
+              PathOnHost: d.path,
+              PathInContainer: d.mountPath,
+              CgroupPermissions: 'rwm',
+            })),
+          ],
         },
       })
       try {

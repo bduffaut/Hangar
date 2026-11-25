@@ -21,6 +21,7 @@ export type {
   InviteView,
   LibraryView,
   PublishedPortView,
+  DeviceView,
   DeploymentView,
   ErrorBody,
   FlightStats,

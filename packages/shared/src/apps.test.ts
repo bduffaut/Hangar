@@ -8,7 +8,9 @@ import {
   checkHostPort,
   checkMountPath,
   imageRepository,
+  isSerialDevicePath,
   isTemplateFilePath,
+  serialDeviceName,
   portLabel,
   imageTag,
   isMemberCatalogApp,
@@ -167,8 +169,9 @@ describe('the catalog', () => {
       for (const p of ports)
         expect([app.id, p.port, checkHostPort(p.port)]).toEqual([app.id, p.port, null])
       expect(new Set(ports.map((p) => `${p.port}/${p.protocol}`)).size).toBe(ports.length)
-      // A port on the computer is an admin's to give.
-      if (ports.length) expect(app.tier).toBe('elevated')
+      // A port or a USB stick on the computer is an admin's to give.
+      if (ports.length || app.device) expect(app.tier).toBe('elevated')
+      if (app.device) expect(app.device.mountPath).toMatch(/^\/dev\/[a-z0-9]+$/)
       // An app that is not a web page is reached by its ports, or by its name from other apps
       // (Mosquitto); nobody opens it in a browser to claim it.
       if (app.web === false) expect(app.firstVisitorIsAdmin).toBe(false)
@@ -293,5 +296,31 @@ describe('starting files (D53)', () => {
     for (const path of ['/etc/passwd', '../x', 'a/../b', 'a//b', '', 'a b', 'a/./b']) {
       expect([path, isTemplateFilePath(path)]).toEqual([path, false])
     }
+  })
+})
+
+describe('USB sticks (D55)', () => {
+  it('takes only stable names under /dev/serial/by-id', () => {
+    expect(isSerialDevicePath('/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0-if00-port0')).toBe(
+      true,
+    )
+    for (const path of [
+      '/dev/ttyUSB0',
+      '/dev/serial/by-id/../sda',
+      '/dev/serial/by-id/a b',
+      '/etc/passwd',
+    ]) {
+      expect([path, isSerialDevicePath(path)]).toEqual([path, false])
+    }
+  })
+  it('names a stick the way its maker does', () => {
+    expect(
+      serialDeviceName(
+        '/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_e4b4cf2a1234-if00-port0',
+      ),
+    ).toBe('ITead Sonoff Zigbee 3.0 USB Dongle Plus')
+    expect(
+      serialDeviceName('/dev/serial/by-id/usb-Nabu_Casa_SkyConnect_v1.0_8a3c7f12-if00-port0'),
+    ).toBe('Nabu Casa SkyConnect v1.0')
   })
 })

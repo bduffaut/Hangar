@@ -8,7 +8,10 @@ import { ensureStack } from './stack.ts'
 import { addressEnvValue, isTemplateFilePath } from '@hangar/shared'
 import { writeFileIfMissing } from '../platform/host.ts'
 import { findTemplate } from '../modules/catalog/templates.ts'
+import { listAppDevices } from '../modules/devices/repo.ts'
 import { listAppPorts } from '../modules/ports/repo.ts'
+import { listSerialDevices } from '../platform/host.ts'
+import { serialDeviceName } from '@hangar/shared'
 import { portHost, portInUseMessage } from '../modules/ports/service.ts'
 
 /**
@@ -70,6 +73,17 @@ export async function startAppContainer(
     }
   }
   const stackNetwork = await ensureStack(ctx, project, log)
+  // USB sticks (D55): each must be plugged in now; Docker follows the stable link at start.
+  const devices = await listAppDevices(ctx.db, [project.id])
+  if (devices.length) {
+    const plugged = await listSerialDevices(ctx)
+    const missing = devices.find((d) => !plugged.some((p) => p.path === d.path))
+    if (missing) {
+      throw new Error(
+        `${serialDeviceName(missing.path)} is not plugged in. Plug it into the computer, then update the app again.`,
+      )
+    }
+  }
   const alias = appAlias(project.name)
   // Ports that are not web pages (D51), on the Tailscale address only.
   const ports = await listAppPorts(ctx.db, [project.id])
@@ -85,6 +99,9 @@ export async function startAppContainer(
     ...(alias ? { aliases: [alias] } : {}),
     ...(ports.length ? { ports: ports.map((p) => ({ ...p, hostIp: ip! })) } : {}),
     ...(project.hostNetwork ? { hostNetwork: true } : {}),
+    ...(devices.length
+      ? { devices: devices.map(({ path, mountPath }) => ({ path, mountPath })) }
+      : {}),
     image,
     projectId: project.id,
     deploymentId: deployment.id,

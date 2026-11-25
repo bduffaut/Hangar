@@ -72,6 +72,24 @@ const TEST_TEMPLATES: CatalogApp[] = [
     firstSteps: ['Nothing to set up.'],
     tier: 'standard',
   },
+  {
+    // A USB stick (D55); the tests plug in a stand-in under /dev/serial/by-id.
+    id: 'device-test',
+    name: 'Device test',
+    category: 'developer',
+    summary: 'An app with a USB stick, for Hangar’s own tests.',
+    description: 'whoami with a stick passed in.',
+    website: 'https://github.com/bduffaut/Hangar',
+    image: 'traefik/whoami:v1.11',
+    port: 80,
+    device: { label: 'Test stick', hint: 'Any stick.', mountPath: '/dev/teststick' },
+    memoryLimitMb: 64,
+    volumes: [],
+    env: {},
+    firstVisitorIsAdmin: false,
+    firstSteps: ['Nothing to set up.'],
+    tier: 'elevated',
+  },
 ]
 
 /** A catalog template by id, including the test ones when they are switched on. */

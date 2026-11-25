@@ -18,6 +18,7 @@ import {
 import { replaceAppStorage } from '../../src/modules/storage/repo.ts'
 import { storageView } from '../../src/modules/storage/service.ts'
 import { stackStatus } from '../../src/worker/stack.ts'
+import { deviceList } from '../../src/modules/devices/service.ts'
 import { portList } from '../../src/modules/ports/service.ts'
 import { ownerNetworkName } from '../../src/platform/names.ts'
 import { createFixtureRepo, createHarness, docker, eventually } from './harness.ts'
@@ -203,6 +204,64 @@ describe('the computer’s own network (D54)', () => {
     expect(docker('inspect', app, '--format', '{{.HostConfig.NetworkMode}}')).toBe('host')
     // Traefik reaches it through the computer itself.
     expect((await h.fetchApp(project.name)).body).toContain('Hostname:')
+  })
+})
+
+describe('a USB stick (D55)', () => {
+  // A stand-in stick: a stable name under /dev/serial/by-id pointing at /dev/null, made on the
+  // computer Docker runs on (Docker Desktop's VM here, the CI machine on Linux).
+  const STICK = 'usb-Hangar_Test_Stick_0123456789abcdef-if00-port0'
+  const PATH = `/dev/serial/by-id/${STICK}`
+  const onHost = (script: string) =>
+    docker('run', '--rm', '--privileged', '-v', '/dev:/hostdev', 'busybox:1.37', 'sh', '-c', script)
+  afterAll(() => onHost(`rm -f /hostdev/serial/by-id/${STICK}`))
+
+  it('is picked from what is plugged in, passed at start, and missed in plain words', async () => {
+    onHost(`mkdir -p /hostdev/serial/by-id && ln -sf ../../null /hostdev/serial/by-id/${STICK}`)
+    const listed = await deviceList(h.ctx)
+    expect(listed).toContainEqual(
+      expect.objectContaining({
+        path: PATH,
+        target: '/dev/null',
+        name: 'Hangar Test Stick',
+        usedBy: [],
+      }),
+    )
+
+    const ownerId = await h.ownerId()
+    const admin = { id: ownerId, role: 'admin' as const }
+    await expect(
+      installCatalogApp(h.ctx, admin, 'device-test', { name: h.appName('stick-none') }),
+    ).rejects.toThrow('needs a test stick')
+    await expect(
+      installCatalogApp(h.ctx, admin, 'device-test', {
+        name: h.appName('stick-gone'),
+        device: '/dev/serial/by-id/usb-Not_Here-if00',
+      }),
+    ).rejects.toThrow('is not plugged in')
+
+    const project = await installCatalogApp(h.ctx, admin, 'device-test', {
+      name: h.appName('stick'),
+      device: PATH,
+    })
+    h.adopt(project)
+    const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
+    expect(done.failureReason).toBeNull()
+    const app = `hangar-app-${project.name}-${done.number}`
+    expect(docker('inspect', app, '--format', '{{json .HostConfig.Devices}}')).toContain(
+      '"PathInContainer":"/dev/teststick"',
+    )
+    expect((await projectView(h.ctx, project)).devices).toEqual([
+      { path: PATH, name: 'Hangar Test Stick', mountPath: '/dev/teststick' },
+    ])
+
+    // Unplugged: the next start says so, and the running version keeps going.
+    onHost(`rm -f /hostdev/serial/by-id/${STICK}`)
+    const again = await h.waitForEnd(
+      await queueBranchHead(h.ctx, (await getProject(h.ctx.db, project.id))!, 'manual'),
+    )
+    expect(again.status).toBe('failed')
+    expect(again.failureReason).toContain('Hangar Test Stick is not plugged in')
   })
 })
 

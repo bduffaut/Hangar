@@ -6,19 +6,20 @@ choices already filled in.
 
 ![The Apps page: Jellyfin, Immich, Paperless-ngx, Navidrome, Audiobookshelf, Uptime Kuma, Mealie, and File Browser](../images/guides/catalog.png)
 
-| App                | What it does                                              | Guide                                     | Who can install it |
-| ------------------ | --------------------------------------------------------- | ----------------------------------------- | ------------------ |
-| **Jellyfin**       | Movies and shows on any device, like your own Netflix     | [Movies, music, and books](apps-media.md) | Admins             |
-| **Navidrome**      | Your music collection, like your own Spotify              | [Movies, music, and books](apps-media.md) | Admins             |
-| **Audiobookshelf** | Audiobooks and podcasts, with progress kept               | [Movies, music, and books](apps-media.md) | Admins             |
-| **Immich**         | Backs up your phone's photos, like your own Google Photos | [Photos](apps-photos.md)                  | Everyone           |
-| **Paperless-ngx**  | Your paper documents, scanned, read, and searchable       | [Documents and files](apps-documents.md)  | Everyone           |
-| **File Browser**   | Upload, download, and share files from a browser          | [Documents and files](apps-documents.md)  | Everyone           |
-| **Mealie**         | Recipes, meal plans, and shopping lists                   | [Recipes and monitoring](apps-home.md)    | Everyone           |
-| **Uptime Kuma**    | Watches your sites and tells you when one is down         | [Recipes and monitoring](apps-home.md)    | Everyone           |
-| **Home Assistant** | Your lights, sensors, and thermostat in one app           | [Smart home](apps-smart-home.md)          | Everyone           |
-| **Mosquitto**      | The MQTT broker smart home apps talk through              | [Smart home](apps-smart-home.md)          | Everyone           |
-| **Minecraft**      | Your own world, for friends to join over Tailscale        | [Game servers](apps-games.md)             | Admins             |
+| App                | What it does                                               | Guide                                     | Who can install it |
+| ------------------ | ---------------------------------------------------------- | ----------------------------------------- | ------------------ |
+| **Jellyfin**       | Movies and shows on any device, like your own Netflix      | [Movies, music, and books](apps-media.md) | Admins             |
+| **Navidrome**      | Your music collection, like your own Spotify               | [Movies, music, and books](apps-media.md) | Admins             |
+| **Audiobookshelf** | Audiobooks and podcasts, with progress kept                | [Movies, music, and books](apps-media.md) | Admins             |
+| **Immich**         | Backs up your phone's photos, like your own Google Photos  | [Photos](apps-photos.md)                  | Everyone           |
+| **Paperless-ngx**  | Your paper documents, scanned, read, and searchable        | [Documents and files](apps-documents.md)  | Everyone           |
+| **File Browser**   | Upload, download, and share files from a browser           | [Documents and files](apps-documents.md)  | Everyone           |
+| **Mealie**         | Recipes, meal plans, and shopping lists                    | [Recipes and monitoring](apps-home.md)    | Everyone           |
+| **Uptime Kuma**    | Watches your sites and tells you when one is down          | [Recipes and monitoring](apps-home.md)    | Everyone           |
+| **Home Assistant** | Your lights, sensors, and thermostat in one app            | [Smart home](apps-smart-home.md)          | Everyone           |
+| **Mosquitto**      | The MQTT broker smart home apps talk through               | [Smart home](apps-smart-home.md)          | Everyone           |
+| **Zigbee2MQTT**    | Zigbee lights and sensors from any brand, with a USB stick | [Smart home](apps-smart-home.md)          | Admins             |
+| **Minecraft**      | Your own world, for friends to join over Tailscale         | [Game servers](apps-games.md)             | Admins             |
 
 More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
 

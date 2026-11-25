@@ -403,6 +403,8 @@ export const imageAppInput = z.object({
   web: z.boolean().optional(),
   /** The computer's own network, for a catalog template that offers it (D54). */
   hostNetwork: z.boolean().optional(),
+  /** A USB stick for a catalog template that needs one (D55). */
+  device: z.string().max(255).optional(),
   /** Ports published on the computer's Tailscale address, at the same number (D51). */
   ports: z
     .array(z.object({ port, protocol: z.enum(PORT_PROTOCOLS) }))
@@ -426,6 +428,8 @@ export const catalogInstallInput = z.object({
   gpu: z.boolean().optional(),
   /** Run on the computer's own network, for a template that offers it (D54). Admins only. */
   hostNetwork: z.boolean().optional(),
+  /** The USB stick for a template that needs one, by its /dev/serial/by-id path (D55). Admins. */
+  device: z.string().max(255).optional(),
   /** The `env` of each question the installer accepted (D52), such as a licence. */
   accepted: z.array(z.string().max(64)).max(8).optional(),
   deploy: z.boolean().optional(),
@@ -450,6 +454,17 @@ export const libraryView = z.object({
   createdAt: timestamp,
 })
 export type LibraryView = z.infer<typeof libraryView>
+
+/** A USB serial device plugged into the computer (D55), as an admin picks it. */
+export const deviceView = z.object({
+  path: z.string(),
+  name: z.string(),
+  /** What it points to right now, like /dev/ttyUSB0. */
+  target: z.string(),
+  /** The apps that use it. */
+  usedBy: z.array(z.string()),
+})
+export type DeviceView = z.infer<typeof deviceView>
 
 /** A port an app holds on the computer (D51), for the admin's list of everything that listens. */
 export const publishedPortView = z.object({
@@ -556,6 +571,8 @@ export const projectView = z.object({
   web: z.boolean(),
   /** On the computer's own network (D54): it answers on every network the computer is on. */
   hostNetwork: z.boolean(),
+  /** USB sticks passed to the app (D55), by their stable path on the computer. */
+  devices: z.array(z.object({ path: z.string(), name: z.string(), mountPath: z.string() })),
   /** Ports published on the computer's Tailscale address (D51), with the address to connect to. */
   ports: z.array(
     z.object({

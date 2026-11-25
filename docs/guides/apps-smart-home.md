@@ -48,7 +48,28 @@ while installing, under **Home network**. Then:
 - If its address stops answering after you turn this on, the computer's firewall may block
   Docker's networks from reaching it: allow traffic from `172.16.0.0/12` to port 8123.
 
-**USB sticks** (Zigbee, Z-Wave) need Hangar to pass the stick to the app, which is coming next.
+## Zigbee devices with Zigbee2MQTT
+
+Zigbee lights, buttons, and sensors (IKEA, Aqara, Philips Hue bulbs, and many more) need a
+Zigbee USB stick, such as a Sonoff Zigbee 3.0 Dongle or a Home Assistant SkyConnect.
+**Zigbee2MQTT** talks to the stick and passes every device to Home Assistant through Mosquitto.
+An admin installs it, since it uses the computer's hardware.
+
+1. Install **Mosquitto** first, with the name `mosquitto`, and add the MQTT integration in Home
+   Assistant (see below).
+2. Plug the stick into the Hangar computer. An extension cable helps: USB 3 ports and the
+   computer itself can drown out Zigbee's radio.
+3. Open **Apps**, pick **Zigbee2MQTT**, choose the stick under **Zigbee stick**, and install.
+   Hangar remembers the stick by its own name, so it keeps working in another USB socket.
+   ![Installing Zigbee2MQTT: pick the Zigbee stick from what is plugged in](../images/guides/install-zigbee2mqtt.png)
+
+4. Open Zigbee2MQTT, press **Permit join**, and pair each device as its manual says (often by
+   holding its button). Each one appears in Home Assistant by itself.
+
+Hangar gives Zigbee2MQTT a starting `configuration.yaml` pointing at `mosquitto:1883` and the
+stick. Its paired devices and the Zigbee network's keys are kept in its `data` storage: keep it,
+or every device has to be paired again. If the stick is unplugged, the next update stops with
+"… is not plugged in" and the running version keeps going.
 
 Its settings, automations, and history are kept in the app's `config` storage, which survives
 updates.

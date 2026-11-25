@@ -205,6 +205,9 @@ const running = computed(
               <BaseIcon name="globe" :size="14" />
             </a>
           </template>
+          <span v-for="d in project.devices" :key="d.path" class="hg-muted">
+            USB: {{ d.name }}
+          </span>
           <span
             v-if="project.hostNetwork"
             v-hint.bottom="'It runs on the computer’s own network, to find devices there'"

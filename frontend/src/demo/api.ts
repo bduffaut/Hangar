@@ -96,6 +96,15 @@ export async function demoCall(
       return demoStorage(id)
     case 'listLibraries':
       return demoLibraries
+    case 'listDevices':
+      return [
+        {
+          path: '/dev/serial/by-id/usb-ITead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_e4b4cf2a-if00-port0',
+          name: 'ITead Sonoff Zigbee 3.0 USB Dongle Plus',
+          target: '/dev/ttyUSB0',
+          usedBy: [],
+        },
+      ]
     case 'listPorts':
       return demoProjects().flatMap((p) =>
         p.ports.map((port) => ({ app: p.name, owner: 'you', ...port })),

@@ -217,6 +217,20 @@ export const appPorts = pgTable(
   ],
 )
 
+/** USB devices passed to an app (D55), by their stable /dev/serial/by-id path. Admins only. */
+export const appDevices = pgTable(
+  'app_devices',
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    path: text().notNull(),
+    /** Where the app sees it, like /dev/zigbee. */
+    mountPath: text().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.mountPath] })],
+)
+
 /** Libraries mounted into an app. A library in use cannot be removed. */
 export const appLibraries = pgTable(
   'app_libraries',

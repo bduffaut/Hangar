@@ -68,6 +68,10 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - **Home Assistant on your home network (D54).** An admin can turn on **Home network** when
   installing Home Assistant, so it finds Chromecast, HomeKit, and other devices that announce
   themselves there. Its private address stays the same.
+- **USB sticks and Zigbee2MQTT (D55).** An admin can give an app a Zigbee or Z-Wave stick, picked
+  from what is plugged in and remembered by its own name, so it keeps working in another socket.
+  **Zigbee2MQTT** is the first app to use one: Zigbee devices from any brand, passed to Home
+  Assistant through Mosquitto.
 - **Every port on the computer, in one list.** Settings → Network shows each port an app holds,
   with its app, owner, and the address to connect to.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at
