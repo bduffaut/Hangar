@@ -69,7 +69,8 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   installing Home Assistant, so it finds Chromecast, HomeKit, and other devices that announce
   themselves there. Its private address stays the same.
 - **USB sticks and Zigbee2MQTT (D55).** An admin can give an app a Zigbee or Z-Wave stick, picked
-  from what is plugged in and remembered by its own name, so it keeps working in another socket.
+  from what is plugged in and remembered by its own name, so it keeps working in another socket. A
+  new stick can be picked later under the app's Settings.
   **Zigbee2MQTT** is the first app to use one: Zigbee devices from any brand, passed to Home
   Assistant through Mosquitto.
 - **AdGuard Home: ad blocking for your whole tailnet.** DNS on port 53 of the Tailscale address;

@@ -212,9 +212,11 @@ describe('a USB stick (D55)', () => {
   // computer Docker runs on (Docker Desktop's VM here, the CI machine on Linux).
   const STICK = 'usb-Hangar_Test_Stick_0123456789abcdef-if00-port0'
   const PATH = `/dev/serial/by-id/${STICK}`
+  const STICK_TWO = 'usb-Hangar_Test_Stick_Two_0123456789abcdef-if00-port0'
+  const PATH_TWO = `/dev/serial/by-id/${STICK_TWO}`
   const onHost = (script: string) =>
     docker('run', '--rm', '--privileged', '-v', '/dev:/hostdev', 'busybox:1.37', 'sh', '-c', script)
-  afterAll(() => onHost(`rm -f /hostdev/serial/by-id/${STICK}`))
+  afterAll(() => onHost(`rm -f /hostdev/serial/by-id/${STICK} /hostdev/serial/by-id/${STICK_TWO}`))
 
   it('is picked from what is plugged in, passed at start, and missed in plain words', async () => {
     onHost(`mkdir -p /hostdev/serial/by-id && ln -sf ../../null /hostdev/serial/by-id/${STICK}`)
@@ -255,13 +257,23 @@ describe('a USB stick (D55)', () => {
       { path: PATH, name: 'Hangar Test Stick', mountPath: '/dev/teststick' },
     ])
 
+    // Another stick, picked under Settings by an admin only.
+    onHost(`ln -sf ../../null /hostdev/serial/by-id/${STICK_TWO}`)
+    await expect(
+      updateProjectSettings(h.ctx, 'member', project, { device: PATH_TWO }),
+    ).rejects.toMatchObject({ code: 'admin_only' })
+    const swapped = await updateProjectSettings(h.ctx, 'admin', project, { device: PATH_TWO })
+    expect((await projectView(h.ctx, swapped)).devices).toEqual([
+      { path: PATH_TWO, name: 'Hangar Test Stick Two', mountPath: '/dev/teststick' },
+    ])
+
     // Unplugged: the next start says so, and the running version keeps going.
-    onHost(`rm -f /hostdev/serial/by-id/${STICK}`)
+    onHost(`rm -f /hostdev/serial/by-id/${STICK_TWO}`)
     const again = await h.waitForEnd(
       await queueBranchHead(h.ctx, (await getProject(h.ctx.db, project.id))!, 'manual'),
     )
     expect(again.status).toBe('failed')
-    expect(again.failureReason).toContain('Hangar Test Stick is not plugged in')
+    expect(again.failureReason).toContain('Hangar Test Stick Two is not plugged in')
   })
 })
 

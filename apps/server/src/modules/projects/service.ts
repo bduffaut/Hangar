@@ -30,7 +30,7 @@ import type { Ctx } from '../../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository, serviceContainerName } from '../../platform/names.ts'
-import { insertAppDevices, listAppDevices } from '../devices/repo.ts'
+import { insertAppDevices, listAppDevices, replaceAppDevice } from '../devices/repo.ts'
 import { checkDevice } from '../devices/service.ts'
 import { insertAppPorts, listAppPorts } from '../ports/repo.ts'
 import { checkPorts, portAddress, portHost } from '../ports/service.ts'
@@ -95,7 +95,7 @@ export interface ProjectSettings {
 }
 
 /** The settings an update may also change: storage, hardware, and an image app's image. */
-export type ProjectPatch = ProjectSettings & StorageInput & { image?: string }
+export type ProjectPatch = ProjectSettings & StorageInput & { image?: string; device?: string }
 
 const IMAGE_PROBLEM =
   'Enter an image like jellyfin/jellyfin:12.4 or ghcr.io/owner/app:1.2 (lowercase, with a version tag).'
@@ -497,7 +497,16 @@ export async function updateProjectSettings(
   project: Project,
   patch: ProjectPatch,
 ): Promise<Project> {
-  const { volumes, libraries, gpu, image, ...settings } = patch
+  const { volumes, libraries, gpu, image, device, ...settings } = patch
+  // Another USB stick (D55), for an app whose template needs one: an admin's to give.
+  const deviceTemplate = project.catalogId ? findTemplate(ctx, project.catalogId)?.device : null
+  if (device !== undefined) {
+    if (!deviceTemplate) throw new ProjectError('This app does not use a USB device.')
+    if (role !== 'admin') {
+      throw new UserError(403, 'admin_only', 'Only an admin can give an app a USB device.')
+    }
+    await checkDevice(ctx, device)
+  }
   const clean = cleanSettings(settings)
   if (clean.hostnames?.length && !project.web) throw new ProjectError(NOT_WEB_PROBLEM)
   if (clean.hostnames) await checkHostnames(ctx, role, project.id, clean.hostnames)
@@ -543,12 +552,20 @@ export async function updateProjectSettings(
   if (storage.volumes?.length && clean.strategy === undefined && project.strategy === 'rolling') {
     clean.strategy = 'recreate'
   }
-  await updateProject(ctx.db, project.id, {
+  const row = {
     ...clean,
     ...(image !== undefined ? { image } : {}),
     ...(storage.gpu !== undefined ? { gpu: storage.gpu } : {}),
-  })
+  }
+  // A change of storage or device alone leaves nothing to set on the project itself.
+  if (Object.keys(row).length) await updateProject(ctx.db, project.id, row)
   await replaceAppStorage(ctx.db, project.id, storage)
+  if (device !== undefined && deviceTemplate) {
+    await replaceAppDevice(ctx.db, project.id, {
+      path: device,
+      mountPath: deviceTemplate.mountPath,
+    })
+  }
   // Addresses are routes, so they apply right away rather than on the next deploy.
   if (clean.hostnames) {
     await syncRouting(ctx)

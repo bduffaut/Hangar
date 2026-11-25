@@ -69,7 +69,8 @@ An admin installs it, since it uses the computer's hardware.
 Hangar gives Zigbee2MQTT a starting `configuration.yaml` pointing at `mosquitto:1883` and the
 stick. Its paired devices and the Zigbee network's keys are kept in its `data` storage: keep it,
 or every device has to be paired again. If the stick is unplugged, the next update stops with
-"… is not plugged in" and the running version keeps going.
+"… is not plugged in" and the running version keeps going. A new stick has a new name: pick it
+under the app's **Settings**, then press **Update**.
 
 Its settings, automations, and history are kept in the app's `config` storage, which survives
 updates.

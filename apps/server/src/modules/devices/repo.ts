@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { Db } from '../../db/client.ts'
 import { appDevices, projects } from '../../db/schema.ts'
 
@@ -16,6 +16,20 @@ export async function insertAppDevices(
 ): Promise<void> {
   if (!devices.length) return
   await db.insert(appDevices).values(devices.map((d) => ({ projectId, ...d })))
+}
+
+/** Points the app's device at `mountPath` to another stick. */
+export async function replaceAppDevice(
+  db: Db,
+  projectId: string,
+  device: { path: string; mountPath: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(appDevices)
+      .where(and(eq(appDevices.projectId, projectId), eq(appDevices.mountPath, device.mountPath)))
+    await tx.insert(appDevices).values({ projectId, ...device })
+  })
 }
 
 /** For each device path, the names of the apps that use it. */

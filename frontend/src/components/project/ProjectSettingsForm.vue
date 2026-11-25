@@ -37,6 +37,7 @@ import CopyField from '../CopyField.vue'
 import AddressEditor from './AddressEditor.vue'
 import AddressStatus from './AddressStatus.vue'
 import HgPanel from '../HgPanel.vue'
+import DeviceEditor from './DeviceEditor.vue'
 import StorageEditor from './StorageEditor.vue'
 
 const props = defineProps<{ project: ProjectView }>()
@@ -291,6 +292,8 @@ async function remove() {
     </HgPanel>
 
     <StorageEditor :project="project" />
+
+    <DeviceEditor v-if="session.isAdmin && project.devices.length" :project="project" />
 
     <!-- An app that is not a web page (D51): its ports instead of web addresses. -->
     <HgPanel

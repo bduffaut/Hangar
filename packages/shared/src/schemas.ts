@@ -383,6 +383,8 @@ export const projectPatch = projectInput
   .extend({
     /** Image apps: the image to run from the next update on. */
     image: z.string().trim().max(255).optional(),
+    /** Another USB stick for an app whose template needs one (D55). Admins only. */
+    device: z.string().max(255).optional(),
     ...appStorage,
   })
   .partial()

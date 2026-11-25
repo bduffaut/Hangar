@@ -300,8 +300,7 @@ new published ports and `tailscale serve` changes happen on that machine.
 - **Step 5 done (D55):** `device` on a template, table `app_devices`, `modules/devices/`,
   `listSerialDevices` in `platform/host.ts`. Tested with a stand-in link under
   `/dev/serial/by-id` (Docker follows it to the device). **Zigbee2MQTT** (2.14.3) is in the
-  catalog but has not run with a real stick: that needs the maintainer's server and a stick. An
-  installed app's stick cannot be changed under its Settings yet.
+  catalog but has not run with a real stick: that needs the maintainer's server and a stick. An admin swaps an installed app's stick under its Settings (`DeviceEditor`).
 - **AdGuard Home** (v1.0.0, elevated: DNS on port 53 TCP and UDP) is in the catalog and installs
   for real; its setup wizard must keep the web page on port 3000. Guide: the "Around the house"
   guide (`apps-home.md`).
