@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import {
+  type PortProtocol,
   appHostname,
   BUILD_TIMEOUT_MAX_MINUTES,
   BUILD_TIMEOUT_MIN_MINUTES,
@@ -286,6 +287,8 @@ type ImageAppInput = ProjectSettings &
     image: string
     env?: Record<string, string>
     catalogId?: string
+    web?: boolean
+    ports?: { port: number; protocol: PortProtocol }[]
   }
 
 /** Any published image, with the settings given (D42). Admins only. */
@@ -377,10 +380,11 @@ async function insertImageApp(
   const hostnames = cleanSettings({ hostnames: input.hostnames ?? [] }).hostnames!
   await checkHostnames(ctx, owner.role, null, hostnames)
   const storage = await cleanStorage(ctx, owner.role, input)
-  // A template's ports and whether it is a web page (D51); ports are an admin's to grant.
+  // A template's ports and whether it is a web page (D51), or an admin's own choice for any
+  // image; ports are an admin's to grant.
   const template = input.catalogId ? findTemplate(ctx, input.catalogId) : null
-  const web = template?.web !== false
-  const ports = (template?.ports ?? []).map((p) => ({
+  const web = template ? template.web !== false : input.web !== false
+  const ports = (template?.ports ?? input.ports ?? []).map((p) => ({
     port: p.port,
     protocol: p.protocol,
     hostPort: p.port,

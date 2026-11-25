@@ -6,6 +6,7 @@ import { getEnv, setEnv } from '../../src/modules/env-vars/service.ts'
 import { getProject, updateProject } from '../../src/modules/projects/repo.ts'
 import {
   checkPart,
+  createImageApp,
   deleteProject,
   followRuntimeLogs,
   installCatalogApp,
@@ -153,6 +154,29 @@ describe('an app that is not a web page (D51, D52)', () => {
     await expect(
       updateProjectSettings(h.ctx, 'admin', project, { hostnames: ['mc.example.com'] }),
     ).rejects.toThrow('not a web page')
+  })
+})
+
+describe('any image as an app that is not a web page (D51)', () => {
+  it('publishes its port, checks it by connecting, and gives it no route', async () => {
+    const admin = { id: await h.ownerId(), role: 'admin' as const }
+    const project = await createImageApp(h.ctx, admin, {
+      name: h.appName('tcp'),
+      image: 'traefik/whoami:v1.11',
+      port: 18080,
+      env: { WHOAMI_PORT_NUMBER: '18080' },
+      web: false,
+      ports: [{ port: 18080, protocol: 'tcp' }],
+    })
+    h.adopt(project)
+    const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
+    expect(done.failureReason).toBeNull()
+    expect(done.status).toBe('ready')
+    // On the computer's address (127.0.0.1 in development), like a game server.
+    const res = await fetch('http://127.0.0.1:18080/')
+    expect(await res.text()).toContain('Hostname:')
+    // Not routed: its private address belongs to no container.
+    expect((await h.fetchApp(project.name)).body).not.toContain('Hostname:')
   })
 })
 

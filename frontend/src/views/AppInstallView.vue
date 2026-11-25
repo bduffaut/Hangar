@@ -11,7 +11,10 @@ import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   parseWholeNumber,
+  checkHostPort,
+  hostPortProblemCopy,
   portLabel,
+  type PortProtocol,
   type SettingsView,
 } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
@@ -78,7 +81,29 @@ const portHost = computed(() => {
   const url = settings.value?.privateUrl
   return url ? new URL(url).hostname : (settings.value?.lanIp ?? null)
 })
-const isWeb = computed(() => template.value?.web !== false)
+/** Any image (admins): a web page unless said otherwise, and ports of its own (D51). */
+const webPage = ref(true)
+const ownPorts = ref<{ port: string; protocol: PortProtocol }[]>([])
+const isWeb = computed(() => (template.value ? template.value.web !== false : webPage.value))
+const parsedPorts = computed(() =>
+  ownPorts.value.map((p) => ({ port: parseWholeNumber(p.port, 1, 65535), protocol: p.protocol })),
+)
+/** The ports shown under "Where it answers": the template's, or the admin's own. */
+const shownPorts = computed(() =>
+  template.value
+    ? (template.value.ports ?? [])
+    : parsedPorts.value
+        .filter((p) => p.port !== null)
+        .map((p) => ({ port: p.port!, protocol: p.protocol, purpose: 'Connect here' })),
+)
+const portsProblem = computed(() => {
+  for (const p of parsedPorts.value) {
+    if (p.port === null) return hostPortProblemCopy.invalid
+    const problem = checkHostPort(p.port)
+    if (problem) return hostPortProblemCopy[problem]
+  }
+  return null
+})
 const gpu = ref(true)
 
 // A custom image suggests its own name: ghcr.io/owner/my-app:1.2 → my-app.
@@ -174,7 +199,7 @@ const publicAddress = computed(() =>
 )
 const blocked = computed(
   () =>
-    Boolean(nameProblem.value || imageProblem.value || unanswered.value) ||
+    Boolean(nameProblem.value || imageProblem.value || unanswered.value || portsProblem.value) ||
     (port.value.trim() !== '' && portValue.value === null) ||
     memoryValue.value === null,
 )
@@ -248,6 +273,12 @@ async function install() {
                   ? [{ libraryId: libraryChoice, mountPath: t.library.mountPath }]
                   : [],
               gpu: useGpu,
+              ...(t
+                ? {}
+                : {
+                    web: isWeb.value,
+                    ports: parsedPorts.value.map((p) => ({ port: p.port!, protocol: p.protocol })),
+                  }),
               env: t
                 ? {
                     ...t.env,
@@ -405,14 +436,14 @@ async function install() {
 
     <HgPanel v-if="!isWeb" title="Where it answers">
       <div class="hg-install-group">
-        <p v-if="!template?.ports?.length" class="hg-muted">
+        <p v-if="!shownPorts.length" class="hg-muted">
           {{ template?.name }} is not a web page. Your other apps reach it at
           <code>{{ name.trim() || template?.id }}:{{ template?.port }}</code
           >, its name and port; nothing else can, not even your own devices.
         </p>
         <p v-else class="hg-muted">
           {{ template?.name }} is not a web page. On your devices with Tailscale, connect to
-          <template v-for="(p, i) in template?.ports ?? []" :key="p.port"
+          <template v-for="(p, i) in shownPorts" :key="p.port"
             ><template v-if="i > 0">, </template
             ><code
               >{{ portHost ?? 'this computer' }}:{{
@@ -515,6 +546,57 @@ async function install() {
                 mountPath: '/data',
               })
             "
+          />
+        </div>
+        <div v-if="custom && session.isAdmin" class="hg-install-wide">
+          <span class="hg-install-label">Not a web page</span>
+          <div class="hg-install-switch">
+            <BaseSwitch
+              id="ai-web"
+              :model-value="!webPage"
+              @update:model-value="webPage = !$event"
+            />
+            <label for="ai-web"
+              >It is something else, like a game server: no address in the browser, and Hangar
+              checks it by connecting to its port.</label
+            >
+          </div>
+          <span class="hg-install-label">Ports on this computer</span>
+          <p class="hg-muted hg-install-small">
+            Published on this computer's Tailscale address only, at the same number. Your devices,
+            and people you share the computer with in Tailscale, can connect.
+          </p>
+          <div v-for="(p, i) in ownPorts" :key="i" class="hg-install-row">
+            <BaseInput
+              :id="`ai-port-${i}`"
+              v-model="p.port"
+              mono
+              inputmode="numeric"
+              aria-label="Port"
+            />
+            <BaseSelect
+              :id="`ai-port-proto-${i}`"
+              v-model="p.protocol"
+              :options="[
+                { label: 'TCP', value: 'tcp' },
+                { label: 'UDP', value: 'udp' },
+              ]"
+              aria-label="Protocol"
+            />
+            <BaseButton
+              size="sm"
+              variant="ghost"
+              icon="trash"
+              aria-label="Remove"
+              @click="ownPorts.splice(i, 1)"
+            />
+          </div>
+          <BaseMessage v-if="portsProblem" tone="error">{{ portsProblem }}</BaseMessage>
+          <BaseButton
+            size="sm"
+            icon="plus"
+            label="Add a port"
+            @click="ownPorts.push({ port: '', protocol: 'tcp' })"
           />
         </div>
       </div>

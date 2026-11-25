@@ -84,6 +84,9 @@ start.
 2. Under **Customize**, add a **kept folder** for each folder the image's documentation calls a
    volume (often `/config` or `/data`). Without one, the app starts fresh after every update.
 3. Set the **web port** if the image listens on more than one.
+4. For something that is not a web page, like a game server, turn on **Not a web page** and add
+   its **ports**. They are published on the computer's Tailscale address only, at the same
+   number, and Hangar checks the app by connecting to its port.
 
 ## On the internet
 

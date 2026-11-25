@@ -281,8 +281,8 @@ new published ports and `tailscale serve` changes happen on that machine.
   request.
 - **Step 4 done (D51):** `projects.web`, table `app_ports`, `modules/ports/`, the TCP and
   keeps-running checks in `worker/pipeline.ts`. Settings → Network lists every port apps hold
-  (`GET /api/ports`, admins). Ports come from templates only so far: an admin cannot yet add a
-  port to **Any image** or change one under an app's Settings.
+  (`GET /api/ports`, admins). **Any image** takes ports and "not a web page" under Customize.
+  Still missing: changing an installed app's ports under its Settings.
 - **Step 2 done (D53):** `files` on a template, written by `writeFileIfMissing`
   (`platform/host.ts`); test template `files-test`. Along the way, `containerImage` falls back to
   the image's name when Docker Desktop reports an ID it cannot look up, which also lets the host

@@ -399,6 +399,13 @@ export const imageAppInput = z.object({
   env: z.record(z.string().regex(ENV_KEY_PATTERN), z.string().max(4096)).optional(),
   /** The catalog template it came from, for its icon and first steps. */
   catalogId: z.string().max(64).optional(),
+  /** False for an app that is not a web page, like a game server (D51). */
+  web: z.boolean().optional(),
+  /** Ports published on the computer's Tailscale address, at the same number (D51). */
+  ports: z
+    .array(z.object({ port, protocol: z.enum(PORT_PROTOCOLS) }))
+    .max(8, { error: 'An app can publish at most 8 ports.' })
+    .optional(),
   deploy: z.boolean().optional(),
   ...appStorage,
 })
