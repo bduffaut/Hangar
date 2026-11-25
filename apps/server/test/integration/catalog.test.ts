@@ -45,13 +45,11 @@ describe.skipIf(ids.length === 0)('catalog templates, for real', () => {
     const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'), 35 * 60_000)
     expect(done.failureReason).toBeNull()
     expect(done.status).toBe('ready')
-    if (template.web === false) {
-      // Not a web page (D51): its TCP ports answer on the computer's address (127.0.0.1 here).
-      for (const p of (template.ports ?? []).filter((p) => p.protocol === 'tcp')) {
-        expect(await accepts('127.0.0.1', p.port)).toBe(true)
-      }
-      return
+    // Its TCP ports (D51) answer on the computer's address (127.0.0.1 here).
+    for (const p of (template.ports ?? []).filter((p) => p.protocol === 'tcp')) {
+      expect(await accepts('127.0.0.1', p.port)).toBe(true)
     }
+    if (template.web === false) return
     // Through Traefik, like a visitor: a 400 would be an app refusing Hangar's proxy (D53).
     const res = await h.fetchApp(project.name)
     expect(res.status).toBeLessThan(400)

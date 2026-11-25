@@ -40,6 +40,7 @@ test('pictures for the app guides', async ({ page }) => {
     'minecraft',
     'home-assistant',
     'zigbee2mqtt',
+    'adguard-home',
   ]) {
     await page.goto(`/tour/apps/${id}`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()

@@ -9,7 +9,7 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.           |
 | 2. The app catalog                  | **Built** (D43–D49): eight templates including the Immich and Paperless-ngx stacks, the launcher, update checks, a guide per category. |
-| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–5 and 7 done (D50–D55); left: private HTTPS (step 6), AdGuard, Vaultwarden.           |
+| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–5 and 7 done (D50–D55); left: private HTTPS (step 6) and Vaultwarden.                 |
 | 4. For students and projects        | Planned.                                                                                                                               |
 | 5. See everything                   | Planned.                                                                                                                               |
 | 6. Bring your own setup             | Planned.                                                                                                                               |
@@ -302,6 +302,9 @@ new published ports and `tailscale serve` changes happen on that machine.
   `/dev/serial/by-id` (Docker follows it to the device). **Zigbee2MQTT** (2.14.3) is in the
   catalog but has not run with a real stick: that needs the maintainer's server and a stick. An
   installed app's stick cannot be changed under its Settings yet.
+- **AdGuard Home** (v1.0.0, elevated: DNS on port 53 TCP and UDP) is in the catalog and installs
+  for real; its setup wizard must keep the web page on port 3000. Guide: the "Around the house"
+  guide (`apps-home.md`).
 - **Minecraft (Java)** is in the catalog and installs for real (`HANGAR_TEST_CATALOG=minecraft`).
   Guide: `docs/guides/apps-games.md`. Not yet run on the real server. Its image tag
   (`2026.11.1-java25`) is not in a numeric style, so the update notice (D47) does not offer newer

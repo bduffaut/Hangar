@@ -519,6 +519,18 @@ async function install() {
             >http://{{ name.trim() }}.{{ settings.lanDomain }}</code
           ><span v-else>its own address</span>. Nobody else can reach it.
         </p>
+        <p v-if="shownPorts.length" class="hg-muted">
+          It also takes
+          <template v-for="(p, i) in shownPorts" :key="`${p.port}/${p.protocol}`"
+            ><template v-if="i > 0">, </template
+            ><code
+              >{{ portHost ?? 'this computer' }}:{{
+                portLabel({ hostPort: p.port, protocol: p.protocol })
+              }}</code
+            >
+            ({{ p.purpose }})</template
+          >, on the Tailscale address only.
+        </p>
         <p v-if="publicAddress && !offerPublic" class="hg-muted">
           Whoever opens {{ template?.name }} first becomes its admin, so finish its setup before
           putting it on the internet. Then add a public address under its Settings.

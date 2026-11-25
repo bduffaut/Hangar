@@ -14,8 +14,9 @@ choices already filled in.
 | **Immich**         | Backs up your phone's photos, like your own Google Photos  | [Photos](apps-photos.md)                  | Everyone           |
 | **Paperless-ngx**  | Your paper documents, scanned, read, and searchable        | [Documents and files](apps-documents.md)  | Everyone           |
 | **File Browser**   | Upload, download, and share files from a browser           | [Documents and files](apps-documents.md)  | Everyone           |
-| **Mealie**         | Recipes, meal plans, and shopping lists                    | [Recipes and monitoring](apps-home.md)    | Everyone           |
-| **Uptime Kuma**    | Watches your sites and tells you when one is down          | [Recipes and monitoring](apps-home.md)    | Everyone           |
+| **Mealie**         | Recipes, meal plans, and shopping lists                    | [Around the house](apps-home.md)          | Everyone           |
+| **Uptime Kuma**    | Watches your sites and tells you when one is down          | [Around the house](apps-home.md)          | Everyone           |
+| **AdGuard Home**   | Blocks ads and trackers on every device in your tailnet    | [Around the house](apps-home.md)          | Admins             |
 | **Home Assistant** | Your lights, sensors, and thermostat in one app            | [Smart home](apps-smart-home.md)          | Everyone           |
 | **Mosquitto**      | The MQTT broker smart home apps talk through               | [Smart home](apps-smart-home.md)          | Everyone           |
 | **Zigbee2MQTT**    | Zigbee lights and sensors from any brand, with a USB stick | [Smart home](apps-smart-home.md)          | Admins             |

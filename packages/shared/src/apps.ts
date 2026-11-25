@@ -900,6 +900,47 @@ export const CATALOG: CatalogApp[] = [
     ],
     tier: 'elevated',
   },
+  {
+    // DNS for the whole tailnet: port 53 on the Tailscale address (D51), its web page as usual.
+    id: 'adguard-home',
+    name: 'AdGuard Home',
+    category: 'home',
+    summary: 'Block ads and trackers on every device in your Tailscale network.',
+    description:
+      'AdGuard Home answers your devices’ DNS lookups and refuses the ones for ads, trackers, and malware, so pages load faster and cleaner on phones, laptops, and TVs, with nothing to install on them. Point your Tailscale network’s DNS at this computer and every device with Tailscale on uses it.',
+    website: 'https://adguard.com/adguard-home/overview.html',
+    image:
+      'adguard/adguardhome:v1.0.0@sha256:f00a586f0d1caa74f149340bfb225014960310488ffa838406b89256900a96c2',
+    // Its setup page, and its web page afterwards if it is kept on this port during setup.
+    port: 3000,
+    ports: [
+      { port: 53, protocol: 'tcp', purpose: 'DNS' },
+      { port: 53, protocol: 'udp', purpose: 'DNS' },
+    ],
+    memoryLimitMb: 256,
+    volumes: [
+      {
+        name: 'conf',
+        mountPath: '/opt/adguardhome/conf',
+        purpose: 'Settings and accounts',
+        backup: true,
+      },
+      {
+        name: 'work',
+        mountPath: '/opt/adguardhome/work',
+        purpose: 'Block lists, query log, and statistics',
+        backup: false,
+      },
+    ],
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and follow its setup. Under Admin Web Interface, set the port to 3000 (not 80), so this address keeps working. Keep DNS on port 53.',
+      'In the Tailscale admin console, open DNS, add a nameserver with this computer’s Tailscale address, and turn on Override DNS servers.',
+      'Browse on any device with Tailscale on: the app’s Query Log shows each lookup, and blocked ones in red.',
+    ],
+    tier: 'elevated',
+  },
 ]
 
 /** The image a service runs for an app at `appImage`: `{version}` becomes the app's tag. */

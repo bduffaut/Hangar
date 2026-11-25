@@ -21,7 +21,7 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   new one fails.
 - Guides for the apps: [Install apps](docs/guides/apps.md), then one per kind of app
   ([movies, music, and books](docs/guides/apps-media.md), [photos](docs/guides/apps-photos.md),
-  [documents and files](docs/guides/apps-documents.md), [recipes and monitoring](docs/guides/apps-home.md)),
+  [documents and files](docs/guides/apps-documents.md), [around the house](docs/guides/apps-home.md)),
   with pictures of the dashboard.
 - **A build time limit per app**, in its Settings: 15 minutes by default, from 1 to 120. For an
   app from an image it limits the download.
@@ -72,6 +72,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   from what is plugged in and remembered by its own name, so it keeps working in another socket.
   **Zigbee2MQTT** is the first app to use one: Zigbee devices from any brand, passed to Home
   Assistant through Mosquitto.
+- **AdGuard Home: ad blocking for your whole tailnet.** DNS on port 53 of the Tailscale address;
+  point the tailnet's DNS at it and every device with Tailscale on is filtered. The guide covers
+  the Tailscale side.
 - **Every port on the computer, in one list.** Settings → Network shows each port an app holds,
   with its app, owner, and the address to connect to.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at
