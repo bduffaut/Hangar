@@ -3,10 +3,12 @@ import type { Deployment } from '../modules/deployments/repo.ts'
 import { getEnv } from '../modules/env-vars/service.ts'
 import type { Project } from '../modules/projects/repo.ts'
 import { resolveMounts } from '../modules/storage/service.ts'
-import { appContainerName, ownerNetworkName } from '../platform/names.ts'
+import { appAlias, appContainerName, ownerNetworkName } from '../platform/names.ts'
 import { ensureStack } from './stack.ts'
 import { addressEnvValue } from '@hangar/shared'
 import { findTemplate } from '../modules/catalog/templates.ts'
+import { listAppPorts } from '../modules/ports/repo.ts'
+import { portHost, portInUseMessage } from '../modules/ports/service.ts'
 
 /** Makes sure an account's network exists, with Traefik and core attached to reach its apps. */
 export async function ensureOwnerNetwork(ctx: Ctx, ownerId: string): Promise<string> {
@@ -43,8 +45,20 @@ export async function startAppContainer(
   const network = await ensureOwnerNetwork(ctx, project.ownerId)
   const mounts = await resolveMounts(ctx, project)
   const stackNetwork = await ensureStack(ctx, project, log)
-  const id = await ctx.docker.runApp({
+  const alias = appAlias(project.name)
+  // Ports that are not web pages (D51), on the Tailscale address only.
+  const ports = await listAppPorts(ctx.db, [project.id])
+  const { ip } = ports.length ? await portHost(ctx) : { ip: null }
+  if (ports.length && !ip) {
+    throw new Error(
+      'This app publishes ports, but Hangar does not know this computer’s Tailscale address (HANGAR_LAN_IP). Run sudo hangar-tailscale.',
+    )
+  }
+  const spec = {
     name,
+    // Other apps of the account reach it by its name (D50).
+    ...(alias ? { aliases: [alias] } : {}),
+    ...(ports.length ? { ports: ports.map((p) => ({ ...p, hostIp: ip! })) } : {}),
     image,
     projectId: project.id,
     deploymentId: deployment.id,
@@ -54,6 +68,10 @@ export async function startAppContainer(
     mounts,
     gpu: project.gpu,
     ...(stackNetwork ? { extraNetworks: [stackNetwork] } : {}),
+  }
+  const id = await ctx.docker.runApp(spec).catch((error: unknown) => {
+    const inUse = portInUseMessage(error, ports)
+    throw inUse ? new Error(inUse) : error
   })
   return { name, id }
 }

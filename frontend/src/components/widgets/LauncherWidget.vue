@@ -4,6 +4,7 @@ import { computed, reactive } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { DashboardWidgetProps } from '../../dashboard/index.ts'
 import { IS_SITE } from '../../demo/mode.ts'
+import { useClipboard } from '../../composables/useClipboard.ts'
 
 // A tile per app and project, like a folder of bookmarks: its icon, its name, and a dot for its
 // status. A live one opens its address in a new tab; anything else opens its page in Hangar.
@@ -18,12 +19,16 @@ const tiles = computed(() =>
   [...props.data.projects.value]
     .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name))
     .map((project) => {
-      const live = !!project.current && project.desiredState === 'running' && !!project.url
+      const running = !!project.current && project.desiredState === 'running'
+      // An app that is not a web page (a game server, D51): the tile copies where to connect.
+      const address = !project.web && running ? (project.ports[0]?.address ?? null) : null
+      const live = running && (!!project.url || !!address)
       // Your own devices reach the private address; a public one is the fallback.
-      const href = live ? (project.url ?? project.publicUrls[0] ?? null) : null
+      const href = live && project.web ? (project.url ?? project.publicUrls[0] ?? null) : null
       return {
         project,
         href,
+        address,
         label: catalogApp(project.catalogId ?? '')?.name ?? project.name,
         light: light(project, live),
       }
@@ -42,6 +47,8 @@ function light(project: ProjectView, live: boolean): Light {
 // The icon is the app's own, which Hangar fetches from the running app (D45). Apps without one
 // (or not running) get their first letter. The public site's tour has no real apps to ask.
 const broken = reactive(new Set<string>())
+const clip = useClipboard()
+const copyAddress = (address: string) => clip(address, copy.copied(address))
 const iconOf = (href: string | null, id: string) =>
   href && !IS_SITE && !broken.has(id) ? `/api/projects/${id}/icon` : null
 </script>
@@ -58,13 +65,15 @@ const iconOf = (href: string | null, id: string) =>
     <ul v-else class="hg-launcher">
       <li v-for="tile in tiles" :key="tile.project.id">
         <component
-          :is="tile.href ? 'a' : RouterLink"
+          :is="tile.address ? 'button' : tile.href ? 'a' : RouterLink"
           v-bind="
-            tile.href
-              ? { href: tile.href, target: '_blank', rel: 'noopener' }
-              : { to: { name: 'project', params: { name: tile.project.name } } }
+            tile.address
+              ? { type: 'button', onClick: () => copyAddress(tile.address!) }
+              : tile.href
+                ? { href: tile.href, target: '_blank', rel: 'noopener' }
+                : { to: { name: 'project', params: { name: tile.project.name } } }
           "
-          v-hint.top="copy.lights[tile.light]"
+          v-hint.top="tile.address ? copy.copyAddress(tile.address) : copy.lights[tile.light]"
           class="hg-launcher-tile"
           :class="`is-${tile.light}`"
           :data-app="tile.project.name"
@@ -118,6 +127,10 @@ const iconOf = (href: string | null, id: string) =>
   background: color-mix(in srgb, var(--hg-raised) 55%, var(--hg-panel));
   color: var(--hg-ink);
   text-decoration: none;
+  /* Also a button, for apps whose tile copies an address. */
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
   transition:
     transform var(--hg-motion-base) var(--hg-motion-easing),
     background-color var(--hg-motion-fast) var(--hg-motion-easing);

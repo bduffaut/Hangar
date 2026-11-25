@@ -4,6 +4,15 @@ export function appContainerName(projectName: string, deploymentNumber: number):
   return `hangar-app-${projectName}-${deploymentNumber}`
 }
 
+/**
+ * The name other apps of the same account reach an app by, on their shared network: its own
+ * name, so Zigbee2MQTT finds `mosquitto`. None for names starting with `hangar-`: Traefik and
+ * core share that network, and an app called `hangar-core` must not answer for core.
+ */
+export function appAlias(projectName: string): string | null {
+  return projectName.startsWith('hangar-') || projectName === 'hangar' ? null : projectName
+}
+
 /** The Docker network holding every app of one account. */
 export function ownerNetworkName(ownerId: string): string {
   return `hangar-apps-${ownerId}`

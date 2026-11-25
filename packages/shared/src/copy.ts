@@ -177,6 +177,9 @@ export const dashboardCopy = {
       stopped: 'Stopped: opens its page',
       none: 'Not live yet: opens its page',
     },
+    /** An app that is not a web page (D51): its tile copies the address to connect to. */
+    copyAddress: (address: string) => `Live: copies ${address}`,
+    copied: (address: string) => `Copied ${address}`,
   },
   widgets: {
     departures: {

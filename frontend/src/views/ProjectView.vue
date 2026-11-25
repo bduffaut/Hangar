@@ -10,6 +10,7 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, messageOf } from '../api/client.ts'
+import CopyField from '../components/CopyField.vue'
 import EmptyState from '../components/EmptyState.vue'
 import PageHeader from '../components/PageHeader.vue'
 import EnvEditor from '../components/project/EnvEditor.vue'
@@ -173,6 +174,17 @@ const running = computed(
             {{ project.url.replace(/^https?:\/\//, '') }}
             <BaseIcon name="external" :size="14" />
           </a>
+          <template v-else-if="!project.web && running">
+            <span
+              v-for="p in project.ports.filter((p) => p.address)"
+              :key="`${p.port}/${p.protocol}`"
+              class="hg-project-link"
+            >
+              <BaseIcon name="server" :size="14" />
+              <code>{{ p.address }}</code
+              ><span v-if="p.protocol === 'udp'" class="hg-muted"> (UDP)</span>
+            </span>
+          </template>
           <span v-else-if="project.desiredState === 'stopped'" class="hg-muted">Stopped</span>
           <template v-if="running">
             <a
@@ -279,6 +291,10 @@ const running = computed(
       <a v-if="project.url" :href="project.url" target="_blank" rel="noopener">
         Open {{ template.name }} <BaseIcon name="external" :size="14" />
       </a>
+      <!-- An app that is not a web page (D51): where to connect, ready to paste. -->
+      <div v-else-if="project.ports[0]?.address" class="hg-first-steps-address">
+        <CopyField :value="project.ports[0].address" label="address" />
+      </div>
     </section>
 
     <BaseTabs :key="project.id" v-model="tab" :tabs="TABS">
@@ -376,6 +392,9 @@ const running = computed(
 }
 .hg-first-steps h2 {
   font-size: var(--hg-size-md);
+}
+.hg-first-steps-address {
+  max-width: 28rem;
 }
 .hg-first-steps ol {
   margin: 0;

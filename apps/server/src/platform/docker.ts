@@ -60,6 +60,10 @@ export interface AppContainerSpec {
   gpu?: boolean
   /** More networks to join, such as the app's private stack network. */
   extraNetworks?: string[]
+  /** Other names the app answers to on `network`. */
+  aliases?: string[]
+  /** Ports published on `hostIp` only (D51), never on every address of the computer. */
+  ports?: { port: number; protocol: 'tcp' | 'udp'; hostPort: number; hostIp: string }[]
 }
 
 /** A supporting container of a stack (D44): never routed, only on its stack's network. */
@@ -299,23 +303,48 @@ export function createDocker(docker = new Dockerode()) {
         name: spec.name,
         Image: spec.image,
         Env: Object.entries(spec.env).map(([key, value]) => `${key}=${value}`),
+        ...(spec.ports?.length
+          ? {
+              ExposedPorts: Object.fromEntries(
+                spec.ports.map((p) => [`${p.port}/${p.protocol}`, {}]),
+              ),
+            }
+          : {}),
         Labels: {
           [LABELS.managed]: 'true',
           [LABELS.kind]: 'app',
           [LABELS.project]: spec.projectId,
           [LABELS.deployment]: spec.deploymentId,
         },
+        ...(spec.aliases?.length
+          ? { NetworkingConfig: { EndpointsConfig: { [spec.network]: { Aliases: spec.aliases } } } }
+          : {}),
         HostConfig: {
           ...appHostConfig(spec),
+          PortBindings: Object.fromEntries(
+            (spec.ports ?? []).map((p) => {
+              if (!p.hostIp || p.hostIp === '0.0.0.0') throw new Error('Ports need an address')
+              return [
+                `${p.port}/${p.protocol}`,
+                [{ HostIp: p.hostIp, HostPort: String(p.hostPort) }],
+              ]
+            }),
+          ),
           Devices: spec.gpu
             ? [{ PathOnHost: '/dev/dri', PathInContainer: '/dev/dri', CgroupPermissions: 'rwm' }]
             : [],
         },
       })
-      for (const network of spec.extraNetworks ?? []) {
-        await docker.getNetwork(network).connect({ Container: container.id })
+      try {
+        for (const network of spec.extraNetworks ?? []) {
+          await docker.getNetwork(network).connect({ Container: container.id })
+        }
+        await container.start()
+      } catch (error) {
+        // A port another program holds, for example: leave nothing half made behind.
+        await container.remove({ force: true }).catch(() => {})
+        throw error
       }
-      await container.start()
       return container.id
     },
 

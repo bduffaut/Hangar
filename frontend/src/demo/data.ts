@@ -140,6 +140,16 @@ const SEEDS: Seed[] = [
     image: 'ghcr.io/immich-app/immich-server:v3.4.2',
     catalogId: 'immich',
   },
+  // An app that is not a web page (D51): players connect to its port.
+  {
+    name: 'minecraft',
+    repo: '',
+    hostnames: [],
+    framework: 'Image',
+    commits: ['itzg/minecraft-server:2026.11.1-java25'],
+    image: 'itzg/minecraft-server:2026.11.1-java25',
+    catalogId: 'minecraft',
+  },
 ]
 
 interface ProjectRecord {
@@ -208,6 +218,13 @@ function buildProjects(): ProjectRecord[] {
         catalogId: seed.catalogId ?? null,
         strategy: seed.image ? 'recreate' : 'rolling',
         gpu: Boolean(template?.gpu),
+        web: template?.web !== false,
+        ports: (template?.ports ?? []).map((p) => ({
+          port: p.port,
+          protocol: p.protocol,
+          hostPort: p.port,
+          address: `hangar.tail1234.ts.net:${p.port}`,
+        })),
         volumes: (template?.volumes ?? []).map(({ name, mountPath }) => ({ name, mountPath })),
         libraries: template?.library
           ? [{ libraryId: LIBRARY_ID, name: 'Movies', mountPath: '/media', readOnly: true }]
@@ -220,7 +237,7 @@ function buildProjects(): ProjectRecord[] {
         buildTimeoutMinutes: 15,
         triggerMode: seed.image ? 'manual' : index === 1 ? 'webhook' : 'poll',
         desiredState: seed.stopped ? 'stopped' : 'running',
-        url: `http://${seed.name}.${LAN_DOMAIN}`,
+        url: template?.web === false ? null : `http://${seed.name}.${LAN_DOMAIN}`,
         hostnames: seed.hostnames,
         publicUrls: seed.hostnames.map((h) => `https://${h}`),
         addresses,

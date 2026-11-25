@@ -67,6 +67,13 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
   await expect(page.getByText(/checkpoint/).first()).toBeVisible()
   await page.screenshot({ path: 'test-results/tour-radio-parts.png' })
 
+  // An app that is not a web page (D51): its address to connect to, ready to copy.
+  await page.goto('/tour/projects/minecraft')
+  await expect(page.getByText('hangar.tail1234.ts.net:25565').first()).toBeVisible()
+  await expect(page.getByRole('link', { name: /sslip\.io/ })).toHaveCount(0)
+  await page.goto('/tour')
+  await expect(page.locator('button.hg-launcher-tile[data-app="minecraft"]')).toBeVisible()
+
   await page.goto('/tour/projects/blog')
   await page.getByRole('button', { name: 'Deploy', exact: true }).click()
   const prompt = page.getByRole('dialog', { name: 'Ready to fly your own?' })

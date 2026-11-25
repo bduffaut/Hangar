@@ -32,9 +32,11 @@ test('pictures for the app guides', async ({ page }) => {
   await expect(page.getByText('Jellyfin').first()).toBeVisible()
   await shoot(page, 'catalog')
 
-  for (const id of ['jellyfin', 'immich', 'paperless-ngx', 'mealie']) {
+  for (const id of ['jellyfin', 'immich', 'paperless-ngx', 'mealie', 'minecraft']) {
     await page.goto(`/tour/apps/${id}`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    // Its address comes from the settings, which load just after the page.
+    await expect(page.getByText(/tail1234\.ts\.net|\.sslip\.io/).first()).toBeVisible()
     await shoot(page, `install-${id}`)
   }
 
@@ -45,6 +47,11 @@ test('pictures for the app guides', async ({ page }) => {
   // The parts and the start of their output, scrolled to the top.
   await parts.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + scrollY - 140))
   await shoot(page, 'immich-parts', { y: 0, height: 560 })
+
+  // An app that is not a web page: the address players connect to.
+  await page.goto('/tour/projects/minecraft')
+  await expect(page.getByText('hangar.tail1234.ts.net:25565').first()).toBeVisible()
+  await shoot(page, 'minecraft', { y: 0, height: 560 })
 
   await page.goto('/tour/projects/immich')
   await expect(page.getByText('Version v3.5.0 is out. This app runs v3.4.2.')).toBeVisible()

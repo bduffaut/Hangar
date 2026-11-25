@@ -11,6 +11,7 @@ import {
   MEMORY_LIMIT_MAX_MB,
   MEMORY_LIMIT_MIN_MB,
   parseWholeNumber,
+  portLabel,
   type SettingsView,
 } from '@hangar/shared'
 import { computed, onMounted, ref } from 'vue'
@@ -48,7 +49,10 @@ const lockedReason = computed(() => {
   if (session.isAdmin) return null
   if (custom.value) return 'Only an admin can run any image. Pick an app from the list instead.'
   if (template.value && template.value.tier !== 'standard') {
-    return `${template.value.name} reads a folder on this computer, so an admin installs it. Ask an admin to install it for you.`
+    const what = template.value.ports?.length
+      ? 'uses a port on this computer'
+      : 'reads a folder on this computer'
+    return `${template.value.name} ${what}, so an admin installs it. Ask an admin to install it for you.`
   }
   return null
 })
@@ -65,6 +69,16 @@ const volumes = ref(
 )
 const customize = ref(false)
 const publish = ref(false)
+/** Required answers (D52), such as a licence: the `env` of each accepted question. */
+const accepted = ref<Record<string, boolean>>({})
+const questions = computed(() => template.value?.questions ?? [])
+const unanswered = computed(() => questions.value.some((q) => !accepted.value[q.env]))
+/** Where ports are published (D51): the machine's Tailscale name, or its address. */
+const portHost = computed(() => {
+  const url = settings.value?.privateUrl
+  return url ? new URL(url).hostname : (settings.value?.lanIp ?? null)
+})
+const isWeb = computed(() => template.value?.web !== false)
 const gpu = ref(true)
 
 // A custom image suggests its own name: ghcr.io/owner/my-app:1.2 → my-app.
@@ -160,7 +174,7 @@ const publicAddress = computed(() =>
 )
 const blocked = computed(
   () =>
-    Boolean(nameProblem.value || imageProblem.value) ||
+    Boolean(nameProblem.value || imageProblem.value || unanswered.value) ||
     (port.value.trim() !== '' && portValue.value === null) ||
     memoryValue.value === null,
 )
@@ -188,7 +202,7 @@ const asWritten = computed(() => {
 })
 /** Apps whose first visitor becomes admin stay private until their owner has set them up. */
 const offerPublic = computed(() =>
-  Boolean(publicAddress.value && !template.value?.firstVisitorIsAdmin),
+  Boolean(publicAddress.value && isWeb.value && !template.value?.firstVisitorIsAdmin),
 )
 
 const busy = ref(false)
@@ -213,6 +227,7 @@ async function install() {
               hostnames,
               ...(libraryChoice ? { libraryId: libraryChoice } : {}),
               gpu: useGpu,
+              accepted: questions.value.filter((q) => accepted.value[q.env]).map((q) => q.env),
               deploy: true,
             },
           })
@@ -233,7 +248,16 @@ async function install() {
                   ? [{ libraryId: libraryChoice, mountPath: t.library.mountPath }]
                   : [],
               gpu: useGpu,
-              env: t?.env,
+              env: t
+                ? {
+                    ...t.env,
+                    ...Object.fromEntries(
+                      questions.value
+                        .filter((q) => accepted.value[q.env])
+                        .map((q) => [q.env, q.value]),
+                    ),
+                  }
+                : undefined,
               catalogId: t?.id,
               deploy: true,
             },
@@ -362,7 +386,41 @@ async function install() {
       </div>
     </HgPanel>
 
-    <HgPanel title="Where it answers">
+    <HgPanel v-if="questions.length" title="Before installing">
+      <div class="hg-install-group">
+        <div v-for="q in questions" :key="q.env" class="hg-install-question">
+          <div class="hg-install-switch">
+            <BaseSwitch :id="`ai-q-${q.env}`" v-model="accepted[q.env]" />
+            <label :for="`ai-q-${q.env}`">{{ q.label }}</label>
+          </div>
+          <p class="hg-muted hg-install-small">
+            {{ q.hint }}
+            <a v-if="q.link" :href="q.link" target="_blank" rel="noopener"
+              >Read it <BaseIcon name="external" :size="12"
+            /></a>
+          </p>
+        </div>
+      </div>
+    </HgPanel>
+
+    <HgPanel v-if="!isWeb" title="Where it answers">
+      <div class="hg-install-group">
+        <p class="hg-muted">
+          {{ template?.name }} is not a web page. On your devices with Tailscale, connect to
+          <template v-for="(p, i) in template?.ports ?? []" :key="p.port"
+            ><template v-if="i > 0">, </template
+            ><code
+              >{{ portHost ?? 'this computer' }}:{{
+                portLabel({ hostPort: p.port, protocol: p.protocol })
+              }}</code
+            >
+            ({{ p.purpose.toLowerCase() }})</template
+          >. Nobody else can reach it, and it is never put on the internet.
+        </p>
+      </div>
+    </HgPanel>
+
+    <HgPanel v-else title="Where it answers">
       <div class="hg-install-group">
         <p class="hg-muted">
           On your devices with Tailscale, at
@@ -402,7 +460,7 @@ async function install() {
           <BaseInput id="ai-image-t" v-model="image" mono />
         </BaseField>
         <BaseField
-          v-if="session.isAdmin"
+          v-if="session.isAdmin && isWeb"
           label="Web port"
           for="ai-port"
           help="Leave empty to read it from the image."
@@ -492,6 +550,9 @@ async function install() {
   align-items: center;
   gap: var(--hg-space-1);
   font-size: var(--hg-size-sm);
+}
+.hg-install-question .hg-install-small {
+  margin: var(--hg-space-1) 0 0;
 }
 .hg-install-parts {
   margin: var(--hg-space-3) 0 0;

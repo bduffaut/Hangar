@@ -9,6 +9,7 @@ import {
   type UserRole,
 } from '@hangar/shared'
 import type { Ctx } from '../../context.ts'
+import { listAppPorts } from '../ports/repo.ts'
 import { conflict, notFound, UserError } from '../../errors.ts'
 import type { AppMount } from '../../platform/docker.ts'
 import { checkHostFolder } from '../../platform/host.ts'
@@ -202,11 +203,13 @@ export async function cleanStorage(
 
 /**
  * Whether an app uses anything only an admin can grant (checked again at every deploy): the
- * graphics chip, a library, or a published image other than a standard catalog template's (D43).
+ * graphics chip, a library, a port on the computer (D51), or a published image other than a
+ * standard catalog template's (D43).
  */
 export async function needsAdmin(ctx: Ctx, project: Project): Promise<boolean> {
   if (project.gpu) return true
   if (project.kind === 'image' && !isMemberCatalogApp(project.catalogId, project.image)) return true
+  if ((await listAppPorts(ctx.db, [project.id])).length > 0) return true
   return (await listAppLibraries(ctx.db, [project.id])).length > 0
 }
 

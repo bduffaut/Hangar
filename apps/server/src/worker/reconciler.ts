@@ -69,8 +69,9 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
     return {
       name: row.name,
       hostnames: row.hostnames,
+      // An app that is not a web page (D51) is never routed: visitors get core's page for it.
       target:
-        running && number !== null && port !== null
+        row.web && running && number !== null && port !== null
           ? { host: appContainerName(row.name, number), port }
           : null,
     }

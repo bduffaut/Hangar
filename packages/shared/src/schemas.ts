@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { PROJECT_NAME_MAX_LENGTH } from './hostnames.ts'
 import {
   APP_KINDS,
+  PORT_PROTOCOLS,
   DEPLOY_STRATEGIES,
   MAX_APP_LIBRARIES,
   MAX_APP_VOLUMES,
@@ -414,6 +415,8 @@ export const catalogInstallInput = z.object({
   libraryId: id.optional(),
   /** Use the graphics chip, for a template that offers it. Admins only. */
   gpu: z.boolean().optional(),
+  /** The `env` of each question the installer accepted (D52), such as a licence. */
+  accepted: z.array(z.string().max(64)).max(8).optional(),
   deploy: z.boolean().optional(),
 })
 export type CatalogInstall = z.infer<typeof catalogInstallInput>
@@ -527,6 +530,17 @@ export const projectView = z.object({
   catalogId: z.string().nullable(),
   strategy: z.enum(DEPLOY_STRATEGIES),
   gpu: z.boolean(),
+  /** False for an app that is not a web page (D51): it has no browser address. */
+  web: z.boolean(),
+  /** Ports published on the computer's Tailscale address (D51), with the address to connect to. */
+  ports: z.array(
+    z.object({
+      port: z.number().int(),
+      protocol: z.enum(PORT_PROTOCOLS),
+      hostPort: z.number().int(),
+      address: z.string().nullable(),
+    }),
+  ),
   volumes: z.array(volumeInput),
   libraries: z.array(
     z.object({ libraryId: id, name: z.string(), mountPath: z.string(), readOnly: z.boolean() }),

@@ -16,12 +16,14 @@ choices already filled in.
 | **File Browser**   | Upload, download, and share files from a browser          | [Documents and files](apps-documents.md)  | Everyone           |
 | **Mealie**         | Recipes, meal plans, and shopping lists                   | [Recipes and monitoring](apps-home.md)    | Everyone           |
 | **Uptime Kuma**    | Watches your sites and tells you when one is down         | [Recipes and monitoring](apps-home.md)    | Everyone           |
+| **Minecraft**      | Your own world, for friends to join over Tailscale        | [Game servers](apps-games.md)             | Admins             |
 
 More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).
 
 > **Who can install what.** Apps that read a folder on the computer (your movies, music, or
-> books) or use its graphics chip need an admin. The others are open to every account. Hangar
-> installs them exactly as the catalog describes, whatever the form sends.
+> books), use its graphics chip, or take one of its ports (a game server) need an admin. The
+> others are open to every account. Hangar installs them exactly as the catalog describes,
+> whatever the form sends.
 
 ## Private until you say so
 

@@ -53,6 +53,13 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
 - Apps can have a longer download time limit set by their template (Immich: 45 minutes).
 - Apps whose first visitor becomes their admin are installed privately, so nobody on the internet
   can claim them before their owner finishes setup.
+- **Minecraft: your own world, for friends to join over Tailscale (D51).** The first app that is not
+  a web page: players connect to `<your computer>.ts.net:25565`, shown on the app's page and
+  copied by its launcher tile. Ports like this are published on the Tailscale address only, never
+  on your home network or the internet, and one app holds a port at a time. Installing it asks you
+  to accept Minecraft's EULA (D52).
+- **Apps reach each other by name (D50).** An app can talk to another app of the same account at
+  its name, like `http://jellyfin:8096`, ready for smart home apps that work together.
 
 ### Fixed
 

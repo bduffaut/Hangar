@@ -8,6 +8,7 @@ import {
   appHostname,
 } from '@hangar/shared'
 import { realpath, rm } from 'node:fs/promises'
+import { connect } from 'node:net'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { Ctx } from '../context.ts'
@@ -23,6 +24,7 @@ import { getEnv } from '../modules/env-vars/service.ts'
 import { getProject, listCurrentDeployments, type Project } from '../modules/projects/repo.ts'
 import { getSettings } from '../modules/settings/repo.ts'
 import { getGithubToken } from '../modules/settings/secrets.ts'
+import { listAppPorts } from '../modules/ports/repo.ts'
 import { needsAdmin } from '../modules/storage/service.ts'
 import { getUser } from '../modules/users/repo.ts'
 import { secretsHash } from '../platform/builder.ts'
@@ -195,7 +197,15 @@ export async function runDeployment(
 
         const timeout =
           project.kind === 'image' ? IMAGE_HEALTH_CHECK_TIMEOUT_MS : HEALTH_CHECK_TIMEOUT_MS
-        await waitUntilHealthy(ctx, log, container.name, image, port, timeout)
+        await waitUntilHealthy(
+          ctx,
+          log,
+          container.name,
+          image,
+          port,
+          timeout,
+          await checkKind(ctx, project, port),
+        )
         live = await switchTraffic(ctx, project, deployment, container, port, log)
       } finally {
         if (!live && paused.length) {
@@ -338,6 +348,37 @@ const OWN_CHECK_TIMEOUT_MS = 10_000
 const OWN_CHECK_INTERVAL_MS = 2_000
 
 /**
+ * How a new version proves it started (D51): a web app answers HTTP on its port; an app that is
+ * not a web page accepts a TCP connection on its port, or, with only UDP ports, keeps running.
+ */
+type CheckKind = 'http' | 'tcp' | 'running'
+
+async function checkKind(ctx: Ctx, project: Project, port: number): Promise<CheckKind> {
+  if (project.web) return 'http'
+  const ports = await listAppPorts(ctx.db, [project.id])
+  return ports.some((p) => p.protocol === 'tcp' && p.port === port) || !ports.length
+    ? 'tcp'
+    : 'running'
+}
+
+/** Whether something accepts a TCP connection there, within 2 s. */
+function acceptsTcp(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host, port, timeout: 2_000 })
+    const done = (ok: boolean) => {
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
+/** How long an app checked only by running must keep running. */
+const STEADY_MS = 10_000
+
+/**
  * Any HTTP response counts as answering. An image with its own `HEALTHCHECK` must then also pass
  * it (D46): Hangar runs that command itself, at once and every 2 s, instead of waiting on Docker's
  * interval (often 30 s). A container that exits or restarts fails at once.
@@ -349,10 +390,15 @@ async function waitUntilHealthy(
   image: string,
   port: number,
   timeoutMs: number,
+  kind: CheckKind = 'http',
 ): Promise<void> {
   const url = `http://${containerName}:${port}/`
   const started = Date.now()
-  log.system(`Waiting for the app to answer on port ${port} (up to ${timeoutMs / 1000} s)`)
+  log.system(
+    kind === 'running'
+      ? `Waiting for the app to keep running for ${STEADY_MS / 1000} s`
+      : `Waiting for the app to answer on port ${port} (up to ${timeoutMs / 1000} s)`,
+  )
 
   while (Date.now() - started < timeoutMs) {
     const state = await ctx.docker.containerState(containerName)
@@ -365,6 +411,23 @@ async function waitUntilHealthy(
         'health_check_failed',
         `The app exited${state ? ` with code ${state.exitCode}` : ''} before it answered on port ${port}`,
       )
+    }
+    if (kind === 'running') {
+      if (Date.now() - started >= STEADY_MS) {
+        log.system(`The app kept running for ${STEADY_MS / 1000} s`)
+        return waitForOwnCheck(ctx, log, containerName, image, started + timeoutMs)
+      }
+      await sleep(HEALTH_CHECK_INTERVAL_MS)
+      continue
+    }
+    if (kind === 'tcp') {
+      if (await acceptsTcp(containerName, port)) {
+        const seconds = Math.round((Date.now() - started) / 100) / 10
+        log.system(`The app accepted a connection on port ${port} after ${seconds} s`)
+        return waitForOwnCheck(ctx, log, containerName, image, started + timeoutMs)
+      }
+      await sleep(HEALTH_CHECK_INTERVAL_MS)
+      continue
     }
     const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(2_000) })
       .then(async (res) => {
@@ -382,7 +445,9 @@ async function waitUntilHealthy(
   throw new PipelineError(
     'health_check_failed',
     `The app did not answer on port ${port} within ${timeoutMs / 1000} seconds. ` +
-      `Make sure it listens on 0.0.0.0 and on the port in the PORT variable.`,
+      (kind === 'tcp'
+        ? `Make sure it listens on 0.0.0.0 and on port ${port}.`
+        : `Make sure it listens on 0.0.0.0 and on the port in the PORT variable.`),
   )
 }
 
@@ -442,16 +507,9 @@ async function switchTraffic(
   port: number,
   log: DeploymentLog,
 ): Promise<boolean> {
-  log.system('Switching traffic to the new version')
   const { lanDomain } = await getSettings(ctx.db)
-  const url = lanDomain ? ` at http://${appHostname(project.name, lanDomain)}` : ''
-  const target = { deploymentNumber: deployment.number, port }
-
-  const live = await switchRoute(ctx, project.name, target, async () => {
-    const upstream = appUpstreamUrl({ host: container.name, port })
-    await ctx.proxy.waitForService(appServiceName(project.name), upstream).catch((error: Error) => {
-      throw new PipelineError('internal', error.message)
-    })
+  const url = project.web && lanDomain ? ` at http://${appHostname(project.name, lanDomain)}` : ''
+  const confirm = async () => {
     log.system(`Deployment #${deployment.number} is live${url}; stopping the previous version`)
     await log.flush()
     const outcome = await goLive(ctx, deployment)
@@ -459,7 +517,26 @@ async function switchTraffic(
       throw new PipelineError('superseded', 'A newer deployment of this project went live first')
     }
     return outcome === 'live'
-  })
+  }
+
+  // An app that is not a web page has no route to switch (D51): its ports belong to the container.
+  const live = !project.web
+    ? await confirm()
+    : await switchRoute(
+        ctx,
+        project.name,
+        { deploymentNumber: deployment.number, port },
+        async () => {
+          log.system('Switching traffic to the new version')
+          const upstream = appUpstreamUrl({ host: container.name, port })
+          await ctx.proxy
+            .waitForService(appServiceName(project.name), upstream)
+            .catch((error: Error) => {
+              throw new PipelineError('internal', error.message)
+            })
+          return confirm()
+        },
+      )
   if (!live) return false
 
   for (const old of await ctx.docker.listManagedApps(project.id)) {

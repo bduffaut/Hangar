@@ -44,6 +44,7 @@ const ORDER = [
   'apps-photos',
   'apps-documents',
   'apps-home',
+  'apps-games',
   'github',
   'sharing',
   'updating',

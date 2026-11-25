@@ -2,6 +2,7 @@ import {
   ADDRESS_STATUSES,
   APP_KINDS,
   DEPLOY_STRATEGIES,
+  PORT_PROTOCOLS,
   DEPLOYMENT_STATUSES,
   DEPLOYMENT_TRIGGERS,
   DESIRED_STATES,
@@ -54,6 +55,7 @@ export const linkKind = pgEnum('link_kind', LINK_KINDS)
 export const addressStatus = pgEnum('address_status', ADDRESS_STATUSES)
 export const appKind = pgEnum('app_kind', APP_KINDS)
 export const deployStrategy = pgEnum('deploy_strategy', DEPLOY_STRATEGIES)
+export const portProtocol = pgEnum('port_protocol', PORT_PROTOCOLS)
 
 export const users = pgTable('users', {
   id: id(),
@@ -133,6 +135,8 @@ export const projects = pgTable(
     strategy: deployStrategy().notNull().default('rolling'),
     /** Pass the computer's graphics chip (/dev/dri) to the container. Granted by an admin. */
     gpu: boolean().notNull().default(false),
+    /** False for an app that is not a web page (D51): never routed, checked by its TCP port. */
+    web: boolean().notNull().default(true),
     repoUrl: text().notNull(),
     branch: text().notNull(),
     rootDir: text().notNull().default(''),
@@ -186,6 +190,28 @@ export const appVolumes = pgTable(
   (t) => [
     primaryKey({ columns: [t.projectId, t.name] }),
     unique().on(t.projectId, t.service, t.mountPath).nullsNotDistinct(),
+  ],
+)
+
+/**
+ * Ports an app publishes on the computer's Tailscale address (D51). A port on the computer belongs
+ * to one app at a time, whoever owns it.
+ */
+export const appPorts = pgTable(
+  'app_ports',
+  {
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    /** Inside the container. */
+    port: integer().notNull(),
+    protocol: portProtocol().notNull(),
+    /** On the computer's Tailscale address. */
+    hostPort: integer().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.port, t.protocol] }),
+    unique().on(t.hostPort, t.protocol),
   ],
 )
 

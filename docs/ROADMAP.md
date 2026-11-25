@@ -9,7 +9,7 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.           |
 | 2. The app catalog                  | **Built** (D43–D49): eight templates including the Immich and Paperless-ngx stacks, the launcher, update checks, a guide per category. |
-| 3. Smart home, games, private HTTPS | **Planned in detail**, see [Phase 3 plan](#phase-3-plan) below. Not started.                                                           |
+| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1, 3, 4 done (D50–D52), Minecraft in the catalog.                                       |
 | 4. For students and projects        | Planned.                                                                                                                               |
 | 5. See everything                   | Planned.                                                                                                                               |
 | 6. Bring your own setup             | Planned.                                                                                                                               |
@@ -272,6 +272,21 @@ Zigbee sensor through the stick and survives the stick being moved to another so
 Vaultwarden's phone app signs in over `https://`; a device using AdGuard as its DNS server has
 ads blocked; and the other production site on the maintainer's server answers throughout, since
 new published ports and `tailscale serve` changes happen on that machine.
+
+**Progress (2026-11-25):**
+
+- **Step 1 done (D50):** `appAlias` in `platform/names.ts`; integration test "answers to its own
+  name" in `apps.test.ts`.
+- **Step 3 done (D52):** `questions` on a template (`accept` only), `accepted` in the install
+  request.
+- **Step 4 done (D51):** `projects.web`, table `app_ports`, `modules/ports/`, the TCP and
+  keeps-running checks in `worker/pipeline.ts`. Ports come from templates only so far: an admin
+  cannot yet add a port to **Any image** or change one under Settings, and Settings → Security
+  does not list them yet.
+- **Minecraft (Java)** is in the catalog and installs for real (`HANGAR_TEST_CATALOG=minecraft`).
+  Guide: `docs/guides/apps-games.md`. Not yet run on the real server. Its image tag
+  (`2026.11.1-java25`) is not in a numeric style, so the update notice (D47) does not offer newer
+  ones.
 
 **Needs from the maintainer:** a Zigbee (or Z-Wave) USB stick on the server for step 5, and the
 tailnet's HTTPS certificates turned on for step 6.

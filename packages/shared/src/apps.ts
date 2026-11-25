@@ -12,6 +12,40 @@ export type AppKind = (typeof APP_KINDS)[number]
 export const DEPLOY_STRATEGIES = ['rolling', 'recreate'] as const
 export type DeployStrategy = (typeof DEPLOY_STRATEGIES)[number]
 
+// Ports that are not web pages (D51): a game server, DNS, MQTT. Published on the computer's
+// Tailscale address only, never on every network it is on.
+
+export const PORT_PROTOCOLS = ['tcp', 'udp'] as const
+export type PortProtocol = (typeof PORT_PROTOCOLS)[number]
+
+export const MAX_APP_PORTS = 8
+
+/**
+ * Ports an app can never take on the computer: SSH, and Hangar's own web entrypoint and HTTPS.
+ * 8401–8499 are kept for apps' private HTTPS (phase 3).
+ */
+export const RESERVED_HOST_PORTS = [22, 80, 443] as const
+export const PRIVATE_HTTPS_PORTS = { from: 8401, to: 8499 } as const
+
+export type HostPortProblem = 'invalid' | 'reserved'
+
+export function checkHostPort(port: number): HostPortProblem | null {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return 'invalid'
+  if ((RESERVED_HOST_PORTS as readonly number[]).includes(port)) return 'reserved'
+  if (port >= PRIVATE_HTTPS_PORTS.from && port <= PRIVATE_HTTPS_PORTS.to) return 'reserved'
+  return null
+}
+
+export const hostPortProblemCopy: Record<HostPortProblem, string> = {
+  invalid: 'A port is a whole number from 1 to 65535.',
+  reserved: `Ports 22, 80, 443, and ${PRIVATE_HTTPS_PORTS.from}–${PRIVATE_HTTPS_PORTS.to} belong to the computer and Hangar itself.`,
+}
+
+/** How a port is written for people: `25565`, or `19132 (UDP)`. */
+export function portLabel(port: { hostPort: number; protocol: PortProtocol }): string {
+  return port.protocol === 'udp' ? `${port.hostPort} (UDP)` : String(port.hostPort)
+}
+
 export const MAX_APP_VOLUMES = 8
 export const MAX_APP_LIBRARIES = 8
 export const MAX_LIBRARIES = 32
@@ -197,16 +231,38 @@ export interface CatalogService {
   shmSizeMb?: number
 }
 
+/**
+ * Something the installer must answer before install, used nowhere else (D52). `accept`: a box
+ * that must be ticked (a licence), which sets `env` to `value`.
+ */
+export interface CatalogQuestion {
+  env: string
+  kind: 'accept'
+  label: string
+  /** A sentence under the box, and a link to read first. */
+  hint: string
+  link?: string
+  value: string
+}
+
 export interface CatalogApp {
   id: string
   name: string
-  category: 'media' | 'photos' | 'files' | 'home' | 'smart-home' | 'monitoring' | 'developer'
+  category:
+    'media' | 'photos' | 'files' | 'home' | 'smart-home' | 'monitoring' | 'games' | 'developer'
   summary: string
   /** A paragraph for the install page: what it does and what you need. */
   description: string
   website: string
   image: string
+  /** The app's web port; for an app without a web page (`web: false`), the port its check opens. */
   port: number
+  /** False for apps that are not web pages (a game server): no address in the browser (D51). */
+  web?: false
+  /** Ports published on the computer's Tailscale address, at the same number (D51). */
+  ports?: { port: number; protocol: PortProtocol; purpose: string }[]
+  /** Required answers before install (D52). */
+  questions?: CatalogQuestion[]
   memoryLimitMb: number
   /** A longer download time limit than the default, for large apps (minutes). */
   buildTimeoutMinutes?: number
@@ -595,6 +651,49 @@ export const CATALOG: CatalogApp[] = [
       'Drag files onto the page to upload them.',
     ],
     tier: 'standard',
+  },
+  {
+    // The first app that is not a web page (D51): players connect to its port over Tailscale.
+    id: 'minecraft',
+    name: 'Minecraft',
+    category: 'games',
+    summary: 'Your own Minecraft world, for friends and family to join from anywhere.',
+    description:
+      'A Minecraft: Java Edition server that runs all the time on this computer, so your world keeps going when you log off. Players join with the address Hangar shows, from any device with Tailscale: share this computer with friends in Tailscale and they can play too, with nothing open to the internet.',
+    website: 'https://www.minecraft.net',
+    image:
+      'itzg/minecraft-server:2026.11.1-java25@sha256:0634ff76eee896c7e9760a35117d24fad394857d10bc8c1d9bc7f7ff7deef3c2',
+    port: 25565,
+    web: false,
+    ports: [{ port: 25565, protocol: 'tcp', purpose: 'Players join here' }],
+    questions: [
+      {
+        env: 'EULA',
+        kind: 'accept',
+        label: 'Accept the Minecraft EULA',
+        hint: 'Mojang asks everyone who runs a server to accept its end user licence agreement.',
+        link: 'https://www.minecraft.net/eula',
+        value: 'TRUE',
+      },
+    ],
+    memoryLimitMb: 3072,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/data',
+        purpose: 'The world, players, and server settings',
+        backup: true,
+      },
+    ],
+    // The game version is pinned like the image: a world opened by a newer version cannot go back.
+    env: { TYPE: 'VANILLA', VERSION: '26.3', MEMORY: '2G', MOTD: 'A Hangar world' },
+    firstVisitorIsAdmin: false,
+    firstSteps: [
+      'In Minecraft: Java Edition, open Multiplayer, then Add Server, and enter the address above.',
+      'To play with friends, share this computer with them from the Tailscale admin console (Machines, then Share). They join with the same address.',
+      'To be an operator, add an env var OPS with your Minecraft name under Environment, then press Deploy now.',
+    ],
+    tier: 'elevated',
   },
 ]
 

@@ -224,6 +224,7 @@ async function remove() {
           </BaseField>
         </template>
         <BaseField
+          v-if="project.web"
           label="Port"
           for="ps-port"
           :error="portError"
@@ -291,7 +292,24 @@ async function remove() {
 
     <StorageEditor :project="project" />
 
+    <!-- An app that is not a web page (D51): its ports instead of web addresses. -->
     <HgPanel
+      v-if="!project.web"
+      id="addresses"
+      title="Ports on this computer"
+      description="Published on this computer's Tailscale address only: your devices, and people you share it with in Tailscale, can connect. Nothing is opened to your home network or the internet."
+    >
+      <ul class="hg-settings-ports">
+        <li v-for="p in project.ports" :key="`${p.port}/${p.protocol}`">
+          <CopyField v-if="p.address" :value="p.address" :label="`port ${p.hostPort}`" />
+          <code v-else>{{ p.hostPort }}</code>
+          <span v-if="p.protocol === 'udp'" class="hg-muted">UDP</span>
+        </li>
+      </ul>
+    </HgPanel>
+
+    <HgPanel
+      v-else
       id="addresses"
       title="Public addresses"
       description="Where the app answers on the internet. Changes apply right away, without a deploy."
@@ -416,6 +434,19 @@ async function remove() {
 </template>
 
 <style scoped>
+.hg-settings-ports {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--hg-space-2);
+  max-width: 28rem;
+}
+.hg-settings-ports li {
+  display: flex;
+  align-items: center;
+  gap: var(--hg-space-2);
+}
 .hg-addresses-form {
   display: grid;
   gap: var(--hg-space-4);

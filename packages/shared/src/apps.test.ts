@@ -5,8 +5,10 @@ import {
   newerVersion,
   CATALOG,
   checkLibraryPath,
+  checkHostPort,
   checkMountPath,
   imageRepository,
+  portLabel,
   imageTag,
   isMemberCatalogApp,
   serviceEnv,
@@ -158,6 +160,25 @@ describe('the catalog', () => {
       }
     }
   })
+  it('has consistent ports and questions (D51, D52)', () => {
+    for (const app of CATALOG) {
+      const ports = app.ports ?? []
+      for (const p of ports)
+        expect([app.id, p.port, checkHostPort(p.port)]).toEqual([app.id, p.port, null])
+      expect(new Set(ports.map((p) => `${p.port}/${p.protocol}`)).size).toBe(ports.length)
+      // A port on the computer is an admin's to give.
+      if (ports.length) expect(app.tier).toBe('elevated')
+      // An app that is not a web page is reached by its ports, and checked on its main one.
+      if (app.web === false) {
+        expect(ports.length).toBeGreaterThan(0)
+        expect(app.firstVisitorIsAdmin).toBe(false)
+      }
+      for (const q of app.questions ?? []) {
+        expect(q.env).toMatch(/^[A-Z][A-Z0-9_]*$/)
+        expect(app.env[q.env]).toBeUndefined()
+      }
+    }
+  })
   it('offers members at least one app', () => {
     expect(CATALOG.some((app) => app.tier === 'standard')).toBe(true)
   })
@@ -245,5 +266,18 @@ describe('what members may run (D43)', () => {
     expect(isMemberCatalogApp('nope', standard.image)).toBe(false)
     expect(isMemberCatalogApp(null, standard.image)).toBe(false)
     expect(isMemberCatalogApp(standard.id, null)).toBe(false)
+  })
+})
+
+describe('ports on the computer (D51)', () => {
+  it('keeps the computer’s own ports and the private HTTPS range', () => {
+    expect(checkHostPort(25565)).toBeNull()
+    expect(checkHostPort(53)).toBeNull()
+    for (const port of [22, 80, 443, 8401, 8499]) expect(checkHostPort(port)).toBe('reserved')
+    for (const port of [0, 65536, 1.5]) expect(checkHostPort(port)).toBe('invalid')
+  })
+  it('writes UDP ports so people can tell', () => {
+    expect(portLabel({ hostPort: 25565, protocol: 'tcp' })).toBe('25565')
+    expect(portLabel({ hostPort: 19132, protocol: 'udp' })).toBe('19132 (UDP)')
   })
 })

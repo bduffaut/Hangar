@@ -28,6 +28,8 @@ import type { Ctx } from '../../context.ts'
 import { projectLockKey, withAdvisoryLock } from '../../db/lock.ts'
 import { notFound, UserError } from '../../errors.ts'
 import { appImageRepository, serviceContainerName } from '../../platform/names.ts'
+import { insertAppPorts, listAppPorts } from '../ports/repo.ts'
+import { checkPorts, portAddress, portHost } from '../ports/service.ts'
 import { addressViews, listAddressChecks, pruneAddressChecks } from '../addresses/service.ts'
 import { reconcileOne, syncRouting } from '../../worker/reconciler.ts'
 import { removeStack, stackServices } from '../../worker/stack.ts'
@@ -64,6 +66,9 @@ export class ProjectError extends UserError {
     super(400, 'invalid_project', message, hint)
   }
 }
+
+const NOT_WEB_PROBLEM =
+  'This app is not a web page, so it cannot have a public address. Connect to it at its address and port over Tailscale.'
 
 const NAME_PROBLEMS = {
   empty: 'Enter a project name.',
@@ -319,6 +324,13 @@ export async function installCatalogApp(
       'Ask an admin to install it for you.',
     )
   }
+  // Required answers (D52), such as a licence: every one must be accepted, by this request.
+  const accepted = new Set(input.accepted ?? [])
+  const unanswered = (template.questions ?? []).find((q) => !accepted.has(q.env))
+  if (unanswered) {
+    throw new ProjectError(`${unanswered.label} first.`, unanswered.hint)
+  }
+  const answers = Object.fromEntries((template.questions ?? []).map((q) => [q.env, q.value]))
   if (template.firstVisitorIsAdmin && input.hostnames?.length) {
     throw new ProjectError(
       `Finish setting up ${template.name} before putting it on the internet: whoever opens it first becomes its admin.`,
@@ -332,7 +344,7 @@ export async function installCatalogApp(
     memoryLimitMb: input.memoryLimitMb ?? template.memoryLimitMb,
     ...(template.buildTimeoutMinutes ? { buildTimeoutMinutes: template.buildTimeoutMinutes } : {}),
     hostnames: input.hostnames,
-    env: template.env,
+    env: { ...template.env, ...answers },
     catalogId: template.id,
     volumes: template.volumes.map((v) => ({ name: v.name, mountPath: v.mountPath })),
     libraries:
@@ -365,7 +377,22 @@ async function insertImageApp(
   const hostnames = cleanSettings({ hostnames: input.hostnames ?? [] }).hostnames!
   await checkHostnames(ctx, owner.role, null, hostnames)
   const storage = await cleanStorage(ctx, owner.role, input)
-  const hasStorage = Boolean(storage.volumes?.length || storage.libraries?.length)
+  // A template's ports and whether it is a web page (D51); ports are an admin's to grant.
+  const template = input.catalogId ? findTemplate(ctx, input.catalogId) : null
+  const web = template?.web !== false
+  const ports = (template?.ports ?? []).map((p) => ({
+    port: p.port,
+    protocol: p.protocol,
+    hostPort: p.port,
+  }))
+  if (ports.length && owner.role !== 'admin') {
+    throw new UserError(403, 'admin_only', 'Only an admin can give an app a port on this computer.')
+  }
+  if (!web && hostnames.length) throw new ProjectError(NOT_WEB_PROBLEM)
+  await checkPorts(ctx, ports)
+  // Two containers can never hold the same port on the computer, so a new version waits for the
+  // old one to stop.
+  const hasStorage = Boolean(storage.volumes?.length || storage.libraries?.length || ports.length)
 
   let project: Project
   try {
@@ -379,6 +406,7 @@ async function insertImageApp(
       // Two copies of an app must never write to the same storage at once.
       strategy: input.strategy ?? (hasStorage ? 'recreate' : 'rolling'),
       gpu: storage.gpu ?? false,
+      web,
       repoUrl: '',
       branch: '',
       triggerMode: 'manual',
@@ -391,8 +419,15 @@ async function insertImageApp(
     throw error
   }
   await replaceAppStorage(ctx.db, project.id, storage)
+  await insertAppPorts(ctx.db, project.id, ports).catch(async (error: unknown) => {
+    // Taken a moment ago by another install.
+    await deleteProjectRow(ctx.db, project.id)
+    if ((error as { cause?: { code?: string } }).cause?.code === '23505') {
+      throw new UserError(409, 'port_taken', 'Another app took one of these ports just now.')
+    }
+    throw error
+  })
   // A stack template (D44): its services' kept folders, and secrets made for this install only.
-  const template = input.catalogId ? findTemplate(ctx, input.catalogId) : null
   await insertServiceVolumes(
     ctx.db,
     project.id,
@@ -419,6 +454,7 @@ export async function updateProjectSettings(
 ): Promise<Project> {
   const { volumes, libraries, gpu, image, ...settings } = patch
   const clean = cleanSettings(settings)
+  if (clean.hostnames?.length && !project.web) throw new ProjectError(NOT_WEB_PROBLEM)
   if (clean.hostnames) await checkHostnames(ctx, role, project.id, clean.hostnames)
   if (project.kind === 'image') {
     // An image app has no branch to follow; it updates when asked.
@@ -602,6 +638,8 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
     listAppVolumes(ctx.db, ids),
     listAppLibraries(ctx.db, ids),
   ])
+  const ports = await listAppPorts(ctx.db, ids)
+  const host = ports.length ? await portHost(ctx) : { ip: null, name: null }
   return projects.map((p) => {
     const latestRow = latest.find((d) => d.projectId === p.id)
     const currentRow = current.find((d) => d.id === p.currentDeploymentId)
@@ -613,6 +651,15 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       catalogId: p.catalogId,
       strategy: p.strategy,
       gpu: p.gpu,
+      web: p.web,
+      ports: ports
+        .filter((port) => port.projectId === p.id)
+        .map(({ port, protocol, hostPort }) => ({
+          port,
+          protocol,
+          hostPort,
+          address: portAddress(host, hostPort),
+        })),
       volumes: volumes
         .filter((v) => v.projectId === p.id && !v.service)
         .map(({ name, mountPath }) => ({ name, mountPath })),
@@ -632,7 +679,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       buildTimeoutMinutes: p.buildTimeoutMinutes,
       triggerMode: p.triggerMode,
       desiredState: p.desiredState,
-      url: settings.lanDomain ? `http://${appHostname(p.name, settings.lanDomain)}` : null,
+      url: p.web && settings.lanDomain ? `http://${appHostname(p.name, settings.lanDomain)}` : null,
       hostnames: p.hostnames,
       publicUrls: p.hostnames.map((h) => `https://${h}`),
       addresses: addressViews(p.hostnames, checks),

@@ -5,7 +5,8 @@
 //
 // Each app must install, pull, start (with its stack services, D44), pass Hangar's health check,
 // and answer through Traefik. Run it after adding a template or changing its version.
-import { CATALOG } from '@hangar/shared'
+import { CATALOG, catalogApp } from '@hangar/shared'
+import { connect } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { queueBranchHead } from '../../src/modules/deployments/service.ts'
 import { installCatalogApp } from '../../src/modules/projects/service.ts'
@@ -28,12 +29,35 @@ describe.skipIf(ids.length === 0)('catalog templates, for real', () => {
   it.each(ids)('%s installs, starts, and answers', { timeout: 40 * 60_000 }, async (id) => {
     expect(CATALOG.map((t) => t.id)).toContain(id)
     const owner = { id: await h.ownerId(), role: 'admin' as const }
-    const project = await installCatalogApp(h.ctx, owner, id, { name: h.appName(id) })
+    const template = catalogApp(id)!
+    // Its questions (D52) answered yes, as the person installing it would.
+    const accepted = (template.questions ?? []).map((q) => q.env)
+    const project = await installCatalogApp(h.ctx, owner, id, { name: h.appName(id), accepted })
     h.adopt(project)
     const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'), 35 * 60_000)
     expect(done.failureReason).toBeNull()
     expect(done.status).toBe('ready')
+    if (template.web === false) {
+      // Not a web page (D51): its TCP ports answer on the computer's address (127.0.0.1 here).
+      for (const p of (template.ports ?? []).filter((p) => p.protocol === 'tcp')) {
+        expect(await accepts('127.0.0.1', p.port)).toBe(true)
+      }
+      return
+    }
     const res = await h.fetchApp(project.name)
     expect(res.status).toBeLessThan(500)
   })
 })
+
+function accepts(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = connect({ host, port, timeout: 5_000 })
+    const done = (ok: boolean) => {
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}

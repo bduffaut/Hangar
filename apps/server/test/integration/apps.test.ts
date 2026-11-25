@@ -10,11 +10,14 @@ import {
   followRuntimeLogs,
   installCatalogApp,
   needsRestartForAddresses,
+  projectView,
   setDesiredState,
+  updateProjectSettings,
 } from '../../src/modules/projects/service.ts'
 import { replaceAppStorage } from '../../src/modules/storage/repo.ts'
 import { storageView } from '../../src/modules/storage/service.ts'
 import { stackStatus } from '../../src/worker/stack.ts'
+import { ownerNetworkName } from '../../src/platform/names.ts'
 import { createFixtureRepo, createHarness, docker, eventually } from './harness.ts'
 
 const h = createHarness()
@@ -57,6 +60,41 @@ describe('an app from a published image', () => {
     expect((await h.fetchApp(project.name)).status).toBe(200)
   })
 
+  it('answers to its own name for the other apps of its account (D50)', async () => {
+    const project = await h.createProject('named', {
+      repoUrl: '',
+      branch: '',
+      kind: 'image',
+      image: 'traefik/whoami:v1.11',
+      port: 80,
+    })
+    const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
+    expect(done.status).toBe('ready')
+    const network = ownerNetworkName(await h.ownerId())
+    const ask = (net: string) =>
+      docker(
+        'run',
+        '--rm',
+        '--network',
+        net,
+        'busybox:1.37',
+        'wget',
+        '-qO-',
+        '-T',
+        '5',
+        `http://${project.name}/`,
+      )
+    expect(ask(network)).toContain('Hostname:')
+    // Another network (another account's) does not know the name.
+    const other = `hangar-test-other-${h.runId}`
+    docker('network', 'create', other)
+    try {
+      expect(() => ask(other)).toThrow()
+    } finally {
+      docker('network', 'rm', other)
+    }
+  })
+
   it('fails clearly when the image does not exist', async () => {
     const project = await h.createProject('missing', {
       repoUrl: '',
@@ -67,6 +105,49 @@ describe('an app from a published image', () => {
     const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
     expect(done.status).toBe('failed')
     expect(done.failureCode).toBe('pull_failed')
+  })
+})
+
+describe('an app that is not a web page (D51, D52)', () => {
+  it('asks its questions, keeps its port to itself, and gets no public address', async () => {
+    const ownerId = await h.ownerId()
+    const admin = { id: ownerId, role: 'admin' as const }
+    // A licence must be accepted by the request itself.
+    await expect(
+      installCatalogApp(h.ctx, admin, 'minecraft', { name: h.appName('mc-no') }),
+    ).rejects.toThrow('Accept the Minecraft EULA first.')
+    // A port on the computer is an admin's to give.
+    await expect(
+      installCatalogApp(h.ctx, { id: ownerId, role: 'member' }, 'minecraft', {
+        name: h.appName('mc-member'),
+        accepted: ['EULA'],
+      }),
+    ).rejects.toMatchObject({ code: 'admin_only' })
+
+    const project = await installCatalogApp(h.ctx, admin, 'minecraft', {
+      name: h.appName('mc'),
+      accepted: ['EULA'],
+    })
+    h.adopt(project)
+    expect(project.web).toBe(false)
+    expect(project.strategy).toBe('recreate')
+    expect((await getEnv(h.ctx, project.id)).EULA).toBe('TRUE')
+    const view = await projectView(h.ctx, project)
+    expect(view.url).toBeNull()
+    expect(view.ports).toEqual([
+      { port: 25565, protocol: 'tcp', hostPort: 25565, address: expect.stringMatching(/:25565$/) },
+    ])
+
+    // One app per port on the computer, whoever installs the second.
+    await expect(
+      installCatalogApp(h.ctx, admin, 'minecraft', {
+        name: h.appName('mc-two'),
+        accepted: ['EULA'],
+      }),
+    ).rejects.toMatchObject({ code: 'port_taken' })
+    await expect(
+      updateProjectSettings(h.ctx, 'admin', project, { hostnames: ['mc.example.com'] }),
+    ).rejects.toThrow('not a web page')
   })
 })
 

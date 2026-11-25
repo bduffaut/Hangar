@@ -21,6 +21,7 @@ const CATEGORY = {
   home: 'Around the house',
   'smart-home': 'Smart home',
   monitoring: 'Monitoring',
+  games: 'Games',
   developer: 'Developer tools',
 } as const
 </script>

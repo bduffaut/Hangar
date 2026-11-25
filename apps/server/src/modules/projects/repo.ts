@@ -12,6 +12,7 @@ export async function listProjectRoutes(db: Db) {
       name: projects.name,
       hostnames: projects.hostnames,
       desiredState: projects.desiredState,
+      web: projects.web,
       deploymentNumber: deployments.number,
       port: deployments.port,
     })
