@@ -219,6 +219,7 @@ function buildProjects(): ProjectRecord[] {
         strategy: seed.image ? 'recreate' : 'rolling',
         gpu: Boolean(template?.gpu),
         web: template?.web !== false,
+        hostNetwork: false,
         ports: (template?.ports ?? []).map((p) => ({
           port: p.port,
           protocol: p.protocol,

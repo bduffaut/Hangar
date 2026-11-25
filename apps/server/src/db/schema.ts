@@ -137,6 +137,8 @@ export const projects = pgTable(
     gpu: boolean().notNull().default(false),
     /** False for an app that is not a web page (D51): never routed, checked by its TCP port. */
     web: boolean().notNull().default(true),
+    /** On the computer's own network (D54), for apps that find devices there. Admins only. */
+    hostNetwork: boolean().notNull().default(false),
     repoUrl: text().notNull(),
     branch: text().notNull(),
     rootDir: text().notNull().default(''),

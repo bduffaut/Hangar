@@ -105,6 +105,8 @@ const portsProblem = computed(() => {
   return null
 })
 const gpu = ref(true)
+/** The computer's own network (D54): off unless an admin turns it on. */
+const hostNetwork = ref(false)
 
 // A custom image suggests its own name: ghcr.io/owner/my-app:1.2 → my-app.
 function onImage() {
@@ -252,6 +254,7 @@ async function install() {
               hostnames,
               ...(libraryChoice ? { libraryId: libraryChoice } : {}),
               gpu: useGpu,
+              ...(t.hostNetwork && hostNetwork.value ? { hostNetwork: true } : {}),
               accepted: questions.value.filter((q) => accepted.value[q.env]).map((q) => q.env),
               deploy: true,
             },
@@ -273,6 +276,7 @@ async function install() {
                   ? [{ libraryId: libraryChoice, mountPath: t.library.mountPath }]
                   : [],
               gpu: useGpu,
+              ...(t?.hostNetwork && hostNetwork.value ? { hostNetwork: true } : {}),
               ...(t
                 ? {}
                 : {
@@ -408,6 +412,17 @@ async function install() {
           />
         </div>
       </div>
+    </HgPanel>
+
+    <HgPanel v-if="template?.hostNetwork && session.isAdmin" title="Home network">
+      <div class="hg-install-switch">
+        <BaseSwitch id="ai-host-network" v-model="hostNetwork" />
+        <label for="ai-host-network">{{ template.hostNetwork.hint }}</label>
+      </div>
+      <BaseMessage v-if="hostNetwork" tone="warn">
+        Anyone on your home network can then reach {{ template.name }}'s sign-in page at this
+        computer's address. Its private address over Tailscale stays the same.
+      </BaseMessage>
     </HgPanel>
 
     <HgPanel v-if="template?.gpu && gpuAvailable" title="Graphics chip">

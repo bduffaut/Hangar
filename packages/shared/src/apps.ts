@@ -284,6 +284,11 @@ export interface CatalogApp {
   library?: { label: string; mountPath: string; hint: string; writable: boolean }
   /** Offer the graphics chip when the computer has one. */
   gpu?: { hint: string }
+  /**
+   * Offer the computer's own network (admins), for apps that find devices by listening on the home
+   * network (D54). The app then answers on every network the computer is on, at its port.
+   */
+  hostNetwork?: { hint: string }
   env: Record<string, string>
   /** Env vars generated at install, a long random value each, kept encrypted like any env var. */
   secrets?: string[]
@@ -721,6 +726,9 @@ export const CATALOG: CatalogApp[] = [
     image:
       'ghcr.io/home-assistant/home-assistant:2026.11.3@sha256:24e541ddae5818bf8eb27898b9ba00d0c344a655aa5097e9e9bd4b19356be847',
     port: 8123,
+    hostNetwork: {
+      hint: 'Find devices that announce themselves on your home network, like Chromecast, HomeKit, and DLNA. Home Assistant then also answers on port 8123 on every network this computer is on, including your home network.',
+    },
     memoryLimitMb: 1536,
     volumes: [
       {

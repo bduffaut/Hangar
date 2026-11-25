@@ -9,7 +9,7 @@ rows in [ARCHITECTURE.md](ARCHITECTURE.md) when it lands.
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Apps with storage                | **Built**, released to `main` (commit `503c98f`), CI green, running on the maintainer's server. Not yet in a tagged release.           |
 | 2. The app catalog                  | **Built** (D43–D49): eight templates including the Immich and Paperless-ngx stacks, the launcher, update checks, a guide per category. |
-| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–4 done (D50–D53); Minecraft, Home Assistant, Mosquitto in the catalog.                |
+| 3. Smart home, games, private HTTPS | **In progress** ([plan](#phase-3-plan)): steps 1–4 and 7 done (D50–D54); Minecraft, Home Assistant, Mosquitto in the catalog.          |
 | 4. For students and projects        | Planned.                                                                                                                               |
 | 5. See everything                   | Planned.                                                                                                                               |
 | 6. Bring your own setup             | Planned.                                                                                                                               |
@@ -291,6 +291,12 @@ new published ports and `tailscale serve` changes happen on that machine.
   by name) are in the catalog and install for real; guide `docs/guides/apps-smart-home.md`. Home
   Assistant runs on the bridge network for now (step 7 adds host networking for discovery). Not
   yet run on the real server.
+- **Step 7 done (D54):** `hostNetwork` on a template and a project; `upstreamHost` in
+  `worker/app-container.ts` sends Traefik and core to the account network's gateway. Tested with
+  the `host-test` template and the real Home Assistant (`HANGAR_TEST_HOST_NETWORK=1`). Open: on
+  the host network, Home Assistant cannot reach Mosquitto by name (Mosquitto would need a port on
+  the computer's loopback, or Home Assistant a way into the account network); a firewall such as
+  ufw may block Docker's networks from reaching the computer, which the doctor could check.
 - **Minecraft (Java)** is in the catalog and installs for real (`HANGAR_TEST_CATALOG=minecraft`).
   Guide: `docs/guides/apps-games.md`. Not yet run on the real server. Its image tag
   (`2026.11.1-java25`) is not in a numeric style, so the update notice (D47) does not offer newer

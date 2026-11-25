@@ -32,16 +32,23 @@ Install the **Home Assistant** app on your phone and sign in with the app's addr
 controls, notifications, and your phone's location for automations. Your phone needs Tailscale
 on, at home and away.
 
-### What works, and what waits
+### Finding devices on your home network
 
-Home Assistant runs like every app in Hangar: on its own private network, reachable over
-Tailscale. Devices it talks to by address or through a cloud account work as usual. Two things
-are not there yet:
+By default Home Assistant runs like every app in Hangar: on its own private network, reachable
+over Tailscale. Devices it talks to by address or through a cloud account work as usual.
 
-- **Finding devices by itself** (Chromecast, HomeKit, and other devices that announce themselves
-  on the home network) needs Home Assistant on the computer's own network, which Hangar will
-  offer as an admin option.
-- **USB sticks** (Zigbee, Z-Wave) need Hangar to pass the stick to the app, which is coming next.
+Devices that announce themselves on the home network (Chromecast, HomeKit, DLNA, many smart TVs)
+are only found when Home Assistant is on the computer's own network. An admin can turn that on
+while installing, under **Home network**. Then:
+
+- Home Assistant also answers at the computer's home network address, port 8123, to anyone on
+  that network. Its private address over Tailscale stays the same.
+- It cannot reach Mosquitto by name, since Mosquitto stays on Hangar's private network. Use
+  Mosquitto only with Home Assistant on its default network for now.
+- If its address stops answering after you turn this on, the computer's firewall may block
+  Docker's networks from reaching it: allow traffic from `172.16.0.0/12` to port 8123.
+
+**USB sticks** (Zigbee, Z-Wave) need Hangar to pass the stick to the app, which is coming next.
 
 Its settings, automations, and history are kept in the app's `config` storage, which survives
 updates.

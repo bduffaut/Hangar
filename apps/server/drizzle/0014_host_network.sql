@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "host_network" boolean DEFAULT false NOT NULL;

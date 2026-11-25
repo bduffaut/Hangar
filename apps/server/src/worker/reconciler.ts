@@ -15,7 +15,7 @@ import { getUser } from '../modules/users/repo.ts'
 import { LABELS } from '../platform/docker.ts'
 import { appContainerName } from '../platform/names.ts'
 import { renderRouting, type AppRoute } from '../platform/proxy.ts'
-import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
+import { ensureOwnerNetwork, startAppContainer, upstreamHost } from './app-container.ts'
 import { ensureStack, stopStack } from './stack.ts'
 
 // There is one routing file, so every write to it is serialized across processes.
@@ -61,21 +61,24 @@ async function writeRouting(ctx: Ctx, overrides: Record<string, RouteTarget> = {
     return
   }
 
-  const apps: AppRoute[] = (await listProjectRoutes(ctx.db)).map((row) => {
-    const override = overrides[row.name]
-    const number = override?.deploymentNumber ?? row.deploymentNumber
-    const port = override?.port ?? row.port
-    const running = override !== undefined || row.desiredState === 'running'
-    return {
-      name: row.name,
-      hostnames: row.hostnames,
+  const rows = await listProjectRoutes(ctx.db)
+  const apps: AppRoute[] = await Promise.all(
+    rows.map(async (row) => {
+      const override = overrides[row.name]
+      const number = override?.deploymentNumber ?? row.deploymentNumber
+      const port = override?.port ?? row.port
+      const running = override !== undefined || row.desiredState === 'running'
       // An app that is not a web page (D51) is never routed: visitors get core's page for it.
-      target:
-        row.web && running && number !== null && port !== null
-          ? { host: appContainerName(row.name, number), port }
-          : null,
-    }
-  })
+      const routed = row.web && running && number !== null && port !== null
+      // On the computer's own network (D54), the app is reached at the computer's address.
+      const host = routed ? await upstreamHost(ctx, row, number).catch(() => null) : null
+      return {
+        name: row.name,
+        hostnames: row.hostnames,
+        target: host && port !== null ? { host, port } : null,
+      }
+    }),
+  )
 
   const changed = await ctx.proxy.apply(
     renderRouting({

@@ -62,6 +62,8 @@ export interface AppContainerSpec {
   extraNetworks?: string[]
   /** Other names the app answers to on `network`. */
   aliases?: string[]
+  /** On the computer's own network (D54): no Docker network, aliases, or published ports. */
+  hostNetwork?: boolean
   /** Ports published on `hostIp` only (D51), never on every address of the computer. */
   ports?: { port: number; protocol: 'tcp' | 'udp'; hostPort: number; hostIp: string }[]
 }
@@ -280,6 +282,15 @@ export function createDocker(docker = new Dockerode()) {
       }
     },
 
+    /** A network's gateway: the computer itself, as seen from containers on that network. */
+    async networkGateway(name: string): Promise<string | null> {
+      const info = (await docker
+        .getNetwork(name)
+        .inspect()
+        .catch(() => null)) as { IPAM?: { Config?: { Gateway?: string }[] } } | null
+      return info?.IPAM?.Config?.find((c) => c.Gateway && !c.Gateway.includes(':'))?.Gateway ?? null
+    },
+
     /** Removes an account's network, detaching the peers first. Missing networks are ignored. */
     async removeAppNetwork(name: string): Promise<void> {
       const network = docker.getNetwork(name)
@@ -316,11 +327,12 @@ export function createDocker(docker = new Dockerode()) {
           [LABELS.project]: spec.projectId,
           [LABELS.deployment]: spec.deploymentId,
         },
-        ...(spec.aliases?.length
+        ...(spec.aliases?.length && !spec.hostNetwork
           ? { NetworkingConfig: { EndpointsConfig: { [spec.network]: { Aliases: spec.aliases } } } }
           : {}),
         HostConfig: {
           ...appHostConfig(spec),
+          ...(spec.hostNetwork ? { NetworkMode: 'host' } : {}),
           PortBindings: Object.fromEntries(
             (spec.ports ?? []).map((p) => {
               if (!p.hostIp || p.hostIp === '0.0.0.0') throw new Error('Ports need an address')
@@ -336,7 +348,7 @@ export function createDocker(docker = new Dockerode()) {
         },
       })
       try {
-        for (const network of spec.extraNetworks ?? []) {
+        for (const network of spec.hostNetwork ? [] : (spec.extraNetworks ?? [])) {
           await docker.getNetwork(network).connect({ Container: container.id })
         }
         await container.start()

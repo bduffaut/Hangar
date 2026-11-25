@@ -401,6 +401,8 @@ export const imageAppInput = z.object({
   catalogId: z.string().max(64).optional(),
   /** False for an app that is not a web page, like a game server (D51). */
   web: z.boolean().optional(),
+  /** The computer's own network, for a catalog template that offers it (D54). */
+  hostNetwork: z.boolean().optional(),
   /** Ports published on the computer's Tailscale address, at the same number (D51). */
   ports: z
     .array(z.object({ port, protocol: z.enum(PORT_PROTOCOLS) }))
@@ -422,6 +424,8 @@ export const catalogInstallInput = z.object({
   libraryId: id.optional(),
   /** Use the graphics chip, for a template that offers it. Admins only. */
   gpu: z.boolean().optional(),
+  /** Run on the computer's own network, for a template that offers it (D54). Admins only. */
+  hostNetwork: z.boolean().optional(),
   /** The `env` of each question the installer accepted (D52), such as a licence. */
   accepted: z.array(z.string().max(64)).max(8).optional(),
   deploy: z.boolean().optional(),
@@ -550,6 +554,8 @@ export const projectView = z.object({
   gpu: z.boolean(),
   /** False for an app that is not a web page (D51): it has no browser address. */
   web: z.boolean(),
+  /** On the computer's own network (D54): it answers on every network the computer is on. */
+  hostNetwork: z.boolean(),
   /** Ports published on the computer's Tailscale address (D51), with the address to connect to. */
   ports: z.array(
     z.object({

@@ -54,6 +54,24 @@ const TEST_TEMPLATES: CatalogApp[] = [
     firstSteps: ['Nothing to set up.'],
     tier: 'standard',
   },
+  {
+    // The computer's own network (D54), offered like Home Assistant's.
+    id: 'host-test',
+    name: 'Host network test',
+    category: 'developer',
+    summary: 'An app on the computer’s own network, for Hangar’s own tests.',
+    description: 'whoami on a port of its own.',
+    website: 'https://github.com/bduffaut/Hangar',
+    image: 'traefik/whoami:v1.11',
+    port: 18181,
+    hostNetwork: { hint: 'Run on the computer’s own network.' },
+    memoryLimitMb: 64,
+    volumes: [],
+    env: { WHOAMI_PORT_NUMBER: '18181' },
+    firstVisitorIsAdmin: false,
+    firstSteps: ['Nothing to set up.'],
+    tier: 'standard',
+  },
 ]
 
 /** A catalog template by id, including the test ones when they are switched on. */

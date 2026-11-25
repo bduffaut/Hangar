@@ -11,6 +11,21 @@ import { findTemplate } from '../modules/catalog/templates.ts'
 import { listAppPorts } from '../modules/ports/repo.ts'
 import { portHost, portInUseMessage } from '../modules/ports/service.ts'
 
+/**
+ * Where Traefik and core reach a deployment's container: its name on the account's network, or,
+ * for an app on the computer's own network (D54), that network's gateway, which is the computer.
+ */
+export async function upstreamHost(
+  ctx: Ctx,
+  project: { name: string; ownerId: string; hostNetwork: boolean },
+  deploymentNumber: number,
+): Promise<string> {
+  if (!project.hostNetwork) return appContainerName(project.name, deploymentNumber)
+  const gateway = await ctx.docker.networkGateway(ownerNetworkName(project.ownerId))
+  if (!gateway) throw new Error('Could not find the computer’s address on the app network')
+  return gateway
+}
+
 /** Makes sure an account's network exists, with Traefik and core attached to reach its apps. */
 export async function ensureOwnerNetwork(ctx: Ctx, ownerId: string): Promise<string> {
   const network = ownerNetworkName(ownerId)
@@ -69,6 +84,7 @@ export async function startAppContainer(
     // Other apps of the account reach it by its name (D50).
     ...(alias ? { aliases: [alias] } : {}),
     ...(ports.length ? { ports: ports.map((p) => ({ ...p, hostIp: ip! })) } : {}),
+    ...(project.hostNetwork ? { hostNetwork: true } : {}),
     image,
     projectId: project.id,
     deploymentId: deployment.id,

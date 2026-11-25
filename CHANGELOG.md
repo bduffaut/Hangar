@@ -65,6 +65,9 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   when missing, so your own edits are never overwritten.
 - **Any image as a game server or other non-web app.** Under **Customize**, an admin can mark an
   image as not a web page and give it TCP or UDP ports on the Tailscale address.
+- **Home Assistant on your home network (D54).** An admin can turn on **Home network** when
+  installing Home Assistant, so it finds Chromecast, HomeKit, and other devices that announce
+  themselves there. Its private address stays the same.
 - **Every port on the computer, in one list.** Settings → Network shows each port an app holds,
   with its app, owner, and the address to connect to.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at

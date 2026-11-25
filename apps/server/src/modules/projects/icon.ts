@@ -1,5 +1,5 @@
 import type { Ctx } from '../../context.ts'
-import { appContainerName } from '../../platform/names.ts'
+import { upstreamHost } from '../../worker/app-container.ts'
 import { appUpstreamUrl } from '../../platform/proxy.ts'
 import { listCurrentDeployments } from './repo.ts'
 
@@ -114,7 +114,7 @@ export async function projectIcon(ctx: Ctx, projectId: string): Promise<AppIcon 
   if (hit && Date.now() - hit.at < (hit.icon ? CACHE_MS : MISS_CACHE_MS)) return hit.icon
   const origin = new URL(
     appUpstreamUrl({
-      host: appContainerName(row.project.name, row.deployment.number),
+      host: await upstreamHost(ctx, row.project, row.deployment.number),
       port: row.deployment.port,
     }),
   ).origin

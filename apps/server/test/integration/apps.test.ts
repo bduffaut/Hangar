@@ -180,6 +180,32 @@ describe('any image as an app that is not a web page (D51)', () => {
   })
 })
 
+describe('the computer’s own network (D54)', () => {
+  it('runs on the host network for an admin, and is still reached at its private address', async () => {
+    const ownerId = await h.ownerId()
+    await expect(
+      installCatalogApp(h.ctx, { id: ownerId, role: 'member' }, 'host-test', {
+        name: h.appName('host-member'),
+        hostNetwork: true,
+      }),
+    ).rejects.toMatchObject({ code: 'admin_only' })
+
+    const project = await installCatalogApp(h.ctx, { id: ownerId, role: 'admin' }, 'host-test', {
+      name: h.appName('host'),
+      hostNetwork: true,
+    })
+    h.adopt(project)
+    expect(project.hostNetwork).toBe(true)
+    expect(project.strategy).toBe('recreate')
+    const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
+    expect(done.failureReason).toBeNull()
+    const app = `hangar-app-${project.name}-${done.number}`
+    expect(docker('inspect', app, '--format', '{{.HostConfig.NetworkMode}}')).toBe('host')
+    // Traefik reaches it through the computer itself.
+    expect((await h.fetchApp(project.name)).body).toContain('Hostname:')
+  })
+})
+
 describe('starting files (D53)', () => {
   it('writes a template file once, and never over the owner’s own edit', async () => {
     const owner = { id: await h.ownerId(), role: 'admin' as const }

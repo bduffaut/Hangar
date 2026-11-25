@@ -207,7 +207,7 @@ export async function cleanStorage(
  * standard catalog template's (D43).
  */
 export async function needsAdmin(ctx: Ctx, project: Project): Promise<boolean> {
-  if (project.gpu) return true
+  if (project.gpu || project.hostNetwork) return true
   if (project.kind === 'image' && !isMemberCatalogApp(project.catalogId, project.image)) return true
   if ((await listAppPorts(ctx.db, [project.id])).length > 0) return true
   return (await listAppLibraries(ctx.db, [project.id])).length > 0

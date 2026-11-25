@@ -3,6 +3,8 @@
 //
 //   HANGAR_TEST_CATALOG=immich,navidrome pnpm vitest run --project integration catalog
 //
+// HANGAR_TEST_HOST_NETWORK=1 also turns on the home network option of templates that offer it.
+//
 // Each app must install, pull, start (with its stack services, D44), pass Hangar's health check,
 // and answer through Traefik. Run it after adding a template or changing its version.
 import { CATALOG, catalogApp } from '@hangar/shared'
@@ -32,7 +34,13 @@ describe.skipIf(ids.length === 0)('catalog templates, for real', () => {
     const template = catalogApp(id)!
     // Its questions (D52) answered yes, as the person installing it would.
     const accepted = (template.questions ?? []).map((q) => q.env)
-    const project = await installCatalogApp(h.ctx, owner, id, { name: h.appName(id), accepted })
+    // HANGAR_TEST_HOST_NETWORK=1 turns on the home network option where a template offers it (D54).
+    const hostNetwork = Boolean(process.env.HANGAR_TEST_HOST_NETWORK && template.hostNetwork)
+    const project = await installCatalogApp(h.ctx, owner, id, {
+      name: h.appName(id),
+      accepted,
+      ...(hostNetwork ? { hostNetwork } : {}),
+    })
     h.adopt(project)
     const done = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'), 35 * 60_000)
     expect(done.failureReason).toBeNull()

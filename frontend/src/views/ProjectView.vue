@@ -205,6 +205,13 @@ const running = computed(
               <BaseIcon name="globe" :size="14" />
             </a>
           </template>
+          <span
+            v-if="project.hostNetwork"
+            v-hint.bottom="'It runs on the computer’s own network, to find devices there'"
+            class="hg-muted"
+          >
+            Also on your home network, port {{ project.port }}
+          </span>
           <span v-if="project.kind === 'image'" class="hg-muted hg-project-repo">
             <BaseIcon name="server" :size="14" />
             <code>{{ project.image }}</code>

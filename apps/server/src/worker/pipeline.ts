@@ -30,7 +30,7 @@ import { getUser } from '../modules/users/repo.ts'
 import { secretsHash } from '../platform/builder.ts'
 import { appImageRef, ownerBuilderName } from '../platform/names.ts'
 import { appServiceName, appUpstreamUrl } from '../platform/proxy.ts'
-import { ensureOwnerNetwork, startAppContainer } from './app-container.ts'
+import { ensureOwnerNetwork, startAppContainer, upstreamHost } from './app-container.ts'
 import { createDeploymentLog, type DeploymentLog } from './deployment-log.ts'
 import { switchRoute } from './reconciler.ts'
 import { pullStackImages } from './stack.ts'
@@ -197,6 +197,8 @@ export async function runDeployment(
 
         const timeout =
           project.kind === 'image' ? IMAGE_HEALTH_CHECK_TIMEOUT_MS : HEALTH_CHECK_TIMEOUT_MS
+        // An app on the computer's own network (D54) is reached at the computer's address.
+        const host = await upstreamHost(ctx, project, deployment.number)
         await waitUntilHealthy(
           ctx,
           log,
@@ -205,8 +207,9 @@ export async function runDeployment(
           port,
           timeout,
           await checkKind(ctx, project, port),
+          host,
         )
-        live = await switchTraffic(ctx, project, deployment, container, port, log)
+        live = await switchTraffic(ctx, project, deployment, container, port, log, host)
       } finally {
         if (!live && paused.length) {
           // The new version must be gone before the old one writes to the storage again.
@@ -391,8 +394,9 @@ async function waitUntilHealthy(
   port: number,
   timeoutMs: number,
   kind: CheckKind = 'http',
+  host: string = containerName,
 ): Promise<void> {
-  const url = `http://${containerName}:${port}/`
+  const url = `http://${host}:${port}/`
   const started = Date.now()
   log.system(
     kind === 'running'
@@ -421,7 +425,7 @@ async function waitUntilHealthy(
       continue
     }
     if (kind === 'tcp') {
-      if (await acceptsTcp(containerName, port)) {
+      if (await acceptsTcp(host, port)) {
         const seconds = Math.round((Date.now() - started) / 100) / 10
         log.system(`The app accepted a connection on port ${port} after ${seconds} s`)
         return waitForOwnCheck(ctx, log, containerName, image, started + timeoutMs)
@@ -506,6 +510,7 @@ async function switchTraffic(
   container: { name: string; id: string },
   port: number,
   log: DeploymentLog,
+  host: string = container.name,
 ): Promise<boolean> {
   const { lanDomain } = await getSettings(ctx.db)
   const url = project.web && lanDomain ? ` at http://${appHostname(project.name, lanDomain)}` : ''
@@ -528,7 +533,7 @@ async function switchTraffic(
         { deploymentNumber: deployment.number, port },
         async () => {
           log.system('Switching traffic to the new version')
-          const upstream = appUpstreamUrl({ host: container.name, port })
+          const upstream = appUpstreamUrl({ host, port })
           await ctx.proxy
             .waitForService(appServiceName(project.name), upstream)
             .catch((error: Error) => {

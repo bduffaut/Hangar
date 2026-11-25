@@ -289,6 +289,8 @@ type ImageAppInput = ProjectSettings &
     catalogId?: string
     web?: boolean
     ports?: { port: number; protocol: PortProtocol }[]
+    /** The computer's own network (D54): only for a template that offers it. */
+    hostNetwork?: boolean
   }
 
 /** Any published image, with the settings given (D42). Admins only. */
@@ -355,6 +357,7 @@ export async function installCatalogApp(
         ? [{ libraryId: input.libraryId, mountPath: template.library.mountPath, writable: false }]
         : [],
     gpu: Boolean(template.gpu && input.gpu),
+    hostNetwork: Boolean(template.hostNetwork && input.hostNetwork),
   })
 }
 
@@ -393,10 +396,22 @@ async function insertImageApp(
     throw new UserError(403, 'admin_only', 'Only an admin can give an app a port on this computer.')
   }
   if (!web && hostnames.length) throw new ProjectError(NOT_WEB_PROBLEM)
+  // The computer's own network (D54): an admin's to grant, and only where a template offers it.
+  const hostNetwork = Boolean(input.hostNetwork && template?.hostNetwork)
+  if (hostNetwork && owner.role !== 'admin') {
+    throw new UserError(
+      403,
+      'admin_only',
+      'Only an admin can put an app on the computer’s own network.',
+      'Install it without that option, or ask an admin.',
+    )
+  }
   await checkPorts(ctx, ports)
   // Two containers can never hold the same port on the computer, so a new version waits for the
   // old one to stop.
-  const hasStorage = Boolean(storage.volumes?.length || storage.libraries?.length || ports.length)
+  const hasStorage = Boolean(
+    storage.volumes?.length || storage.libraries?.length || ports.length || hostNetwork,
+  )
 
   let project: Project
   try {
@@ -411,6 +426,7 @@ async function insertImageApp(
       strategy: input.strategy ?? (hasStorage ? 'recreate' : 'rolling'),
       gpu: storage.gpu ?? false,
       web,
+      hostNetwork,
       repoUrl: '',
       branch: '',
       triggerMode: 'manual',
@@ -656,6 +672,7 @@ export async function projectViews(ctx: Ctx, projects: Project[]): Promise<Proje
       strategy: p.strategy,
       gpu: p.gpu,
       web: p.web,
+      hostNetwork: p.hostNetwork,
       ports: ports
         .filter((port) => port.projectId === p.id)
         .map(({ port, protocol, hostPort }) => ({

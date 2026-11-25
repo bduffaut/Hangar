@@ -99,6 +99,13 @@
       "when": 1795626317045,
       "tag": "0013_app_ports",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795631180863,
+      "tag": "0014_host_network",
+      "breakpoints": true
     }
   ]
 }
