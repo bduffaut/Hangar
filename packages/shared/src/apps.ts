@@ -1068,6 +1068,70 @@ export const CATALOG: CatalogApp[] = [
     ],
     tier: 'elevated',
   },
+  {
+    id: 'syncthing',
+    name: 'Syncthing',
+    category: 'files',
+    summary: 'Keep folders in sync between your computers and phone, with no cloud.',
+    description:
+      'Syncthing keeps folders identical across your devices: change a file on your laptop and it appears on the others. This computer becomes the copy that is always on, so devices sync through it even when they are never on at the same time.',
+    website: 'https://syncthing.net',
+    image:
+      'syncthing/syncthing:2.1.7@sha256:2b71da7c0d0a91a6ae5285ad079226fecc0a365d08b27720e1f7037b018f7546',
+    port: 8384,
+    // Devices sync over Tailscale, on this computer's Tailscale address (D51).
+    ports: [
+      { port: 22000, protocol: 'tcp', purpose: 'Sync' },
+      { port: 22000, protocol: 'udp', purpose: 'Sync' },
+    ],
+    memoryLimitMb: 512,
+    volumes: [
+      {
+        name: 'data',
+        mountPath: '/var/syncthing',
+        purpose: 'Synced folders, settings, and device keys',
+        backup: true,
+      },
+    ],
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and set a user name and password under Settings → GUI: until then anyone who can reach it can change it.',
+      'Install Syncthing on your other devices and add this one with its device ID (Actions → Show ID). Its address is tcp://<this computer’s Tailscale name>:22000.',
+      'Share a folder from either side and accept it on the other. Folders on this computer live under /var/syncthing.',
+    ],
+    tier: 'elevated',
+  },
+  {
+    id: 'code-server',
+    name: 'code-server',
+    category: 'developer',
+    summary: 'VS Code in your browser, on this computer.',
+    description:
+      'code-server runs Visual Studio Code on this computer, so you can write code from any browser, even on a tablet. Its files and extensions are kept between updates. It has its own terminal, inside its own container only.',
+    website: 'https://coder.com/docs/code-server',
+    image:
+      'codercom/code-server:4.146.0@sha256:fc708b18f6c613b5a9d00f1d1801e58376d3df9c5b5de77f5c02d67b711f99c9',
+    port: 8080,
+    memoryLimitMb: 2048,
+    volumes: [
+      {
+        name: 'home',
+        mountPath: '/home/coder',
+        purpose: 'Your projects, settings, and extensions',
+        backup: true,
+      },
+    ],
+    env: {},
+    // Its sign-in password, made for this install.
+    secrets: ['PASSWORD'],
+    firstVisitorIsAdmin: false,
+    firstSteps: [
+      'Find its password under Environment (PASSWORD), then open the app and sign in.',
+      'Open a terminal (Terminal → New Terminal) and clone a repository into /home/coder.',
+    ],
+    tier: 'standard',
+  },
 ]
 
 /** The image a service runs for an app at `appImage`: `{version}` becomes the app's tag. */

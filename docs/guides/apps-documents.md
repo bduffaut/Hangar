@@ -1,11 +1,16 @@
 # Documents and files
 
-Two apps keep paper and files on the Hangar computer, and every account can install both:
+Three apps keep paper and files on the Hangar computer:
 
 - **Paperless-ngx** reads every letter, bill, and receipt you give it, recognizes the text, and
   files it so a search finds it later.
 - **File Browser** is a simple web page for keeping files: upload from your phone, organize
   folders, and share a link to a file.
+- **Syncthing** keeps folders identical across your computers and phone, with this computer as
+  the copy that is always on.
+
+Every account can install Paperless-ngx and File Browser. Syncthing syncs through a port of the
+computer, so an admin installs it.
 
 ## Paperless-ngx
 
@@ -71,3 +76,18 @@ links are in `database`.
 > **Sharing a link with someone outside your devices** needs a public address for File Browser
 > (see [Put your apps on the internet](go-public.md)). Without one, a share link only opens on
 > devices with Tailscale.
+
+## Syncthing
+
+Syncthing keeps folders in sync between your devices. With the Hangar computer always on, your
+laptop and phone stay in sync even when they are never on at the same time.
+
+1. Open **Apps**, pick **Syncthing**, and install it. It syncs on port 22000 of the computer's
+   Tailscale address, so only your devices with Tailscale can sync with it.
+2. Open it and set a user name and password under **Settings → GUI** right away.
+3. Install Syncthing on your other devices (Syncthing for Android, or Möbius Sync on iPhone).
+   Add the Hangar computer with its device ID (**Actions → Show ID**), and give its address as
+   `tcp://<computer's Tailscale name>:22000`.
+4. Share a folder from either side and accept it on the other.
+
+Synced folders live in the app's `data` storage, under `/var/syncthing`.
