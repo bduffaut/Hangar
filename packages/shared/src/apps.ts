@@ -46,6 +46,14 @@ export function portLabel(port: { hostPort: number; protocol: PortProtocol }): s
   return port.protocol === 'udp' ? `${port.hostPort} (UDP)` : String(port.hostPort)
 }
 
+/** A template file's path inside its kept folder: plain names, no `..`, no leading `/` (D53). */
+export function isTemplateFilePath(path: string): boolean {
+  return (
+    /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(path) &&
+    !path.split('/').some((part) => part === '.' || part === '..')
+  )
+}
+
 export const MAX_APP_VOLUMES = 8
 export const MAX_APP_LIBRARIES = 8
 export const MAX_LIBRARIES = 32
@@ -263,6 +271,11 @@ export interface CatalogApp {
   ports?: { port: number; protocol: PortProtocol; purpose: string }[]
   /** Required answers before install (D52). */
   questions?: CatalogQuestion[]
+  /**
+   * Files written into one of the app's kept folders before it starts, only when missing, so the
+   * owner's own edits are never overwritten (D53): a config file the app cannot start well without.
+   */
+  files?: { volume: string; path: string; content: string }[]
   memoryLimitMb: number
   /** A longer download time limit than the default, for large apps (minutes). */
   buildTimeoutMinutes?: number
@@ -694,6 +707,106 @@ export const CATALOG: CatalogApp[] = [
       'To be an operator, add an env var OPS with your Minecraft name under Environment, then press Deploy now.',
     ],
     tier: 'elevated',
+  },
+  {
+    // Smart home (phase 3). Runs like every app, behind Hangar's proxy; its starting settings
+    // trust that proxy, or it answers 400 to every visit (D53).
+    id: 'home-assistant',
+    name: 'Home Assistant',
+    category: 'smart-home',
+    summary: 'Your lights, sensors, and thermostat in one app, with automations that run at home.',
+    description:
+      'Home Assistant connects the smart devices in your home, from lights and plugs to thermostats and sensors, and runs automations on this computer instead of in someone else’s cloud. Its phone app gives you controls and notifications anywhere you have Tailscale.',
+    website: 'https://www.home-assistant.io',
+    image:
+      'ghcr.io/home-assistant/home-assistant:2026.11.3@sha256:24e541ddae5818bf8eb27898b9ba00d0c344a655aa5097e9e9bd4b19356be847',
+    port: 8123,
+    memoryLimitMb: 1536,
+    volumes: [
+      {
+        name: 'config',
+        mountPath: '/config',
+        purpose: 'Settings, automations, and history',
+        backup: true,
+      },
+    ],
+    files: [
+      {
+        volume: 'config',
+        path: 'configuration.yaml',
+        content: [
+          '# Written by Hangar when Home Assistant was installed. Edit it freely: Hangar never',
+          '# writes it again while it exists.',
+          'default_config:',
+          '',
+          'automation: !include automations.yaml',
+          'script: !include scripts.yaml',
+          'scene: !include scenes.yaml',
+          '',
+          'http:',
+          "  # Every visit arrives through Hangar's proxy, on a private Docker network.",
+          '  use_x_forwarded_for: true',
+          '  trusted_proxies:',
+          '    - 10.0.0.0/8',
+          '    - 172.16.0.0/12',
+          '    - 192.168.0.0/16',
+          '',
+        ].join('\n'),
+      },
+      { volume: 'config', path: 'automations.yaml', content: '[]\n' },
+      { volume: 'config', path: 'scripts.yaml', content: '' },
+      { volume: 'config', path: 'scenes.yaml', content: '' },
+    ],
+    env: {},
+    firstVisitorIsAdmin: true,
+    firstSteps: [
+      'Open the app and create the owner account, then set your home’s location and time zone.',
+      'Add your devices under Settings → Devices & services.',
+      'Install the Home Assistant app on your phone and sign in with this address.',
+    ],
+    tier: 'standard',
+  },
+  {
+    // A message broker for smart home apps. No web page and no port on the computer: other apps
+    // of the same account reach it by name, mqtt://mosquitto:1883 (D50, D51).
+    id: 'mosquitto',
+    name: 'Mosquitto',
+    category: 'smart-home',
+    summary: 'The MQTT broker smart home apps and devices talk through.',
+    description:
+      'Mosquitto passes messages between smart home apps, like Home Assistant and Zigbee2MQTT. It has no web page: your other apps reach it by its name on port 1883, and nothing else can.',
+    website: 'https://mosquitto.org',
+    image:
+      'eclipse-mosquitto:2.0.23@sha256:6a332cc7a8dbe011cbc076180cbb76b37c6f0f55809682ea08e7980ef0112ad9',
+    port: 1883,
+    web: false,
+    memoryLimitMb: 128,
+    volumes: [
+      { name: 'config', mountPath: '/mosquitto/config', purpose: 'Settings', backup: true },
+      { name: 'data', mountPath: '/mosquitto/data', purpose: 'Saved messages', backup: true },
+    ],
+    files: [
+      {
+        volume: 'config',
+        path: 'mosquitto.conf',
+        content: [
+          '# Written by Hangar when Mosquitto was installed. Edit it freely: Hangar never writes',
+          '# it again while it exists.',
+          '# Only apps of the same Hangar account can reach this port.',
+          'listener 1883',
+          'allow_anonymous true',
+          'persistence true',
+          'persistence_location /mosquitto/data/',
+          '',
+        ].join('\n'),
+      },
+    ],
+    env: {},
+    firstVisitorIsAdmin: false,
+    firstSteps: [
+      'Your other apps reach it at mosquitto:1883 (its name, if you changed it). In Home Assistant, add the MQTT integration with that broker and port, and no user name.',
+    ],
+    tier: 'standard',
   },
 ]
 

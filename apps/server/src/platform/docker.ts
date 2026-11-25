@@ -670,6 +670,8 @@ export function createDocker(docker = new Dockerode()) {
       image: string
       cmd: string[]
       binds: string[]
+      /** Capabilities beyond reading; reading other users' folders by default. */
+      capAdd?: string[]
     }): Promise<{ exitCode: number; output: string }> {
       const container = await docker.createContainer({
         Image: spec.image,
@@ -683,7 +685,7 @@ export function createDocker(docker = new Dockerode()) {
           // Only reading: DAC_READ_SEARCH lets it look into folders other users locked (a home
           // folder is usually 750), on a mount that is read-only anyway.
           CapDrop: ['ALL'],
-          CapAdd: ['DAC_READ_SEARCH'],
+          CapAdd: spec.capAdd ?? ['DAC_READ_SEARCH'],
           SecurityOpt: ['no-new-privileges'],
           ReadonlyRootfs: true,
           Memory: 64 * 1024 * 1024,
@@ -703,7 +705,14 @@ export function createDocker(docker = new Dockerode()) {
     /** The image a running container was created from (core's own, for probes). */
     async containerImage(idOrName: string): Promise<string | null> {
       const info = await inspectContainer(idOrName)
-      return info?.Image ?? null
+      if (!info) return null
+      // Docker Desktop's image store can report an ID it cannot look up again; the name works.
+      const usable = await docker
+        .getImage(info.Image)
+        .inspect()
+        .then(() => true)
+        .catch(() => false)
+      return usable ? info.Image : (info.Config?.Image ?? null)
     },
 
     /** Total size of Hangar's app images (`hangar/*`). */

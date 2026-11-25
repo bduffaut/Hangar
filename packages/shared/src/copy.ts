@@ -180,6 +180,8 @@ export const dashboardCopy = {
     /** An app that is not a web page (D51): its tile copies the address to connect to. */
     copyAddress: (address: string) => `Live: copies ${address}`,
     copied: (address: string) => `Copied ${address}`,
+    /** Live, but reached only by other apps (Mosquitto): its tile opens its page. */
+    liveHere: 'Live: opens its page',
   },
   widgets: {
     departures: {

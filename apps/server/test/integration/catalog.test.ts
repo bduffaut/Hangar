@@ -44,8 +44,9 @@ describe.skipIf(ids.length === 0)('catalog templates, for real', () => {
       }
       return
     }
+    // Through Traefik, like a visitor: a 400 would be an app refusing Hangar's proxy (D53).
     const res = await h.fetchApp(project.name)
-    expect(res.status).toBeLessThan(500)
+    expect(res.status).toBeLessThan(400)
   })
 })
 

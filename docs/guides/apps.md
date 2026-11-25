@@ -16,6 +16,8 @@ choices already filled in.
 | **File Browser**   | Upload, download, and share files from a browser          | [Documents and files](apps-documents.md)  | Everyone           |
 | **Mealie**         | Recipes, meal plans, and shopping lists                   | [Recipes and monitoring](apps-home.md)    | Everyone           |
 | **Uptime Kuma**    | Watches your sites and tells you when one is down         | [Recipes and monitoring](apps-home.md)    | Everyone           |
+| **Home Assistant** | Your lights, sensors, and thermostat in one app           | [Smart home](apps-smart-home.md)          | Everyone           |
+| **Mosquitto**      | The MQTT broker smart home apps talk through              | [Smart home](apps-smart-home.md)          | Everyone           |
 | **Minecraft**      | Your own world, for friends to join over Tailscale        | [Game servers](apps-games.md)             | Admins             |
 
 More are on the [roadmap](https://github.com/bduffaut/Hangar/blob/main/docs/ROADMAP.md).

@@ -2,10 +2,11 @@ import type { Ctx } from '../context.ts'
 import type { Deployment } from '../modules/deployments/repo.ts'
 import { getEnv } from '../modules/env-vars/service.ts'
 import type { Project } from '../modules/projects/repo.ts'
-import { resolveMounts } from '../modules/storage/service.ts'
+import { dataVolumeName, resolveMounts } from '../modules/storage/service.ts'
 import { appAlias, appContainerName, ownerNetworkName } from '../platform/names.ts'
 import { ensureStack } from './stack.ts'
-import { addressEnvValue } from '@hangar/shared'
+import { addressEnvValue, isTemplateFilePath } from '@hangar/shared'
+import { writeFileIfMissing } from '../platform/host.ts'
 import { findTemplate } from '../modules/catalog/templates.ts'
 import { listAppPorts } from '../modules/ports/repo.ts'
 import { portHost, portInUseMessage } from '../modules/ports/service.ts'
@@ -44,6 +45,15 @@ export async function startAppContainer(
   }
   const network = await ensureOwnerNetwork(ctx, project.ownerId)
   const mounts = await resolveMounts(ctx, project)
+  // A template's starting files (D53), into kept folders the app still has, only when missing.
+  const template = project.catalogId ? findTemplate(ctx, project.catalogId) : null
+  for (const file of template?.files ?? []) {
+    const volume = dataVolumeName(project.name, file.volume)
+    if (!isTemplateFilePath(file.path) || !mounts.some((m) => m.source === volume)) continue
+    if (await writeFileIfMissing(ctx, volume, file.path, file.content)) {
+      log?.(`Wrote ${file.path} into ${file.volume}, the starting settings for ${template!.name}`)
+    }
+  }
   const stackNetwork = await ensureStack(ctx, project, log)
   const alias = appAlias(project.name)
   // Ports that are not web pages (D51), on the Tailscale address only.

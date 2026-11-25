@@ -36,6 +36,24 @@ const TEST_TEMPLATES: CatalogApp[] = [
     firstSteps: ['Nothing to set up.'],
     tier: 'elevated',
   },
+  {
+    // Starting files (D53): written into a kept folder once, never over the owner's edits.
+    id: 'files-test',
+    name: 'Files test',
+    category: 'developer',
+    summary: 'An app with a starting settings file, for Hangar’s own tests.',
+    description: 'whoami with a kept folder Hangar writes a file into.',
+    website: 'https://github.com/bduffaut/Hangar',
+    image: 'traefik/whoami:v1.11',
+    port: 80,
+    memoryLimitMb: 64,
+    volumes: [{ name: 'settings', mountPath: '/settings', purpose: 'Settings', backup: true }],
+    files: [{ volume: 'settings', path: 'conf/app.conf', content: 'greeting=hello\n' }],
+    env: {},
+    firstVisitorIsAdmin: false,
+    firstSteps: ['Nothing to set up.'],
+    tier: 'standard',
+  },
 ]
 
 /** A catalog template by id, including the test ones when they are switched on. */

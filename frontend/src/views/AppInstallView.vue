@@ -405,7 +405,12 @@ async function install() {
 
     <HgPanel v-if="!isWeb" title="Where it answers">
       <div class="hg-install-group">
-        <p class="hg-muted">
+        <p v-if="!template?.ports?.length" class="hg-muted">
+          {{ template?.name }} is not a web page. Your other apps reach it at
+          <code>{{ name.trim() || template?.id }}:{{ template?.port }}</code
+          >, its name and port; nothing else can, not even your own devices.
+        </p>
+        <p v-else class="hg-muted">
           {{ template?.name }} is not a web page. On your devices with Tailscale, connect to
           <template v-for="(p, i) in template?.ports ?? []" :key="p.port"
             ><template v-if="i > 0">, </template

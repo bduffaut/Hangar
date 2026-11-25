@@ -32,7 +32,14 @@ test('pictures for the app guides', async ({ page }) => {
   await expect(page.getByText('Jellyfin').first()).toBeVisible()
   await shoot(page, 'catalog')
 
-  for (const id of ['jellyfin', 'immich', 'paperless-ngx', 'mealie', 'minecraft']) {
+  for (const id of [
+    'jellyfin',
+    'immich',
+    'paperless-ngx',
+    'mealie',
+    'minecraft',
+    'home-assistant',
+  ]) {
     await page.goto(`/tour/apps/${id}`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     // Its address comes from the settings, which load just after the page.

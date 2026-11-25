@@ -63,3 +63,34 @@ export async function hasGpu(ctx: Ctx): Promise<boolean> {
   gpu = { value, at: Date.now() }
   return value
 }
+
+/**
+ * Writes a file into a kept folder unless one is already there (D53). Path and content reach the
+ * helper as arguments, never as code; it has no network and may only write past file owners.
+ */
+const WRITE_IF_MISSING = `
+set -eu
+f="/v/$1"
+[ -e "$f" ] && exit 0
+mkdir -p "\${f%/*}"
+printf '%s' "$2" > "$f"
+chmod 644 "$f"
+echo written
+`
+
+export async function writeFileIfMissing(
+  ctx: Ctx,
+  volume: string,
+  path: string,
+  content: string,
+): Promise<boolean> {
+  const { exitCode, output } = await ctx.docker.runProbe({
+    image: await image(ctx),
+    cmd: ['sh', '-c', WRITE_IF_MISSING, 'write', path, content],
+    binds: [`${volume}:/v`],
+    // The app may have made its folders its own (Mosquitto runs as user 1883).
+    capAdd: ['DAC_OVERRIDE'],
+  })
+  if (exitCode !== 0) throw new Error(`Could not write ${path} into ${volume}: ${output}`)
+  return output.includes('written')
+}

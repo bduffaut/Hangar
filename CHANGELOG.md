@@ -58,6 +58,11 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   copied by its launcher tile. Ports like this are published on the Tailscale address only, never
   on your home network or the internet, and one app holds a port at a time. Installing it asks you
   to accept Minecraft's EULA (D52).
+- **Home Assistant and Mosquitto: a smart home at home.** Home Assistant works behind Hangar right
+  away: Hangar gives it a starting `configuration.yaml` that trusts its proxy (D53). Mosquitto,
+  the MQTT broker, has no web page and no port on the computer; your other apps reach it at
+  `mosquitto:1883`. Both are open to every account. Templates' starting files are written only
+  when missing, so your own edits are never overwritten.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at
   its name, like `http://jellyfin:8096`, ready for smart home apps that work together.
 

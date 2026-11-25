@@ -8,6 +8,7 @@ import {
   checkHostPort,
   checkMountPath,
   imageRepository,
+  isTemplateFilePath,
   portLabel,
   imageTag,
   isMemberCatalogApp,
@@ -168,10 +169,13 @@ describe('the catalog', () => {
       expect(new Set(ports.map((p) => `${p.port}/${p.protocol}`)).size).toBe(ports.length)
       // A port on the computer is an admin's to give.
       if (ports.length) expect(app.tier).toBe('elevated')
-      // An app that is not a web page is reached by its ports, and checked on its main one.
-      if (app.web === false) {
-        expect(ports.length).toBeGreaterThan(0)
-        expect(app.firstVisitorIsAdmin).toBe(false)
+      // An app that is not a web page is reached by its ports, or by its name from other apps
+      // (Mosquitto); nobody opens it in a browser to claim it.
+      if (app.web === false) expect(app.firstVisitorIsAdmin).toBe(false)
+      // Starting files (D53) go into the app's own kept folders, at plain relative paths.
+      for (const f of app.files ?? []) {
+        expect(app.volumes.map((v) => v.name)).toContain(f.volume)
+        expect([f.path, isTemplateFilePath(f.path)]).toEqual([f.path, true])
       }
       for (const q of app.questions ?? []) {
         expect(q.env).toMatch(/^[A-Z][A-Z0-9_]*$/)
@@ -279,5 +283,15 @@ describe('ports on the computer (D51)', () => {
   it('writes UDP ports so people can tell', () => {
     expect(portLabel({ hostPort: 25565, protocol: 'tcp' })).toBe('25565')
     expect(portLabel({ hostPort: 19132, protocol: 'udp' })).toBe('19132 (UDP)')
+  })
+})
+
+describe('starting files (D53)', () => {
+  it('only takes plain paths inside the kept folder', () => {
+    expect(isTemplateFilePath('mosquitto.conf')).toBe(true)
+    expect(isTemplateFilePath('conf/app.conf')).toBe(true)
+    for (const path of ['/etc/passwd', '../x', 'a/../b', 'a//b', '', 'a b', 'a/./b']) {
+      expect([path, isTemplateFilePath(path)]).toEqual([path, false])
+    }
   })
 })

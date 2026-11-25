@@ -174,6 +174,9 @@ const running = computed(
             {{ project.url.replace(/^https?:\/\//, '') }}
             <BaseIcon name="external" :size="14" />
           </a>
+          <span v-else-if="!project.web && running && !project.ports.length" class="hg-muted">
+            Other apps reach it at <code>{{ project.name }}:{{ project.port }}</code>
+          </span>
           <template v-else-if="!project.web && running">
             <span
               v-for="p in project.ports.filter((p) => p.address)"

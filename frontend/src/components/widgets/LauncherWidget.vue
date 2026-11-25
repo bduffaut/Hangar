@@ -22,7 +22,8 @@ const tiles = computed(() =>
       const running = !!project.current && project.desiredState === 'running'
       // An app that is not a web page (a game server, D51): the tile copies where to connect.
       const address = !project.web && running ? (project.ports[0]?.address ?? null) : null
-      const live = running && (!!project.url || !!address)
+      // Reached only by other apps (Mosquitto): live once it runs; its tile opens its page.
+      const live = running && (project.web ? !!project.url : true)
       // Your own devices reach the private address; a public one is the fallback.
       const href = live && project.web ? (project.url ?? project.publicUrls[0] ?? null) : null
       return {
@@ -73,7 +74,13 @@ const iconOf = (href: string | null, id: string) =>
                 ? { href: tile.href, target: '_blank', rel: 'noopener' }
                 : { to: { name: 'project', params: { name: tile.project.name } } }
           "
-          v-hint.top="tile.address ? copy.copyAddress(tile.address) : copy.lights[tile.light]"
+          v-hint.top="
+            tile.address
+              ? copy.copyAddress(tile.address)
+              : tile.light === 'live' && !tile.href
+                ? copy.liveHere
+                : copy.lights[tile.light]
+          "
           class="hg-launcher-tile"
           :class="`is-${tile.light}`"
           :data-app="tile.project.name"

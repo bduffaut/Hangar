@@ -151,6 +151,39 @@ describe('an app that is not a web page (D51, D52)', () => {
   })
 })
 
+describe('starting files (D53)', () => {
+  it('writes a template file once, and never over the owner’s own edit', async () => {
+    const owner = { id: await h.ownerId(), role: 'admin' as const }
+    const project = await installCatalogApp(h.ctx, owner, 'files-test', {
+      name: h.appName('files'),
+    })
+    h.adopt(project)
+    const volume = `hangar-data-${project.name}-settings`
+    const read = () =>
+      docker('run', '--rm', '-v', `${volume}:/v`, 'busybox:1.37', 'cat', '/v/conf/app.conf')
+
+    const first = await h.waitForEnd(await queueBranchHead(h.ctx, project, 'manual'))
+    expect(first.failureReason).toBeNull()
+    expect(read()).toBe('greeting=hello')
+
+    docker(
+      'run',
+      '--rm',
+      '-v',
+      `${volume}:/v`,
+      'busybox:1.37',
+      'sh',
+      '-c',
+      'echo mine > /v/conf/app.conf',
+    )
+    const second = await h.waitForEnd(
+      await queueBranchHead(h.ctx, (await getProject(h.ctx.db, project.id))!, 'manual'),
+    )
+    expect(second.status).toBe('ready')
+    expect(read()).toBe('mine')
+  })
+})
+
 describe('storage', () => {
   it('keeps what an app writes across deploys, stopping the old version first', async () => {
     const project = await h.createProject('stateful', {
