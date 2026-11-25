@@ -440,6 +440,17 @@ export const libraryView = z.object({
 })
 export type LibraryView = z.infer<typeof libraryView>
 
+/** A port an app holds on the computer (D51), for the admin's list of everything that listens. */
+export const publishedPortView = z.object({
+  app: z.string(),
+  owner: z.string(),
+  port: z.number().int(),
+  protocol: z.enum(PORT_PROTOCOLS),
+  hostPort: z.number().int(),
+  address: z.string().nullable(),
+})
+export type PublishedPortView = z.infer<typeof publishedPortView>
+
 export const libraryInput = z.object({
   name: z
     .string()

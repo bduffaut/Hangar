@@ -73,6 +73,11 @@ test('the tour shows the dashboard and sends actions to the install guide', asyn
   await expect(page.getByRole('link', { name: /sslip\.io/ })).toHaveCount(0)
   await page.goto('/tour')
   await expect(page.locator('button.hg-launcher-tile[data-app="minecraft"]')).toBeVisible()
+  // The admin's list of every port an app holds on the computer.
+  await page.goto('/tour/settings/network')
+  const ports = page.locator('table.hg-ports')
+  await expect(ports).toContainText('25565')
+  await expect(ports).toContainText('minecraft')
 
   await page.goto('/tour/projects/blog')
   await page.getByRole('button', { name: 'Deploy', exact: true }).click()

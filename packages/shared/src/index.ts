@@ -20,6 +20,7 @@ export type {
   CreatedLink,
   InviteView,
   LibraryView,
+  PublishedPortView,
   DeploymentView,
   ErrorBody,
   FlightStats,

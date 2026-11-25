@@ -1,7 +1,7 @@
 import { and, eq, inArray, or } from 'drizzle-orm'
 import type { PortProtocol } from '@hangar/shared'
 import type { Db } from '../../db/client.ts'
-import { appPorts, projects } from '../../db/schema.ts'
+import { appPorts, projects, users } from '../../db/schema.ts'
 
 export type AppPort = typeof appPorts.$inferSelect
 
@@ -27,6 +27,22 @@ export async function portHolders(
         ),
       ),
     )
+}
+
+/** Every port held on the computer, with its app and owner, by port. */
+export async function listAllPorts(db: Db) {
+  return db
+    .select({
+      app: projects.name,
+      owner: users.username,
+      port: appPorts.port,
+      protocol: appPorts.protocol,
+      hostPort: appPorts.hostPort,
+    })
+    .from(appPorts)
+    .innerJoin(projects, eq(projects.id, appPorts.projectId))
+    .innerJoin(users, eq(users.id, projects.ownerId))
+    .orderBy(appPorts.hostPort, appPorts.protocol)
 }
 
 export async function insertAppPorts(

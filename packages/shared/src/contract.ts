@@ -313,6 +313,12 @@ export const contract = {
   }),
 
   // Libraries: folders on the computer that apps may use. Admins only.
+  listPorts: endpoint({
+    method: 'GET',
+    path: '/api/ports',
+    access: 'admin',
+    response: z.array(s.publishedPortView),
+  }),
   listLibraries: endpoint({
     method: 'GET',
     path: '/api/libraries',

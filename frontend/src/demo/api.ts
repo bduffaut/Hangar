@@ -96,6 +96,10 @@ export async function demoCall(
       return demoStorage(id)
     case 'listLibraries':
       return demoLibraries
+    case 'listPorts':
+      return demoProjects().flatMap((p) =>
+        p.ports.map((port) => ({ app: p.name, owner: 'you', ...port })),
+      )
     case 'listVolumes':
       return demoProjects().flatMap((p) =>
         demoStorage(p.id).volumes.map((v) => ({

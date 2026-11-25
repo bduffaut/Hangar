@@ -63,6 +63,8 @@ with an installer and a `ghcr.io/bduffaut/hangar-core` image.
   the MQTT broker, has no web page and no port on the computer; your other apps reach it at
   `mosquitto:1883`. Both are open to every account. Templates' starting files are written only
   when missing, so your own edits are never overwritten.
+- **Every port on the computer, in one list.** Settings → Network shows each port an app holds,
+  with its app, owner, and the address to connect to.
 - **Apps reach each other by name (D50).** An app can talk to another app of the same account at
   its name, like `http://jellyfin:8096`, ready for smart home apps that work together.
 

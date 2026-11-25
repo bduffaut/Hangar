@@ -8,7 +8,7 @@ import {
 import type { Ctx } from '../../context.ts'
 import { UserError } from '../../errors.ts'
 import { getSettings } from '../settings/repo.ts'
-import { portHolders } from './repo.ts'
+import { listAllPorts, portHolders } from './repo.ts'
 
 // Ports that are not web pages (D51): published by Docker on the computer's Tailscale address
 // only (HANGAR_LAN_IP, which the installer sets to it, D40), never on every network it is on.
@@ -50,6 +50,12 @@ export async function checkPorts(ctx: Ctx, ports: WantedPort[], projectId?: stri
 export async function portHost(ctx: Ctx): Promise<{ ip: string | null; name: string | null }> {
   const { lanIp } = await getSettings(ctx.db)
   return { ip: lanIp ?? null, name: ctx.config.tailscaleHostname }
+}
+
+/** Every port apps hold on the computer, for admins (Settings → Network). */
+export async function portList(ctx: Ctx) {
+  const host = await portHost(ctx)
+  return (await listAllPorts(ctx.db)).map((p) => ({ ...p, address: portAddress(host, p.hostPort) }))
 }
 
 /** What people type to reach a port: the machine's Tailscale name, or its address. */

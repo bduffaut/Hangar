@@ -17,6 +17,7 @@ import {
 import { replaceAppStorage } from '../../src/modules/storage/repo.ts'
 import { storageView } from '../../src/modules/storage/service.ts'
 import { stackStatus } from '../../src/worker/stack.ts'
+import { portList } from '../../src/modules/ports/service.ts'
 import { ownerNetworkName } from '../../src/platform/names.ts'
 import { createFixtureRepo, createHarness, docker, eventually } from './harness.ts'
 
@@ -138,6 +139,10 @@ describe('an app that is not a web page (D51, D52)', () => {
       { port: 25565, protocol: 'tcp', hostPort: 25565, address: expect.stringMatching(/:25565$/) },
     ])
 
+    // The admin's list of everything that listens on the computer has it, with its owner.
+    expect(await portList(h.ctx)).toContainEqual(
+      expect.objectContaining({ app: project.name, hostPort: 25565, protocol: 'tcp' }),
+    )
     // One app per port on the computer, whoever installs the second.
     await expect(
       installCatalogApp(h.ctx, admin, 'minecraft', {

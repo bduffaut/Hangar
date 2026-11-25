@@ -16,6 +16,7 @@ import { api, messageOf } from '../api/client.ts'
 import CopyField from '../components/CopyField.vue'
 import HgPanel from '../components/HgPanel.vue'
 import LibrariesPanel from '../components/LibrariesPanel.vue'
+import PortsPanel from '../components/PortsPanel.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { useDocumentTitle } from '../composables/useDocumentTitle.ts'
 import { cleanCpuModel, formatBytes } from '../lib/format.ts'
@@ -210,6 +211,7 @@ const saveTunnel = (token: string | null) =>
           </div>
         </form>
       </HgPanel>
+      <PortsPanel v-if="section === 'network'" />
 
       <HgPanel
         v-if="section === 'public'"
